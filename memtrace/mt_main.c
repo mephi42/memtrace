@@ -1,6 +1,7 @@
 #include "pub_core_aspacemgr.h"
 #include "pub_core_libcfile.h"
 #include "pub_core_syscall.h"
+#include "pub_tool_aspacehl.h"
 #include "pub_tool_basics.h"
 #include "pub_tool_libcassert.h"
 #include "pub_tool_libcfile.h"
@@ -98,6 +99,26 @@ static void add_entry(IRSB* out, Addr pc, IRExpr* addr)
                                    IRExpr_RdTmp(updatedEntryPtr)));
 }
 
+static void show_segments(void)
+{
+   Int n_seg_starts;
+   Addr* seg_starts;
+   Int i;
+
+   VG_(umsg)("Segments:\n");
+   seg_starts = VG_(get_segment_starts)(SkFileC | SkAnonC | SkShmC,
+                                        &n_seg_starts);
+   for (i = 0; i < n_seg_starts; i++) {
+      const NSegment* seg;
+
+      seg = VG_(am_find_nsegment)(seg_starts[i]);
+      VG_(umsg)("%016llx-%016llx %s\n",
+                (ULong)seg->start,
+                (ULong)seg->end + 1,
+                VG_(am_get_filename)(seg));
+   }
+}
+
 static void mt_post_clo_init(void)
 {
 }
@@ -139,8 +160,8 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          addStmtToIRSB(out, bb->stmts[i]);
          break;
       case Ist_Store:
-         addStmtToIRSB(out, bb->stmts[i]);
          add_entry(out, pc, bb->stmts[i]->Ist.Store.addr);
+         addStmtToIRSB(out, bb->stmts[i]);
          break;
       case Ist_LoadG:
          addStmtToIRSB(out, bb->stmts[i]);
@@ -182,6 +203,7 @@ static void mt_fini(Int exitcode)
       VG_(exit)(1);
    }
    VG_(close)(trace_fd);
+   show_segments();
 }
 
 static void mt_pre_clo_init(void)
