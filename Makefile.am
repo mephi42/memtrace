@@ -12,7 +12,8 @@ TOOLS = \
 		massif \
 		dhat \
 		lackey \
-		none
+		none \
+		memtrace
 
 EXP_TOOLS = \
 		exp-sgcheck \
