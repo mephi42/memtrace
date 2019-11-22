@@ -1,0 +1,33 @@
+diff --git a/Makefile.am b/Makefile.am
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -12,7 +12,8 @@ TOOLS = \
+ 		massif \
+ 		dhat \
+ 		lackey \
+-		none
++		none \
++		memtrace
+ 
+ EXP_TOOLS = \
+ 		exp-bbv
+diff --git a/configure.ac b/configure.ac
+--- a/configure.ac
++++ b/configure.ac
+@@ -4899,6 +4899,9 @@ AC_CONFIG_FILES([
+    exp-bbv/tests/arm-linux/Makefile
+    shared/Makefile
+    solaris/Makefile
++   memtrace/Makefile
++   memtrace/docs/Makefile
++   memtrace/tests/Makefile
+ ])
+ AC_CONFIG_FILES([coregrind/link_tool_exe_linux],
+                 [chmod +x coregrind/link_tool_exe_linux])
+diff --git a/memtrace b/memtrace
+new file mode 120000
+--- /dev/null
++++ b/memtrace
+@@ -0,0 +1 @@
++../memtrace
+\ No newline at end of file

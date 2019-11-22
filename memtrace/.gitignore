@@ -1,0 +1,8 @@
+.deps/
+Makefile
+Makefile.in
+docs/Makefile
+docs/Makefile.in
+memtrace-*-linux
+tests/Makefile
+tests/Makefile.in
