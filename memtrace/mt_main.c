@@ -4,8 +4,10 @@
 #include "pub_tool_aspacehl.h"
 #include "pub_tool_basics.h"
 #include "pub_tool_libcassert.h"
+#include "pub_tool_libcbase.h"
 #include "pub_tool_libcfile.h"
 #include "pub_tool_libcprint.h"
+#include "pub_tool_options.h"
 #include "pub_tool_tooliface.h"
 #include "pub_tool_vki.h"
 #include "pub_tool_vkiscnums.h"
@@ -52,6 +54,8 @@ static const char trace_file_name[] = "memtrace.out";
 static int trace_fd;
 static MTEntry* trace_start;
 static MTEntry* trace;
+static Addr pc_start = 0;
+static Addr pc_end = (Addr)-1;
 
 static void add_entry(IRSB* out, Addr pc, IRExpr* addr)
 {
@@ -119,6 +123,29 @@ static void show_segments(void)
    }
 }
 
+static Bool is_pc_interesting(Addr pc)
+{
+   return pc >= pc_start && pc <= pc_end;
+}
+
+static Bool mt_process_cmd_line_option(const HChar* arg)
+{
+   if (VG_BHEX_CLO(arg, "--pc-start", pc_start, 0, (Addr)-1))
+      return True;
+   else if (VG_BHEX_CLO(arg, "--pc-end", pc_end, 0, (Addr)-1))
+      return True;
+   else
+      return False;
+}
+
+static void mt_print_usage(void)
+{
+}
+
+static void mt_print_debug_usage(void)
+{
+}
+
 static void mt_post_clo_init(void)
 {
 }
@@ -142,11 +169,10 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
       case Ist_NoOp:
          addStmtToIRSB(out, bb->stmts[i]);
          break;
-      case Ist_IMark: {
+      case Ist_IMark:
          pc = bb->stmts[i]->Ist.IMark.addr;
          addStmtToIRSB(out, bb->stmts[i]);
          break;
-      }
       case Ist_AbiHint:
          addStmtToIRSB(out, bb->stmts[i]);
          break;
@@ -160,7 +186,8 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          addStmtToIRSB(out, bb->stmts[i]);
          break;
       case Ist_Store:
-         add_entry(out, pc, bb->stmts[i]->Ist.Store.addr);
+         if (is_pc_interesting(pc))
+            add_entry(out, pc, bb->stmts[i]->Ist.Store.addr);
          addStmtToIRSB(out, bb->stmts[i]);
          break;
       case Ist_LoadG:
@@ -217,6 +244,9 @@ static void mt_pre_clo_init(void)
    VG_(basic_tool_funcs)(mt_post_clo_init,
                          mt_instrument,
                          mt_fini);
+   VG_(needs_command_line_options)(mt_process_cmd_line_option,
+                                   mt_print_usage,
+                                   mt_print_debug_usage);
    o = VG_(open)(trace_file_name,
                  VKI_O_CREAT | VKI_O_TRUNC | VKI_O_RDWR,
                  0644);
