@@ -3,6 +3,7 @@
 #include "pub_core_syscall.h"
 #include "pub_tool_aspacehl.h"
 #include "pub_tool_basics.h"
+#include "pub_tool_guest.h"
 #include "pub_tool_libcassert.h"
 #include "pub_tool_libcbase.h"
 #include "pub_tool_libcfile.h"
@@ -46,6 +47,7 @@ static IRExpr* mkPtr(void* ptr)
 
 #define MT_LOAD (1 << 0)
 #define MT_STORE (1 << 1)
+#define MT_REG (1 << 2)
 #define MT_SIZE_SHIFT 8
 
 typedef struct {
@@ -60,6 +62,7 @@ typedef struct {
    /* max sizeofIRType() is 32 at the moment */
    UChar value[32];
 } MTEntry;
+#define MAX_VALUE_SIZE sizeof(((MTEntry*)0)->value)
 
 #define MAX_TRACE_SIZE (1024 * 1024 * 1024)
 static const char trace_file_name[] = "memtrace.out";
@@ -68,32 +71,23 @@ static MTEntry* trace_start;
 static MTEntry* trace;
 static Addr pc_start = 0;
 static Addr pc_end = (Addr)-1;
+static Addr trace_regs_pc = (Addr)-1;
 
-static void add_entry(IRSB* out,
-                      Addr pc,
-                      IRExpr* addr,
-                      UIntPtr flags,
-                      IRExpr* value)
+static IRTemp load_current_entry_ptr(IRSB* out)
 {
    IRTemp currentEntryPtr;
    IRExpr* loadEntryPtr;
-   IRTemp pcPtr;
-   IRExpr* calculatePcPtr;
-   IRTemp addrPtr;
-   IRExpr *calculateAddrPtr;
-   IRTemp flagsPtr;
-   IRExpr *calculateFlagsPtr;
-   IRType valueType;
-   Int valueSize;
-   IRTemp valuePtr;
-   IRExpr *calculateValuePtr;
-   IRTemp valueTmp;
-   IRTemp updatedEntryPtr;
-   IRExpr* incEntryPtr;
    /* currentEntryPtr = trace; */
    currentEntryPtr = newIRTemp(out->tyenv, Ity_Ptr);
    loadEntryPtr = IRExpr_Load(END, Ity_Ptr, mkPtr(&trace));
    addStmtToIRSB(out, IRStmt_WrTmp(currentEntryPtr, loadEntryPtr));
+   return currentEntryPtr;
+}
+
+static void store_pc(IRSB* out, IRTemp currentEntryPtr, IRExpr* pc)
+{
+   IRTemp pcPtr;
+   IRExpr* calculatePcPtr;
    /* pcPtr = &currentEntryPtr->pc; */
    pcPtr = newIRTemp(out->tyenv, Ity_Ptr);
    calculatePcPtr = IRExpr_Binop(Iop_AddPtr,
@@ -101,9 +95,13 @@ static void add_entry(IRSB* out,
                                  mkUIntPtr(offsetof(MTEntry, pc)));
    addStmtToIRSB(out, IRStmt_WrTmp(pcPtr, calculatePcPtr));
    /* (*pcPtr) = pc; */
-   addStmtToIRSB(out, IRStmt_Store(END,
-                                   IRExpr_RdTmp(pcPtr),
-                                   mkUIntPtr(pc)));
+   addStmtToIRSB(out, IRStmt_Store(END, IRExpr_RdTmp(pcPtr), pc));
+}
+
+static void store_addr(IRSB* out, IRTemp currentEntryPtr, IRExpr* addr)
+{
+   IRTemp addrPtr;
+   IRExpr *calculateAddrPtr;
    /* addrPtr = &currentEntryPtr->addr; */
    addrPtr = newIRTemp(out->tyenv, Ity_Ptr);
    calculateAddrPtr = IRExpr_Binop(Iop_AddPtr,
@@ -111,9 +109,13 @@ static void add_entry(IRSB* out,
                                    mkUIntPtr(offsetof(MTEntry, addr)));
    addStmtToIRSB(out, IRStmt_WrTmp(addrPtr, calculateAddrPtr));
    /* (*addrPtr) = addr; */
-   addStmtToIRSB(out, IRStmt_Store(END,
-                                   IRExpr_RdTmp(addrPtr),
-                                   addr));
+   addStmtToIRSB(out, IRStmt_Store(END, IRExpr_RdTmp(addrPtr), addr));
+}
+
+static void store_flags(IRSB* out, IRTemp currentEntryPtr, IRExpr* flags)
+{
+   IRTemp flagsPtr;
+   IRExpr *calculateFlagsPtr;
    /* flagsPtr = &currentEntryPtr->flags; */
    flagsPtr = newIRTemp(out->tyenv, Ity_Ptr);
    calculateFlagsPtr = IRExpr_Binop(Iop_AddPtr,
@@ -121,13 +123,14 @@ static void add_entry(IRSB* out,
                                     mkUIntPtr(offsetof(MTEntry, flags)));
    addStmtToIRSB(out, IRStmt_WrTmp(flagsPtr, calculateFlagsPtr));
    /* (*flagsPtr) = flags; */
-   valueType = typeOfIRExpr(out->tyenv, value);
-   valueSize = sizeofIRType(valueType);
-   tl_assert(valueSize <= sizeof((MTEntry*)0)->value);
-   addStmtToIRSB(out, IRStmt_Store(END,
-                                   IRExpr_RdTmp(flagsPtr),
-                                   mkUIntPtr(valueSize << MT_SIZE_SHIFT
-                                             | flags)));
+   addStmtToIRSB(out, IRStmt_Store(END, IRExpr_RdTmp(flagsPtr), flags));
+}
+
+static void store_value(IRSB* out, IRTemp currentEntryPtr, IRExpr* value)
+{
+   IRTemp valuePtr;
+   IRExpr *calculateValuePtr;
+   IRTemp valueTmp;
    /* valuePtr = &currentEntryPtr->value; */
    valuePtr = newIRTemp(out->tyenv, Ity_Ptr);
    calculateValuePtr = IRExpr_Binop(Iop_AddPtr,
@@ -135,11 +138,17 @@ static void add_entry(IRSB* out,
                                     mkUIntPtr(offsetof(MTEntry, value)));
    addStmtToIRSB(out, IRStmt_WrTmp(valuePtr, calculateValuePtr));
    /* (*(typeof(value)*)valuePtr) = value; */
-   valueTmp = newIRTemp(out->tyenv, valueType);
+   valueTmp = newIRTemp(out->tyenv, typeOfIRExpr(out->tyenv, value));
    addStmtToIRSB(out, IRStmt_WrTmp(valueTmp, value));
    addStmtToIRSB(out, IRStmt_Store(END,
                                    IRExpr_RdTmp(valuePtr),
                                    IRExpr_RdTmp(valueTmp)));
+}
+
+static void update_current_entry_ptr(IRSB* out, IRTemp currentEntryPtr)
+{
+   IRTemp updatedEntryPtr;
+   IRExpr* incEntryPtr;
    /* updatedEntryPtr = currentEntryPtr + 1; */
    updatedEntryPtr = newIRTemp(out->tyenv, Ity_Ptr);
    incEntryPtr = IRExpr_Binop(Iop_AddPtr,
@@ -150,6 +159,46 @@ static void add_entry(IRSB* out,
    addStmtToIRSB(out, IRStmt_Store(END,
                                    mkPtr(&trace),
                                    IRExpr_RdTmp(updatedEntryPtr)));
+}
+
+static void add_entry(IRSB* out,
+                      Addr pc,
+                      IRExpr* addr,
+                      UIntPtr flags,
+                      IRExpr* value)
+{
+   IRTemp currentEntryPtr;
+   Int valueSize;
+   currentEntryPtr = load_current_entry_ptr(out);
+   store_pc(out, currentEntryPtr, mkUIntPtr(pc));
+   store_addr(out, currentEntryPtr, addr);
+   valueSize = sizeofIRType(typeOfIRExpr(out->tyenv, value));
+   tl_assert(valueSize <= MAX_VALUE_SIZE);
+   store_flags(out,
+               currentEntryPtr,
+               mkUIntPtr(valueSize << MT_SIZE_SHIFT | flags));
+   store_value(out, currentEntryPtr, value);
+   update_current_entry_ptr(out, currentEntryPtr);
+}
+
+static void add_reg_entry(IRSB* out, Addr pc, Int offset)
+{
+   IRTemp currentEntryPtr;
+   UIntPtr flags;
+   currentEntryPtr = load_current_entry_ptr(out);
+   store_pc(out, currentEntryPtr, mkUIntPtr(pc));
+   store_addr(out, currentEntryPtr, mkUIntPtr(offset));
+   flags = VG_WORDSIZE << MT_SIZE_SHIFT | MT_REG;
+   store_flags(out, currentEntryPtr, mkUIntPtr(flags));
+   store_value(out, currentEntryPtr, IRExpr_Get(offset, Ity_Ptr));
+   update_current_entry_ptr(out, currentEntryPtr);
+}
+
+static void add_reg_entries(IRSB* out, Addr pc)
+{
+   int i;
+   for (i = 0; i < sizeof(VexGuestArchState); i += VG_WORDSIZE)
+      add_reg_entry(out, pc, i);
 }
 
 static void show_segments(void)
@@ -177,11 +226,18 @@ static Bool is_pc_interesting(Addr pc)
    return pc >= pc_start && pc <= pc_end;
 }
 
+static Bool should_trace_regs(Addr pc)
+{
+   return pc == trace_regs_pc;
+}
+
 static Bool mt_process_cmd_line_option(const HChar* arg)
 {
    if (VG_BHEX_CLO(arg, "--pc-start", pc_start, 0, (Addr)-1))
       return True;
    else if (VG_BHEX_CLO(arg, "--pc-end", pc_end, 0, (Addr)-1))
+      return True;
+   else if (VG_BHEX_CLO(arg, "--trace-regs-pc", trace_regs_pc, 0, (Addr)-1))
       return True;
    else
       return False;
@@ -224,6 +280,8 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          break;
       case Ist_IMark:
          pc = stmt->Ist.IMark.addr;
+         if (should_trace_regs(pc))
+            add_reg_entries(out, pc);
          addStmtToIRSB(out, stmt);
          break;
       case Ist_AbiHint:
