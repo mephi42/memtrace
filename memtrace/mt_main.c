@@ -44,9 +44,21 @@ static IRExpr* mkPtr(void* ptr)
    return mkUIntPtr((UIntPtr)ptr);
 }
 
+#define MT_LOAD (1 << 0)
+#define MT_STORE (1 << 1)
+#define MT_SIZE_SHIFT 8
+
 typedef struct {
-   UIntPtr pc;
-   UIntPtr addr;
+   union {
+      struct {
+         UIntPtr pc;
+         UIntPtr addr;
+         UIntPtr flags;
+      };
+      UChar pad[32];
+   };
+   /* max sizeofIRType() is 32 at the moment */
+   UChar value[32];
 } MTEntry;
 
 #define MAX_TRACE_SIZE (1024 * 1024 * 1024)
@@ -57,7 +69,11 @@ static MTEntry* trace;
 static Addr pc_start = 0;
 static Addr pc_end = (Addr)-1;
 
-static void add_entry(IRSB* out, Addr pc, IRExpr* addr)
+static void add_entry(IRSB* out,
+                      Addr pc,
+                      IRExpr* addr,
+                      UIntPtr flags,
+                      IRExpr* value)
 {
    IRTemp currentEntryPtr;
    IRExpr* loadEntryPtr;
@@ -65,6 +81,13 @@ static void add_entry(IRSB* out, Addr pc, IRExpr* addr)
    IRExpr* calculatePcPtr;
    IRTemp addrPtr;
    IRExpr *calculateAddrPtr;
+   IRTemp flagsPtr;
+   IRExpr *calculateFlagsPtr;
+   IRType valueType;
+   Int valueSize;
+   IRTemp valuePtr;
+   IRExpr *calculateValuePtr;
+   IRTemp valueTmp;
    IRTemp updatedEntryPtr;
    IRExpr* incEntryPtr;
    /* currentEntryPtr = trace; */
@@ -91,6 +114,32 @@ static void add_entry(IRSB* out, Addr pc, IRExpr* addr)
    addStmtToIRSB(out, IRStmt_Store(END,
                                    IRExpr_RdTmp(addrPtr),
                                    addr));
+   /* flagsPtr = &currentEntryPtr->flags; */
+   flagsPtr = newIRTemp(out->tyenv, Ity_Ptr);
+   calculateFlagsPtr = IRExpr_Binop(Iop_AddPtr,
+                                    IRExpr_RdTmp(currentEntryPtr),
+                                    mkUIntPtr(offsetof(MTEntry, flags)));
+   addStmtToIRSB(out, IRStmt_WrTmp(flagsPtr, calculateFlagsPtr));
+   /* (*flagsPtr) = flags; */
+   valueType = typeOfIRExpr(out->tyenv, value);
+   valueSize = sizeofIRType(valueType);
+   tl_assert(valueSize <= sizeof((MTEntry*)0)->value);
+   addStmtToIRSB(out, IRStmt_Store(END,
+                                   IRExpr_RdTmp(flagsPtr),
+                                   mkUIntPtr(valueSize << MT_SIZE_SHIFT
+                                             | flags)));
+   /* valuePtr = &currentEntryPtr->value; */
+   valuePtr = newIRTemp(out->tyenv, Ity_Ptr);
+   calculateValuePtr = IRExpr_Binop(Iop_AddPtr,
+                                    IRExpr_RdTmp(currentEntryPtr),
+                                    mkUIntPtr(offsetof(MTEntry, value)));
+   addStmtToIRSB(out, IRStmt_WrTmp(valuePtr, calculateValuePtr));
+   /* (*(typeof(value)*)valuePtr) = value; */
+   valueTmp = newIRTemp(out->tyenv, valueType);
+   addStmtToIRSB(out, IRStmt_WrTmp(valueTmp, value));
+   addStmtToIRSB(out, IRStmt_Store(END,
+                                   IRExpr_RdTmp(valuePtr),
+                                   IRExpr_RdTmp(valueTmp)));
    /* updatedEntryPtr = currentEntryPtr + 1; */
    updatedEntryPtr = newIRTemp(out->tyenv, Ity_Ptr);
    incEntryPtr = IRExpr_Binop(Iop_AddPtr,
@@ -159,63 +208,72 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
                     IRType gWordTy,
                     IRType hWordTy)
 {
+   IRExpr* addr;
    IRExpr* data;
+   IRStmt* stmt;
    Addr pc = 0;
    IRSB* out;
    int i;
 
    out = deepCopyIRSBExceptStmts(bb);
    for (i = 0; i < bb->stmts_used; i++) {
-      switch (bb->stmts[i]->tag) {
+      stmt = bb->stmts[i];
+      switch (stmt->tag) {
       case Ist_NoOp:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_IMark:
-         pc = bb->stmts[i]->Ist.IMark.addr;
-         addStmtToIRSB(out, bb->stmts[i]);
+         pc = stmt->Ist.IMark.addr;
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_AbiHint:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_Put:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_PutI:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_WrTmp:
-         data = bb->stmts[i]->Ist.WrTmp.data;
-         if (is_pc_interesting(pc) && data->tag == Iex_Load)
-            add_entry(out, pc, data->Iex.Load.addr);
-         addStmtToIRSB(out, bb->stmts[i]);
+         data = stmt->Ist.WrTmp.data;
+         if (is_pc_interesting(pc) && data->tag == Iex_Load) {
+            addr = data->Iex.Load.addr;
+            add_entry(out, pc, addr, MT_LOAD, data);
+         }
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_Store:
-         if (is_pc_interesting(pc))
-            add_entry(out, pc, bb->stmts[i]->Ist.Store.addr);
-         addStmtToIRSB(out, bb->stmts[i]);
+         if (is_pc_interesting(pc)) {
+            addr = stmt->Ist.Store.addr;
+            data = stmt->Ist.Store.data;
+            add_entry(out, pc, addr, MT_STORE, data);
+         }
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_LoadG:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_StoreG:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_CAS:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_LLSC:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_Dirty:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_MBE:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       case Ist_Exit:
-         addStmtToIRSB(out, bb->stmts[i]);
+         addStmtToIRSB(out, stmt);
          break;
       default:
+         ppIRStmt(stmt);
          tl_assert(0);
       }
    }
