@@ -159,6 +159,7 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
                     IRType gWordTy,
                     IRType hWordTy)
 {
+   IRExpr* data;
    Addr pc = 0;
    IRSB* out;
    int i;
@@ -183,6 +184,9 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          addStmtToIRSB(out, bb->stmts[i]);
          break;
       case Ist_WrTmp:
+         data = bb->stmts[i]->Ist.WrTmp.data;
+         if (is_pc_interesting(pc) && data->tag == Iex_Load)
+            add_entry(out, pc, data->Iex.Load.addr);
          addStmtToIRSB(out, bb->stmts[i]);
          break;
       case Ist_Store:
