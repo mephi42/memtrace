@@ -48,6 +48,7 @@ static IRExpr* mkPtr(void* ptr)
 #define MT_LOAD (1 << 0)
 #define MT_STORE (1 << 1)
 #define MT_REG (1 << 2)
+#define MT_INSN (1 << 3)
 #define MT_SIZE_SHIFT 8
 
 typedef struct {
@@ -201,6 +202,15 @@ static void add_reg_entries(IRSB* out, Addr pc)
       add_reg_entry(out, pc, i);
 }
 
+static void add_insn_entry(Addr pc, UInt len)
+{
+   trace->pc = pc;
+   trace->addr = pc;
+   trace->flags = len << MT_SIZE_SHIFT | MT_INSN;
+   VG_(memcpy)(trace->value, (void*)pc, len);
+   trace++;
+}
+
 static void show_segments(void)
 {
    Int n_seg_starts;
@@ -280,6 +290,8 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          break;
       case Ist_IMark:
          pc = stmt->Ist.IMark.addr;
+         if (should_trace_regs(pc) || is_pc_interesting(pc))
+            add_insn_entry(pc, stmt->Ist.IMark.len);
          if (should_trace_regs(pc))
             add_reg_entries(out, pc);
          addStmtToIRSB(out, stmt);
