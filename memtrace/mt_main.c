@@ -70,14 +70,20 @@ static const char trace_file_name[] = "memtrace.out";
 static int trace_fd;
 static MTEntry* trace_start;
 static MTEntry* trace;
-static Addr pc_start = 0;
-static Addr pc_end = (Addr)-1;
+typedef struct {
+   Addr start;
+   Addr end;
+} AddrRange;
+#define MAX_PC_RANGES 32
+static AddrRange pc_ranges[MAX_PC_RANGES];
+static UInt n_pc_ranges;
 static Addr trace_regs_pc = (Addr)-1;
 
 static IRTemp load_current_entry_ptr(IRSB* out)
 {
    IRTemp currentEntryPtr;
    IRExpr* loadEntryPtr;
+
    /* currentEntryPtr = trace; */
    currentEntryPtr = newIRTemp(out->tyenv, Ity_Ptr);
    loadEntryPtr = IRExpr_Load(END, Ity_Ptr, mkPtr(&trace));
@@ -89,6 +95,7 @@ static void store_pc(IRSB* out, IRTemp currentEntryPtr, IRExpr* pc)
 {
    IRTemp pcPtr;
    IRExpr* calculatePcPtr;
+
    /* pcPtr = &currentEntryPtr->pc; */
    pcPtr = newIRTemp(out->tyenv, Ity_Ptr);
    calculatePcPtr = IRExpr_Binop(Iop_AddPtr,
@@ -103,6 +110,7 @@ static void store_addr(IRSB* out, IRTemp currentEntryPtr, IRExpr* addr)
 {
    IRTemp addrPtr;
    IRExpr *calculateAddrPtr;
+
    /* addrPtr = &currentEntryPtr->addr; */
    addrPtr = newIRTemp(out->tyenv, Ity_Ptr);
    calculateAddrPtr = IRExpr_Binop(Iop_AddPtr,
@@ -117,6 +125,7 @@ static void store_flags(IRSB* out, IRTemp currentEntryPtr, IRExpr* flags)
 {
    IRTemp flagsPtr;
    IRExpr *calculateFlagsPtr;
+
    /* flagsPtr = &currentEntryPtr->flags; */
    flagsPtr = newIRTemp(out->tyenv, Ity_Ptr);
    calculateFlagsPtr = IRExpr_Binop(Iop_AddPtr,
@@ -132,6 +141,7 @@ static void store_value(IRSB* out, IRTemp currentEntryPtr, IRExpr* value)
    IRTemp valuePtr;
    IRExpr *calculateValuePtr;
    IRTemp valueTmp;
+
    /* valuePtr = &currentEntryPtr->value; */
    valuePtr = newIRTemp(out->tyenv, Ity_Ptr);
    calculateValuePtr = IRExpr_Binop(Iop_AddPtr,
@@ -150,6 +160,7 @@ static void update_current_entry_ptr(IRSB* out, IRTemp currentEntryPtr)
 {
    IRTemp updatedEntryPtr;
    IRExpr* incEntryPtr;
+
    /* updatedEntryPtr = currentEntryPtr + 1; */
    updatedEntryPtr = newIRTemp(out->tyenv, Ity_Ptr);
    incEntryPtr = IRExpr_Binop(Iop_AddPtr,
@@ -170,6 +181,7 @@ static void add_entry(IRSB* out,
 {
    IRTemp currentEntryPtr;
    Int valueSize;
+
    currentEntryPtr = load_current_entry_ptr(out);
    store_pc(out, currentEntryPtr, mkUIntPtr(pc));
    store_addr(out, currentEntryPtr, addr);
@@ -186,6 +198,7 @@ static void add_reg_entry(IRSB* out, Addr pc, Int offset)
 {
    IRTemp currentEntryPtr;
    UIntPtr flags;
+
    currentEntryPtr = load_current_entry_ptr(out);
    store_pc(out, currentEntryPtr, mkUIntPtr(pc));
    store_addr(out, currentEntryPtr, mkUIntPtr(offset));
@@ -233,7 +246,11 @@ static void show_segments(void)
 
 static Bool is_pc_interesting(Addr pc)
 {
-   return pc >= pc_start && pc <= pc_end;
+   UInt i;
+   for (i = 0; i < n_pc_ranges; i++)
+      if (pc >= pc_ranges[i].start && pc <= pc_ranges[i].end)
+         return True;
+   return False;
 }
 
 static Bool should_trace_regs(Addr pc)
@@ -241,12 +258,32 @@ static Bool should_trace_regs(Addr pc)
    return pc == trace_regs_pc;
 }
 
+static Bool add_pc_range(const HChar* spec)
+{
+   const HChar* dash;
+   HChar *endptr;
+
+   if (n_pc_ranges == MAX_PC_RANGES)
+      return False;
+   dash = VG_(strchr)(spec, '-');
+   if (dash == NULL)
+      return False;
+   pc_ranges[n_pc_ranges].start = VG_(strtoull16)(spec, &endptr);
+   if (endptr != dash)
+      return False;
+   pc_ranges[n_pc_ranges].end = VG_(strtoull16)(dash + 1, &endptr);
+   if (*endptr != '\0')
+      return False;
+   n_pc_ranges++;
+   return True;
+}
+
 static Bool mt_process_cmd_line_option(const HChar* arg)
 {
-   if (VG_BHEX_CLO(arg, "--pc-start", pc_start, 0, (Addr)-1))
-      return True;
-   else if (VG_BHEX_CLO(arg, "--pc-end", pc_end, 0, (Addr)-1))
-      return True;
+   const HChar* tmp_str;
+
+   if (VG_STR_CLO(arg, "--pc-range", tmp_str))
+      return add_pc_range(tmp_str);
    else if (VG_BHEX_CLO(arg, "--trace-regs-pc", trace_regs_pc, 0, (Addr)-1))
       return True;
    else
