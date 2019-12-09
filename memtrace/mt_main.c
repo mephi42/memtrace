@@ -1,6 +1,5 @@
 #include "pub_core_aspacemgr.h"
 #include "pub_core_libcfile.h"
-#include "pub_core_syscall.h"
 #include "pub_tool_aspacehl.h"
 #include "pub_tool_basics.h"
 #include "pub_tool_guest.h"
@@ -8,6 +7,7 @@
 #include "pub_tool_libcbase.h"
 #include "pub_tool_libcfile.h"
 #include "pub_tool_libcprint.h"
+#include "pub_tool_mallocfree.h"
 #include "pub_tool_options.h"
 #include "pub_tool_tooliface.h"
 #include "pub_tool_vki.h"
@@ -26,11 +26,13 @@ typedef ULong UIntPtr;
 #define Ity_Ptr Ity_I64
 #define Iop_AddPtr Iop_Add64
 #define IRConst_UIntPtr IRConst_U64
+#define Iop_CmpEQPtr Iop_CmpEQ64
 #elif VG_WORDSIZE == 4
 typedef UInt UIntPtr;
 #define Ity_Ptr Ity_I32
 #define Iop_AddPtr Iop_Add32
 #define IRConst_UIntPtr IRConst_U32
+#define Iop_CmpEQPtr Iop_CmpEQ32
 #else
 #error "Unsupported VG_WORDSIZE"
 #endif
@@ -65,11 +67,12 @@ typedef struct {
 } MTEntry;
 #define MAX_VALUE_SIZE sizeof(((MTEntry*)0)->value)
 
-#define MAX_TRACE_SIZE (1024 * 1024 * 1024)
+#define TRACE_BUFFER_SIZE (1024 * 1024 * 1024)
 static const char trace_file_name[] = "memtrace.out";
 static int trace_fd;
 static MTEntry* trace_start;
 static MTEntry* trace;
+static MTEntry* trace_end;
 typedef struct {
    Addr start;
    Addr end;
@@ -78,6 +81,40 @@ typedef struct {
 static AddrRange pc_ranges[MAX_PC_RANGES];
 static UInt n_pc_ranges;
 static Addr trace_regs_pc = (Addr)-1;
+
+static void open_trace_file(void)
+{
+   SysRes o;
+
+   o = VG_(open)(trace_file_name,
+                 VKI_O_CREAT | VKI_O_TRUNC | VKI_O_RDWR,
+                 0644);
+   if (sr_isError(o)) {
+      VG_(umsg)("error: can't open '%s'\n", trace_file_name);
+      VG_(exit)(1);
+   }
+   trace_fd = VG_(safe_fd)(sr_Res(o));
+   if (trace_fd == -1) {
+      VG_(umsg)("error: safe_fd for '%s' failed\n", trace_file_name);
+      VG_(exit)(1);
+   }
+   trace_start = VG_(malloc)("mt.trace", TRACE_BUFFER_SIZE);
+   trace = trace_start;
+   trace_end = trace_start + TRACE_BUFFER_SIZE / sizeof(MTEntry);
+}
+
+static void flush_trace_buffer(void)
+{
+   VG_(write)(trace_fd, trace_start, (trace - trace_start) * sizeof(MTEntry));
+   trace = trace_start;
+}
+
+static void close_trace_file(void)
+{
+   flush_trace_buffer();
+   VG_(free)(trace_start);
+   VG_(close)(trace_fd);
+}
 
 static IRTemp load_current_entry_ptr(IRSB* out)
 {
@@ -158,8 +195,9 @@ static void store_value(IRSB* out, IRTemp currentEntryPtr, IRExpr* value)
 
 static void update_current_entry_ptr(IRSB* out, IRTemp currentEntryPtr)
 {
-   IRTemp updatedEntryPtr;
+   IRTemp updatedEntryPtr, isFlushNeeded;
    IRExpr* incEntryPtr;
+   IRDirty* d;
 
    /* updatedEntryPtr = currentEntryPtr + 1; */
    updatedEntryPtr = newIRTemp(out->tyenv, Ity_Ptr);
@@ -171,6 +209,23 @@ static void update_current_entry_ptr(IRSB* out, IRTemp currentEntryPtr)
    addStmtToIRSB(out, IRStmt_Store(END,
                                    mkPtr(&trace),
                                    IRExpr_RdTmp(updatedEntryPtr)));
+   /* isFlushNeeded = updatedEntryPtr == traceEnd; */
+   isFlushNeeded = newIRTemp(out->tyenv, Ity_I1);
+   addStmtToIRSB(out,
+                 IRStmt_WrTmp(isFlushNeeded,
+                              IRExpr_Binop(Iop_CmpEQPtr,
+                                           IRExpr_RdTmp(updatedEntryPtr),
+                                           mkPtr(trace_end))));
+   /* if (isFlushNeeded) flush_trace_buffer(); */
+   d = unsafeIRDirty_0_N(0,
+                         "flush_trace_buffer",
+                         flush_trace_buffer,
+                         mkIRExprVec_0());
+   d->guard = IRExpr_RdTmp(isFlushNeeded);
+   d->mFx   = Ifx_Write;
+   d->mAddr = mkPtr(&trace);
+   d->mSize = sizeof(trace);
+   addStmtToIRSB(out, IRStmt_Dirty(d));
 }
 
 static void add_entry(IRSB* out,
@@ -389,22 +444,12 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
 
 static void mt_fini(Int exitcode)
 {
-   ULong trace_size;
-   SysRes o;
-   VG_(am_munmap_valgrind)((Addr)trace_start, MAX_TRACE_SIZE);
-   trace_size = (char*)trace - (char*)trace_start;
-   o = VG_(do_syscall2)(__NR_ftruncate, trace_fd, trace_size);
-   if (sr_isError(o)) {
-      VG_(umsg)("error: can't truncate '%s'\n", trace_file_name);
-      VG_(exit)(1);
-   }
-   VG_(close)(trace_fd);
+   close_trace_file();
    show_segments();
 }
 
 static void mt_pre_clo_init(void)
 {
-   SysRes o;
    VG_(details_name)("Memory Tracer");
    VG_(details_description)("Valgrind tool for tracing memory accesses");
    VG_(details_copyright_author)(
@@ -416,33 +461,7 @@ static void mt_pre_clo_init(void)
    VG_(needs_command_line_options)(mt_process_cmd_line_option,
                                    mt_print_usage,
                                    mt_print_debug_usage);
-   o = VG_(open)(trace_file_name,
-                 VKI_O_CREAT | VKI_O_TRUNC | VKI_O_RDWR,
-                 0644);
-   if (sr_isError(o)) {
-      VG_(umsg)("error: can't open '%s'\n", trace_file_name);
-      VG_(exit)(1);
-   }
-   trace_fd = VG_(safe_fd)(sr_Res(o));
-   if (trace_fd == -1) {
-      VG_(umsg)("error: safe_fd for '%s' failed\n", trace_file_name);
-      VG_(exit)(1);
-   }
-   o = VG_(do_syscall2)(__NR_ftruncate, trace_fd, MAX_TRACE_SIZE);
-   if (sr_isError(o)) {
-      VG_(umsg)("error: can't reserve space for '%s'\n", trace_file_name);
-      VG_(exit)(1);
-   }
-   o = VG_(am_shared_mmap_file_float_valgrind)(MAX_TRACE_SIZE,
-                                               VKI_PROT_READ | VKI_PROT_WRITE,
-                                               trace_fd,
-                                               0);
-   if (sr_isError(o)) {
-      VG_(umsg)("error: can't mmap '%s'\n", trace_file_name);
-      VG_(exit)(1);
-   }
-   trace_start = (MTEntry*)sr_Res(o);
-   trace = trace_start;
+   open_trace_file();
 }
 
 VG_DETERMINE_INTERFACE_VERSION(mt_pre_clo_init)
