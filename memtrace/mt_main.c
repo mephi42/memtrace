@@ -482,6 +482,11 @@ static void mt_pre_clo_init(void)
    VG_(needs_command_line_options)(mt_process_cmd_line_option,
                                    mt_print_usage,
                                    mt_print_debug_usage);
+   /* Valgrind passes an optimized IRSB to mt_instrument, in which nearby
+      instructions might become intertwined. Therefore, in order to get the
+      accurate associaton of data accesses to instructions, need to look at
+      one instruction at a time. */
+   VG_(clo_vex_control).guest_max_insns = 1;
    open_trace_file();
 }
 
