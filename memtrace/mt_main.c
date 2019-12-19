@@ -1,5 +1,6 @@
 #include "pub_core_aspacemgr.h"
 #include "pub_core_libcfile.h"
+#include "pub_core_machine.h"
 #include "pub_tool_aspacehl.h"
 #include "pub_tool_basics.h"
 #include "pub_tool_guest.h"
@@ -12,6 +13,8 @@
 #include "pub_tool_tooliface.h"
 #include "pub_tool_vki.h"
 #include "pub_tool_vkiscnums.h"
+
+#include <elf.h>
 
 #if defined(VG_BIGENDIAN)
 #define END Iend_BE
@@ -27,12 +30,14 @@ typedef ULong UIntPtr;
 #define Iop_AddPtr Iop_Add64
 #define IRConst_UIntPtr IRConst_U64
 #define Iop_CmpEQPtr Iop_CmpEQ64
+#define MT_MAGIC 0x4d543634
 #elif VG_WORDSIZE == 4
 typedef UInt UIntPtr;
 #define Ity_Ptr Ity_I32
 #define Iop_AddPtr Iop_Add32
 #define IRConst_UIntPtr IRConst_U32
 #define Iop_CmpEQPtr Iop_CmpEQ32
+#define MT_MAGIC 0x4d543332
 #else
 #error "Unsupported VG_WORDSIZE"
 #endif
@@ -62,6 +67,10 @@ typedef struct {
          UIntPtr addr;
          UIntPtr flags;
       };
+      struct {
+         UInt magic;
+         UShort e_machine;
+      } header;
       UChar pad[32];
    };
    /* max sizeofIRType() is 32 at the moment */
@@ -104,6 +113,11 @@ static void open_trace_file(void)
    trace_start = VG_(malloc)("mt.trace", TRACE_BUFFER_SIZE);
    trace = trace_start;
    trace_end = trace_start + TRACE_BUFFER_SIZE / sizeof(MTEntry);
+
+   /* this is always the first entry */
+   trace->header.magic = MT_MAGIC;
+   trace->header.e_machine = VG_ELF_MACHINE;
+   trace++;
 }
 
 static void flush_trace_buffer(void)
