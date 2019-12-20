@@ -17,6 +17,7 @@ class InsnInCode:
 
 @dataclass
 class InsnInTrace:
+    seq: int
     in_code: InsnInCode
     reg_uses: List['Def'] = field(default_factory=list)
     reg_defs: List['Def'] = field(default_factory=list)
@@ -77,7 +78,7 @@ def find_defs(store: SortedKeyList, start: int, end: int) \
         )
 
 
-INITIAL_INSN = InsnInTrace(InsnInCode(0))
+INITIAL_INSN = InsnInTrace(seq=0, in_code=InsnInCode(pc=0))
 INITIAL_DEF = Def(0, (1 << 64) - 1, INITIAL_INSN)
 
 
@@ -98,8 +99,13 @@ def analyze_insn(ud: UD, pc, addr, flags, data):
         insn_in_code = InsnInCode(pc)
         ud.pc2insn[pc] = insn_in_code
     if pc != ud.insns_in_trace[-1].in_code.pc:
-        ud.insns_in_trace.append(InsnInTrace(insn_in_code))
-    insn_in_trace = ud.insns_in_trace[-1]
+        insn_in_trace = InsnInTrace(
+            seq=len(ud.insns_in_trace),
+            in_code=insn_in_code,
+        )
+        ud.insns_in_trace.append(insn_in_trace)
+    else:
+        insn_in_trace = ud.insns_in_trace[-1]
     end = addr + (flags >> 8)
     if flags & MT_LOAD:
         insn_in_trace.mem_uses.extend(find_defs(ud.mem, addr, end))
@@ -123,7 +129,12 @@ def analyze_insn(ud: UD, pc, addr, flags, data):
 
 def format_uses(uses):
     return ', '.join(
-        '0x{:x}-0x{:x}@0x{:x}'.format(use.start, use.end, use.insn_in_trace.in_code.pc)
+        '0x{:x}-0x{:x}@[{}]0x{:x}'.format(
+            use.start,
+            use.end,
+            use.insn_in_trace.seq,
+            use.insn_in_trace.in_code.pc,
+        )
         for use in uses
     )
 
@@ -145,7 +156,8 @@ def main():
     for pc, addr, flags, data in gen:
         prev = ud.insns_in_trace[-1]
         if pc != prev.in_code.pc:
-            print('0x{:x}: {} {} reg_uses=[{}] reg_defs=[{}] mem_uses=[{}] mem_defs=[{}]'.format(
+            print('[{}]0x{:x}: {} {} reg_uses=[{}] reg_defs=[{}] mem_uses=[{}] mem_defs=[{}]'.format(
+                prev.seq,
                 prev.in_code.pc,
                 prev.in_code.raw.hex(),
                 disasm_str(disasm, pc, prev.in_code.raw),
