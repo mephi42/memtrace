@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 from dataclasses import dataclass, field
 from typing import Dict, Generator, List
@@ -5,7 +6,7 @@ from typing import Dict, Generator, List
 from sortedcontainers import SortedKeyList
 
 from memtrace import MT_LOAD, MT_STORE, MT_REGS, MT_INSN, MT_GET_REG, \
-    MT_PUT_REG, read_entries
+    MT_PUT_REG, MT_INSN_EXEC, read_entries
 from memtrace.disasm import disasm_init, disasm_str
 
 
@@ -123,6 +124,8 @@ def analyze_insn(ud: UD, pc, addr, flags, data):
         def_ = Def(addr, end, insn_in_trace)
         insn_in_trace.reg_defs.append(def_)
         add_def(ud.regs, def_)
+    elif flags & MT_INSN_EXEC:
+        pass
     else:
         raise Exception('Unsupported flags')
 
@@ -156,7 +159,7 @@ def main():
     for pc, addr, flags, data in gen:
         prev = ud.insns_in_trace[-1]
         if pc != prev.in_code.pc:
-            print('[{}]0x{:x}: {} {} reg_uses=[{}] reg_defs=[{}] mem_uses=[{}] mem_defs=[{}]'.format(
+            print('[{}]0x{:x}: {} {} reg_uses=[{}] reg_defs=[{}] mem_uses=[{}] mem_defs=[{}]'.format(  # noqa: E501
                 prev.seq,
                 prev.in_code.pc,
                 prev.in_code.raw.hex(),

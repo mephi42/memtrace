@@ -3,7 +3,7 @@ import argparse
 import struct
 
 from memtrace import EM2STR, MT_LOAD, MT_STORE, MT_REGS, MT_INSN, MT_GET_REG, \
-    MT_PUT_REG, MT_SIZE_SHIFT, read_entries
+    MT_PUT_REG, MT_INSN_EXEC, MT_SIZE_SHIFT, read_entries
 from memtrace.disasm import disasm_init, disasm_str
 
 
@@ -35,6 +35,7 @@ def main():
     print('Word:    {}'.format(word))
     print('Machine: {}'.format(EM2STR[e_machine]))
     disasm = disasm_init(endian, word, e_machine)
+    insn_exec_count = 0
     for pc, addr, flags, value in gen:
         size = flags >> MT_SIZE_SHIFT
         if flags & MT_LOAD:
@@ -49,6 +50,9 @@ def main():
             op = 'MT_GET_REG'
         elif flags & MT_PUT_REG:
             op = 'MT_PUT_REG'
+        elif flags & MT_INSN_EXEC:
+            op = 'MT_INSN_EXEC'
+            insn_exec_count += 1
         else:
             raise Exception('Unsupported flags')
         if flags & MT_INSN:
@@ -58,6 +62,8 @@ def main():
         else:
             print('0x{:x}: {} uint{}_t [0x{:x}] {}'.format(
                 pc, op, size * 8, addr, format_value(value, endian, size)))
+    if insn_exec_count > 0:
+        print('Insns   : {}'.format(insn_exec_count))
 
 
 if __name__ == '__main__':

@@ -1,0 +1,4 @@
+/build/
+/dist/
+/memtrace.egg-info/
+/memtrace/__pycache__/
