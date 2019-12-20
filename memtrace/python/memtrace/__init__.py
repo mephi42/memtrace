@@ -28,6 +28,7 @@ MT_REGS = 1 << 2
 MT_INSN = 1 << 3
 MT_GET_REG = 1 << 4
 MT_PUT_REG = 1 << 5
+MT_INSN_EXEC = 1 << 6
 MT_SIZE_SHIFT = 8
 
 MAGIC2STRUCT = {

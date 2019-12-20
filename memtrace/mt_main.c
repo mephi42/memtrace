@@ -58,6 +58,7 @@ static IRExpr* mkPtr(void* ptr)
 #define MT_INSN (1 << 3)
 #define MT_GET_REG (1 << 4)
 #define MT_PUT_REG (1 << 5)
+#define MT_INSN_EXEC (1 << 6)
 #define MT_SIZE_SHIFT 8
 
 typedef struct {
@@ -65,6 +66,7 @@ typedef struct {
       struct {
          UIntPtr pc;
          UIntPtr addr;
+         /* combination of MT_* flags */
          UIntPtr flags;
       };
       struct {
@@ -84,15 +86,20 @@ static int trace_fd;
 static MTEntry* trace_start;
 static MTEntry* trace;
 static MTEntry* trace_end;
+#define AR_MEM (1 << 1)
+#define AR_REGS (1 << 2)
+#define AR_INSNS (1 << 3)
+#define AR_ALL_REGS (1 << 4)
+#define AR_DEFAULT AR_MEM
 typedef struct {
    Addr start;
    Addr end;
+   /* combination of AR_* flags */
+   int flags;
 } AddrRange;
 #define MAX_PC_RANGES 32
 static AddrRange pc_ranges[MAX_PC_RANGES];
 static UInt n_pc_ranges;
-static Addr trace_reg_values_pc = (Addr)-1;
-static Bool should_trace_regs;
 
 static void open_trace_file(void)
 {
@@ -122,7 +129,10 @@ static void open_trace_file(void)
 
 static void flush_trace_buffer(void)
 {
-   VG_(write)(trace_fd, trace_start, (trace - trace_start) * sizeof(MTEntry));
+   Int trace_size = (trace - trace_start) * sizeof(MTEntry);
+
+   VG_(write)(trace_fd, trace_start, trace_size);
+   VG_(memset)(trace_start, 0, trace_size);
    trace = trace_start;
 }
 
@@ -297,6 +307,17 @@ static void add_insn_entry(Addr pc, UInt len)
    trace++;
 }
 
+static void add_insn_exec_entry(IRSB* out, Addr pc)
+{
+   IRTemp currentEntryPtr;
+
+   currentEntryPtr = load_current_entry_ptr(out);
+   store_pc(out, currentEntryPtr, mkUIntPtr(pc));
+   store_addr(out, currentEntryPtr, mkUIntPtr(pc));
+   store_flags(out, currentEntryPtr, mkUIntPtr(MT_INSN_EXEC));
+   update_current_entry_ptr(out, currentEntryPtr);
+}
+
 static void show_segments(void)
 {
    Int n_seg_starts;
@@ -317,25 +338,20 @@ static void show_segments(void)
    }
 }
 
-static Bool is_pc_interesting(Addr pc)
+static int get_pc_flags(Addr pc)
 {
+   int flags = 0;
    UInt i;
 
-   if (n_pc_ranges == 0)
-      return True;
    for (i = 0; i < n_pc_ranges; i++)
       if (pc >= pc_ranges[i].start && pc <= pc_ranges[i].end)
-         return True;
-   return False;
-}
-
-static Bool should_trace_reg_values(Addr pc)
-{
-   return pc == trace_reg_values_pc;
+         flags |= pc_ranges[i].flags;
+   return flags ? flags : AR_DEFAULT;
 }
 
 static Bool add_pc_range(const HChar* spec)
 {
+   const HChar* colon;
    const HChar* dash;
    HChar* endptr;
 
@@ -344,12 +360,37 @@ static Bool add_pc_range(const HChar* spec)
    dash = VG_(strchr)(spec, '-');
    if (dash == NULL)
       return False;
+   colon = VG_(strchr)(dash, ':');
    pc_ranges[n_pc_ranges].start = VG_(strtoull16)(spec, &endptr);
    if (endptr != dash)
       return False;
    pc_ranges[n_pc_ranges].end = VG_(strtoull16)(dash + 1, &endptr);
-   if (*endptr != '\0')
-      return False;
+   if (colon == NULL) {
+      if (*endptr != '\0')
+         return False;
+      pc_ranges[n_pc_ranges].flags = AR_DEFAULT;
+   } else {
+      if (endptr != colon)
+         return False;
+      for (endptr++; *endptr; endptr++) {
+         switch (*endptr) {
+         case 'i':
+            pc_ranges[n_pc_ranges].flags |= AR_INSNS;
+            break;
+         case 'm':
+            pc_ranges[n_pc_ranges].flags |= AR_MEM;
+            break;
+         case 'r':
+            pc_ranges[n_pc_ranges].flags |= AR_REGS;
+            break;
+         case 'R':
+            pc_ranges[n_pc_ranges].flags |= AR_ALL_REGS;
+            break;
+         default:
+            return False;
+         }
+      }
+   }
    n_pc_ranges++;
    return True;
 }
@@ -360,14 +401,6 @@ static Bool mt_process_cmd_line_option(const HChar* arg)
 
    if (VG_STR_CLO(arg, "--pc-range", tmp_str))
       return add_pc_range(tmp_str);
-   else if (VG_BHEX_CLO(arg,
-                        "--trace-reg-values-pc",
-                        trace_reg_values_pc,
-                        0,
-                        (Addr)-1))
-      return True;
-   else if (VG_BOOL_CLO(arg, "--trace-regs", should_trace_regs))
-      return True;
    else
       return False;
 }
@@ -393,6 +426,7 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
                     IRType gWordTy,
                     IRType hWordTy)
 {
+   int pc_flags = 0;
    IRExpr* addr;
    IRExpr* data;
    IRStmt* stmt;
@@ -409,9 +443,12 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          break;
       case Ist_IMark:
          pc = stmt->Ist.IMark.addr;
-         if (should_trace_reg_values(pc) || is_pc_interesting(pc))
+         pc_flags = get_pc_flags(pc);
+         if (pc_flags)
             add_insn_entry(pc, stmt->Ist.IMark.len);
-         if (should_trace_reg_values(pc))
+         if (pc_flags & AR_INSNS)
+            add_insn_exec_entry(out, pc);
+         if (pc_flags & AR_ALL_REGS)
             add_reg_entries(out, pc);
          addStmtToIRSB(out, stmt);
          break;
@@ -419,7 +456,7 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          addStmtToIRSB(out, stmt);
          break;
       case Ist_Put:
-         if (is_pc_interesting(pc) && should_trace_regs) {
+         if (pc_flags & AR_REGS) {
             addr = mkUIntPtr(stmt->Ist.Put.offset);
             data = stmt->Ist.Put.data;
             add_ldst_entry(out, pc, addr, MT_PUT_REG, data);
@@ -431,19 +468,17 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          break;
       case Ist_WrTmp:
          data = stmt->Ist.WrTmp.data;
-         if (is_pc_interesting(pc)) {
-            if (data->tag == Iex_Load) {
-               addr = data->Iex.Load.addr;
-               add_ldst_entry(out, pc, addr, MT_LOAD, data);
-            } else if (should_trace_regs && data->tag == Iex_Get) {
-               addr = mkUIntPtr(data->Iex.Get.offset);
-               add_ldst_entry(out, pc, addr, MT_GET_REG, data);
-            }
+         if ((pc_flags & AR_MEM) && data->tag == Iex_Load) {
+            addr = data->Iex.Load.addr;
+            add_ldst_entry(out, pc, addr, MT_LOAD, data);
+         } else if ((pc_flags & AR_REGS) && data->tag == Iex_Get) {
+            addr = mkUIntPtr(data->Iex.Get.offset);
+            add_ldst_entry(out, pc, addr, MT_GET_REG, data);
          }
          addStmtToIRSB(out, stmt);
          break;
       case Ist_Store:
-         if (is_pc_interesting(pc)) {
+         if (pc_flags & AR_MEM) {
             addr = stmt->Ist.Store.addr;
             data = stmt->Ist.Store.data;
             add_ldst_entry(out, pc, addr, MT_STORE, data);
