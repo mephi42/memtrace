@@ -301,7 +301,6 @@ static void add_reg_entries(IRSB* out, Addr pc)
 static void add_insn_entry(Addr pc, UInt len)
 {
    trace->pc = pc;
-   trace->addr = pc;
    trace->flags = len << MT_SIZE_SHIFT | MT_INSN;
    VG_(memcpy)(trace->value, (void*)pc, len);
    trace++;
@@ -313,7 +312,6 @@ static void add_insn_exec_entry(IRSB* out, Addr pc)
 
    currentEntryPtr = load_current_entry_ptr(out);
    store_pc(out, currentEntryPtr, mkUIntPtr(pc));
-   store_addr(out, currentEntryPtr, mkUIntPtr(pc));
    store_flags(out, currentEntryPtr, mkUIntPtr(MT_INSN_EXEC));
    update_current_entry_ptr(out, currentEntryPtr);
 }

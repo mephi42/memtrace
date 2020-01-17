@@ -31,9 +31,9 @@ def main():
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
     args = parser.parse_args()
     endian, word, e_machine, gen = read_entries(args.memtrace_out)
-    print('Endian:  {}'.format(endian))
-    print('Word:    {}'.format(word))
-    print('Machine: {}'.format(EM2STR[e_machine]))
+    print('Endian            : {}'.format(endian))
+    print('Word              : {}'.format(word))
+    print('Machine           : {}'.format(EM2STR[e_machine]))
     disasm = disasm_init(endian, word, e_machine)
     insn_exec_count = 0
     for pc, addr, flags, value in gen:
@@ -58,12 +58,12 @@ def main():
         if flags & MT_INSN:
             hex_str = value[:size].hex()
             insn_str = disasm_str(disasm, pc, value[:size])
-            print('0x{:x}: {} {} {}'.format(pc, op, hex_str, insn_str))
+            print('0x{:016x}: {} {} {}'.format(pc, op, hex_str, insn_str))
         else:
-            print('0x{:x}: {} uint{}_t [0x{:x}] {}'.format(
+            print('0x{:016x}: {} uint{}_t [0x{:x}] {}'.format(
                 pc, op, size * 8, addr, format_value(value, endian, size)))
     if insn_exec_count > 0:
-        print('Insns   : {}'.format(insn_exec_count))
+        print('Insns             : {}'.format(insn_exec_count))
 
 
 if __name__ == '__main__':
