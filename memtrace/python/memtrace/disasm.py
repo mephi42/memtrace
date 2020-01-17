@@ -57,12 +57,18 @@ def disasm_init(endian, word, e_machine):
     return capstone.Cs(arch, mode)
 
 
-def disasm_str(disasm, pc, buf):
-    if disasm is None:
-        return '<unknown>'
+def disasm_cs(disasm, pc, buf):
+    if capstone is None or not isinstance(disasm, capstone.Cs):
+        return None
     try:
-        cs_insn = next(disasm.disasm(buf, pc))
+        return next(disasm.disasm(buf, pc))
     except StopIteration:
+        return None
+
+
+def disasm_str(disasm, pc, buf):
+    cs_insn = disasm_cs(disasm, pc, buf)
+    if cs_insn is None:
         return '<unknown>'
     else:
         return '{} {}'.format(cs_insn.mnemonic, cs_insn.op_str)
