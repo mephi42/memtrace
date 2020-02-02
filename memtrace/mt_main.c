@@ -329,9 +329,12 @@ static void show_segments(void)
       const NSegment* seg;
 
       seg = VG_(am_find_nsegment)(seg_starts[i]);
-      VG_(umsg)("%016llx-%016llx %s\n",
+      VG_(umsg)("%016llx-%016llx %c%c%c %s\n",
                 (ULong)seg->start,
                 (ULong)seg->end + 1,
+                seg->hasR ? 'r' : '-',
+                seg->hasW ? 'w' : '-',
+                seg->hasX ? 'x' : '-',
                 VG_(am_get_filename)(seg));
    }
 }
