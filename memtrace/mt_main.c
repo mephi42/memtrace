@@ -60,6 +60,7 @@ static IRExpr* mkPtr(void* ptr)
 #define MT_GET_REG (1 << 4)
 #define MT_PUT_REG (1 << 5)
 #define MT_INSN_EXEC (1 << 6)
+#define MT_IRSB (1 << 7)
 #define MT_GET_REG_NX (1 << 7)
 #define MT_PUT_REG_NX (1 << 8)
 #define MT_SIZE_SHIFT 16
@@ -144,6 +145,345 @@ static void close_trace_file(void)
    flush_trace_buffer();
    VG_(free)(trace_start);
    VG_(close)(trace_fd);
+}
+
+typedef struct {
+   UChar* buf;
+   Int n;
+} IRStream;
+
+#define MAX_IR_STREAM_SIZE 4096
+
+static Bool require_space(IRStream* stream, Int amount)
+{
+   if (stream->n < amount) {
+      stream->n = -1;
+      return False;
+   }
+   return True;
+}
+
+static void advance(IRStream* stream, Int amount)
+{
+   stream->buf += amount;
+   stream->n -= amount;
+}
+
+static void serialize_buf(IRStream* stream, const void* src, Int amount)
+{
+   if (!require_space(stream, amount))
+      return;
+   VG_(memcpy)(stream->buf, src, amount);
+   advance(stream, amount);
+}
+
+static void serialize_char(IRStream* stream, Char c)
+{
+   serialize_buf(stream, &c, sizeof(c));
+}
+
+static void serialize_short(IRStream* stream, Short s)
+{
+   serialize_buf(stream, &s, sizeof(s));
+}
+
+static void serialize_int(IRStream* stream, Int i)
+{
+   serialize_buf(stream, &i, sizeof(i));
+}
+
+static void serialize_addr(IRStream* stream, Addr a)
+{
+   serialize_buf(stream, &a, sizeof(a));
+}
+
+static void serialize_str(IRStream* stream, const HChar* s)
+{
+   Int len;
+
+   len = VG_(strlen)(s);
+   serialize_int(stream, len);
+   serialize_buf(stream, s, len);
+}
+
+static void serialize_type(IRStream* stream, IRType type)
+{
+   serialize_short(stream, type);
+}
+
+static void serialize_endness(IRStream* stream, IREndness endness)
+{
+   serialize_short(stream, endness);
+}
+
+static void serialize_const(IRStream* stream, IRConst* con)
+{
+   serialize_short(stream, con->tag);
+   serialize_buf(stream, &con->Ico, sizeofIRType(typeOfIRConst(con)));
+}
+
+static void serialize_callee(IRStream* stream, IRCallee* callee)
+{
+   serialize_str(stream, callee->name);
+}
+
+static void serialize_reg_array(IRStream* stream, IRRegArray* reg_array)
+{
+   serialize_int(stream, reg_array->base);
+   serialize_type(stream, reg_array->elemTy);
+   serialize_int(stream, reg_array->nElems);
+}
+
+static void serialize_temp(IRStream* stream, IRTemp temp)
+{
+   serialize_int(stream, temp);
+}
+
+static void serialize_op(IRStream* stream, IROp op)
+{
+   serialize_short(stream, op);
+}
+
+static void serialize_expr_tag(IRStream* stream, IRExprTag tag)
+{
+   serialize_short(stream, tag);
+}
+
+static void serialize_expr(IRStream* stream, IRExpr* expr);
+
+static void serialize_expr_vec(IRStream* stream, IRExpr** vec)
+{
+   Int count, i;
+
+   for (count = 0; vec[count]; count++)
+      ;
+   serialize_int(stream, count);
+   for (i = 0; i < count; i++)
+      serialize_expr(stream, vec[i]);
+}
+
+static void serialize_expr(IRStream* stream, IRExpr* expr)
+{
+   serialize_expr_tag(stream, expr->tag);
+   switch (expr->tag) {
+   case Iex_Binder:
+      serialize_int(stream, expr->Iex.Binder.binder);
+      break;
+   case Iex_Get:
+      serialize_int(stream, expr->Iex.Get.offset);
+      serialize_type(stream, expr->Iex.Get.ty);
+      break;
+   case Iex_GetI:
+      serialize_reg_array(stream, expr->Iex.GetI.descr);
+      serialize_expr(stream, expr->Iex.GetI.ix);
+      serialize_int(stream, expr->Iex.GetI.bias);
+      break;
+   case Iex_RdTmp:
+      serialize_temp(stream, expr->Iex.RdTmp.tmp);
+      break;
+   case Iex_Qop:
+      serialize_op(stream, expr->Iex.Qop.details->op);
+      serialize_expr(stream, expr->Iex.Qop.details->arg1);
+      serialize_expr(stream, expr->Iex.Qop.details->arg2);
+      serialize_expr(stream, expr->Iex.Qop.details->arg3);
+      serialize_expr(stream, expr->Iex.Qop.details->arg4);
+      break;
+   case Iex_Triop:
+      serialize_op(stream, expr->Iex.Triop.details->op);
+      serialize_expr(stream, expr->Iex.Triop.details->arg1);
+      serialize_expr(stream, expr->Iex.Triop.details->arg2);
+      serialize_expr(stream, expr->Iex.Triop.details->arg3);
+      break;
+   case Iex_Binop:
+      serialize_op(stream, expr->Iex.Binop.op);
+      serialize_expr(stream, expr->Iex.Binop.arg1);
+      serialize_expr(stream, expr->Iex.Binop.arg2);
+      break;
+   case Iex_Unop:
+      serialize_op(stream, expr->Iex.Unop.op);
+      serialize_expr(stream, expr->Iex.Unop.arg);
+      break;
+   case Iex_Load:
+      serialize_endness(stream, expr->Iex.Load.end);
+      serialize_type(stream, expr->Iex.Load.ty);
+      serialize_expr(stream, expr->Iex.Load.addr);
+      break;
+   case Iex_Const:
+      serialize_const(stream, expr->Iex.Const.con);
+      break;
+   case Iex_ITE:
+      serialize_expr(stream, expr->Iex.ITE.cond);
+      serialize_expr(stream, expr->Iex.ITE.iftrue);
+      serialize_expr(stream, expr->Iex.ITE.iffalse);
+      break;
+   case Iex_CCall:
+      serialize_callee(stream, expr->Iex.CCall.cee);
+      serialize_type(stream, expr->Iex.CCall.retty);
+      serialize_expr_vec(stream, expr->Iex.CCall.args);
+   case Iex_VECRET:
+   case Iex_GSPTR:
+      break;
+   default:
+      ppIRExpr(expr);
+      tl_assert(0);
+   }
+}
+
+static void serialize_jumpkind(IRStream* stream, IRJumpKind jumpkind)
+{
+   serialize_short(stream, jumpkind);
+}
+
+static void serialize_dirty(IRStream* stream, IRDirty* dirty)
+{
+   serialize_callee(stream, dirty->cee);
+   serialize_expr(stream, dirty->guard);
+   serialize_expr_vec(stream, dirty->args);
+   serialize_temp(stream, dirty->tmp);
+}
+
+static void serialize_bus_event(IRStream* stream, IRMBusEvent event)
+{
+   serialize_short(stream, event);
+}
+
+static void serialize_cas(IRStream* stream, IRCAS* cas)
+{
+   serialize_temp(stream, cas->oldHi);
+   serialize_temp(stream, cas->oldLo);
+   serialize_endness(stream, cas->end);
+   serialize_expr(stream, cas->addr);
+   serialize_expr(stream, cas->expdHi);
+   serialize_expr(stream, cas->expdLo);
+   serialize_expr(stream, cas->dataHi);
+   serialize_expr(stream, cas->dataLo);
+}
+
+static void serialize_puti(IRStream* stream, IRPutI* puti)
+{
+   serialize_reg_array(stream, puti->descr);
+   serialize_expr(stream, puti->ix);
+   serialize_int(stream, puti->bias);
+   serialize_expr(stream, puti->data);
+}
+
+static void serialize_storeg(IRStream* stream, IRStoreG* storeg)
+{
+   serialize_endness(stream, storeg->end);
+   serialize_expr(stream, storeg->addr);
+   serialize_expr(stream, storeg->data);
+   serialize_expr(stream, storeg->guard);
+}
+
+static void serialize_loadg_op(IRStream* stream, IRLoadGOp op)
+{
+   serialize_short(stream, op);
+}
+
+static void serialize_loadg(IRStream* stream, IRLoadG* loadg)
+{
+   serialize_endness(stream, loadg->end);
+   serialize_loadg_op(stream, loadg->cvt);
+   serialize_temp(stream, loadg->dst);
+   serialize_expr(stream, loadg->addr);
+   serialize_expr(stream, loadg->alt);
+   serialize_expr(stream, loadg->guard);
+}
+
+static void serialize_stmt_tag(IRStream* stream, IRStmtTag tag)
+{
+   serialize_short(stream, tag);
+}
+
+static void serialize_stmt(IRStream* stream, IRStmt* stmt)
+{
+   serialize_stmt_tag(stream, stmt->tag);
+   switch (stmt->tag) {
+   case Ist_NoOp:
+      break;
+   case Ist_IMark:
+      serialize_addr(stream, stmt->Ist.IMark.addr);
+      serialize_int(stream, stmt->Ist.IMark.len);
+      serialize_char(stream, stmt->Ist.IMark.delta);
+      break;
+   case Ist_AbiHint:
+      serialize_expr(stream, stmt->Ist.AbiHint.base);
+      serialize_int(stream, stmt->Ist.AbiHint.len);
+      serialize_expr(stream, stmt->Ist.AbiHint.nia);
+      break;
+   case Ist_Put:
+      serialize_int(stream, stmt->Ist.Put.offset);
+      serialize_expr(stream, stmt->Ist.Put.data);
+      break;
+   case Ist_PutI:
+      serialize_puti(stream, stmt->Ist.PutI.details);
+      break;
+   case Ist_WrTmp:
+      serialize_temp(stream, stmt->Ist.WrTmp.tmp);
+      serialize_expr(stream, stmt->Ist.WrTmp.data);
+      break;
+   case Ist_Store:
+      serialize_endness(stream, stmt->Ist.Store.end);
+      serialize_expr(stream, stmt->Ist.Store.addr);
+      serialize_expr(stream, stmt->Ist.Store.data);
+      break;
+   case Ist_LoadG:
+      serialize_loadg(stream, stmt->Ist.LoadG.details);
+      break;
+   case Ist_StoreG:
+      serialize_storeg(stream, stmt->Ist.StoreG.details);
+      break;
+   case Ist_CAS:
+      serialize_cas(stream, stmt->Ist.CAS.details);
+      break;
+   case Ist_LLSC:
+      serialize_endness(stream, stmt->Ist.LLSC.end);
+      serialize_temp(stream, stmt->Ist.LLSC.result);
+      serialize_expr(stream, stmt->Ist.LLSC.addr);
+      serialize_expr(stream, stmt->Ist.LLSC.storedata);
+      break;
+   case Ist_Dirty:
+      serialize_dirty(stream, stmt->Ist.Dirty.details);
+      break;
+   case Ist_MBE:
+      serialize_bus_event(stream, stmt->Ist.MBE.event);
+      break;
+   case Ist_Exit:
+      serialize_expr(stream, stmt->Ist.Exit.guard);
+      serialize_const(stream, stmt->Ist.Exit.dst);
+      serialize_jumpkind(stream, stmt->Ist.Exit.jk);
+      serialize_int(stream, stmt->Ist.Exit.offsIP);
+      break;
+   default:
+      ppIRStmt(stmt);
+      tl_assert(0);
+   }
+}
+
+static void serialize_stmts(IRStream* stream, IRStmt** stmts, Int count)
+{
+   Int i;
+
+   serialize_int(stream, count);
+   for (i = 0; i < count; i++)
+      serialize_stmt(stream, stmts[i]);
+}
+
+static void serialize_tyenv(IRStream* stream, IRTypeEnv* tyenv)
+{
+   Int i;
+
+   serialize_int(stream, tyenv->types_used);
+   for (i = 0; i < tyenv->types_used; i++)
+      serialize_type(stream, tyenv->types[i]);
+}
+
+static void serialize_irsb(IRStream* stream, IRSB* irsb)
+{
+   serialize_tyenv(stream, irsb->tyenv);
+   serialize_stmts(stream, irsb->stmts, irsb->stmts_used);
+   serialize_expr(stream, irsb->next);
+   serialize_jumpkind(stream, irsb->jumpkind);
 }
 
 static IRTemp load_current_entry_ptr(IRSB* out)
