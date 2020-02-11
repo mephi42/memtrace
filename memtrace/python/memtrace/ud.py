@@ -152,11 +152,17 @@ def format_defs(defs):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
+    parser.add_argument('--start', type=int)
+    parser.add_argument('--end', type=int)
     args = parser.parse_args()
     endian, word, e_machine, gen = read_entries(args.memtrace_out)
     disasm = disasm_init(endian, word, e_machine)
     ud = UD()
-    for pc, addr, flags, data in gen:
+    for i, (pc, addr, flags, data) in enumerate(gen):
+        if args.start is not None and i < args.start:
+            continue
+        if args.end is not None and i >= args.end:
+            break
         prev = ud.insns_in_trace[-1]
         if pc != prev.in_code.pc:
             print('[{}]0x{:x}: {} {} reg_uses=[{}] reg_defs=[{}] mem_uses=[{}] mem_defs=[{}]'.format(  # noqa: E501
