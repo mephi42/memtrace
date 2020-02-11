@@ -82,7 +82,7 @@ typedef struct {
 
 #define TRACE_BUFFER_SIZE (1024 * 1024 * 1024)
 static const char trace_file_name[] = "memtrace.out";
-static int trace_fd;
+static Int trace_fd;
 static MTEntry* trace_start;
 static MTEntry* trace;
 static MTEntry* trace_end;
@@ -95,7 +95,7 @@ typedef struct {
    Addr start;
    Addr end;
    /* combination of AR_* flags */
-   int flags;
+   Int flags;
 } AddrRange;
 #define MAX_PC_RANGES 32
 static AddrRange pc_ranges[MAX_PC_RANGES];
@@ -292,7 +292,7 @@ static void add_reg_entry(IRSB* out, Addr pc, Int offset)
 
 static void add_reg_entries(IRSB* out, Addr pc)
 {
-   int i;
+   Int i;
 
    for (i = 0; i < sizeof(VexGuestArchState); i += VG_WORDSIZE)
       add_reg_entry(out, pc, i);
@@ -339,15 +339,30 @@ static void show_segments(void)
    }
 }
 
-static int get_pc_flags(Addr pc)
+static Int get_pc_flags(Addr pc)
 {
-   int flags = 0;
+   Int flags = 0;
    UInt i;
 
    for (i = 0; i < n_pc_ranges; i++)
       if (pc >= pc_ranges[i].start && pc <= pc_ranges[i].end)
          flags |= pc_ranges[i].flags;
-   return flags ? flags : AR_DEFAULT;
+   return flags;
+}
+
+static void show_pc_ranges(void)
+{
+   UInt i;
+
+   VG_(umsg)("Traced addresses:\n");
+   for (i = 0; i < n_pc_ranges; i++)
+      VG_(umsg)("%016llx-%016llx %c%c%c%c\n",
+                (ULong)pc_ranges[i].start,
+                (ULong)pc_ranges[i].end,
+                (pc_ranges[i].flags & AR_MEM) ? 'm' : '-',
+                (pc_ranges[i].flags & AR_REGS) ? 'r' : '-',
+                (pc_ranges[i].flags & AR_INSNS) ? 'i' : '-',
+                (pc_ranges[i].flags & AR_ALL_REGS) ? 'R' : '-');
 }
 
 static Bool add_pc_range(const HChar* spec)
@@ -416,6 +431,14 @@ static void mt_print_debug_usage(void)
 
 static void mt_post_clo_init(void)
 {
+   if (n_pc_ranges == 0) {
+      pc_ranges[0].start = 0;
+      pc_ranges[0].end = (Addr)-1;
+      pc_ranges[0].flags = AR_DEFAULT;
+      n_pc_ranges = 1;
+   }
+
+   show_pc_ranges();
 }
 
 static
@@ -427,7 +450,7 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
                     IRType gWordTy,
                     IRType hWordTy)
 {
-   int pc_flags = 0;
+   Int pc_flags = 0;
    IRExpr* addr;
    IRExpr* data;
    IRStmt* stmt;
@@ -526,7 +549,7 @@ static void mt_pre_clo_init(void)
    VG_(details_name)("Memory Tracer");
    VG_(details_description)("Valgrind tool for tracing memory accesses");
    VG_(details_copyright_author)(
-      "Copyright (C) 2019, and GNU GPL'd, by mephi42.");
+      "Copyright (C) 2019-2020, and GNU GPL'd, by mephi42.");
    VG_(details_bug_reports_to)("https://github.com/mephi42/memtrace");
    VG_(basic_tool_funcs)(mt_post_clo_init,
                          mt_instrument,
