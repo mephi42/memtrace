@@ -149,11 +149,36 @@ def format_defs(defs):
     )
 
 
+def output_dot(fp, ud: UD, disasm):
+    fp.write('digraph ud {\n')
+    for in_trace in ud.insns_in_trace:
+        in_code = in_trace.in_code
+        fp.write('    {} [label="[{}] 0x{:x}: {}"]\n'.format(
+            in_trace.seq,
+            in_trace.seq,
+            in_code.pc,
+            disasm_str(disasm, in_code.pc, in_code.raw)))
+        for reg_use in in_trace.reg_uses:
+            fp.write('    {} -> {} [label="reg 0x{:x}-0x{:x}"]\n'.format(
+                in_trace.seq,
+                reg_use.insn_in_trace.seq,
+                reg_use.start,
+                reg_use.end))
+        for mem_use in in_trace.mem_uses:
+            fp.write('    {} -> {} [label="mem 0x{:x}-0x{:x}"]\n'.format(
+                in_trace.seq,
+                mem_use.insn_in_trace.seq,
+                mem_use.start,
+                mem_use.end))
+    fp.write('}\n')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
     parser.add_argument('--start', type=int)
     parser.add_argument('--end', type=int)
+    parser.add_argument('--dot')
     args = parser.parse_args()
     endian, word, e_machine, gen = read_entries(args.memtrace_out)
     disasm = disasm_init(endian, word, e_machine)
@@ -176,6 +201,9 @@ def main():
                 format_defs(prev.mem_defs),
             ))
         analyze_insn(ud, pc, addr, flags, data)
+    if args.dot is not None:
+        with open(args.dot, 'w') as fp:
+            output_dot(fp, ud, disasm)
 
 
 if __name__ == '__main__':

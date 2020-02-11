@@ -55,13 +55,13 @@ def read_entries(memtrace):
 
     def gen():
         with fp:
+            entry_fmt = word * 3
+            entry_fmt += '20x' if word == 'I' else '8x'
+            entry_fmt += '32s'
             while True:
                 buf = fp.read(64 * 1024)
                 if len(buf) == 0:
                     break
-                entry_fmt = word * 3
-                entry_fmt += '20x' if word == 'I' else '8x'
-                entry_fmt += '32s'
                 entries_fmt = entry_fmt * (len(buf) // 64)
                 values = struct.unpack(endian + entries_fmt, buf)
                 for i in range(0, len(values), 4):
