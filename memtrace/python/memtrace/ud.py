@@ -6,7 +6,8 @@ from typing import Dict, Generator, List
 from sortedcontainers import SortedKeyList
 
 from memtrace import MT_LOAD, MT_STORE, MT_REGS, MT_INSN, MT_GET_REG, \
-    MT_PUT_REG, MT_INSN_EXEC, read_entries
+    MT_PUT_REG, MT_INSN_EXEC, MT_GET_REG_NX, MT_PUT_REG_NX, MT_SIZE_SHIFT, \
+    read_entries
 from memtrace.disasm import disasm_init, disasm_str
 
 
@@ -107,7 +108,7 @@ def analyze_insn(ud: UD, pc, addr, flags, data):
         ud.insns_in_trace.append(insn_in_trace)
     else:
         insn_in_trace = ud.insns_in_trace[-1]
-    end = addr + (flags >> 8)
+    end = addr + (flags >> MT_SIZE_SHIFT)
     if flags & MT_LOAD:
         insn_in_trace.mem_uses.extend(find_defs(ud.mem, addr, end))
     elif flags & MT_STORE:
@@ -117,10 +118,10 @@ def analyze_insn(ud: UD, pc, addr, flags, data):
     elif flags & MT_REGS:
         pass
     elif flags & MT_INSN:
-        insn_in_code.raw = data[:flags >> 8]
-    elif flags & MT_GET_REG:
+        insn_in_code.raw = data[:flags >> MT_SIZE_SHIFT]
+    elif flags & (MT_GET_REG | MT_GET_REG_NX):
         insn_in_trace.reg_uses.extend(find_defs(ud.regs, addr, end))
-    elif flags & MT_PUT_REG:
+    elif flags & (MT_PUT_REG | MT_PUT_REG_NX):
         def_ = Def(addr, end, insn_in_trace)
         insn_in_trace.reg_defs.append(def_)
         add_def(ud.regs, def_)
@@ -157,19 +158,22 @@ def output_dot(fp, ud: UD, disasm):
             in_trace.seq,
             in_trace.seq,
             in_code.pc,
-            disasm_str(disasm, in_code.pc, in_code.raw)))
+            disasm_str(disasm, in_code.pc, in_code.raw),
+        ))
         for reg_use in in_trace.reg_uses:
             fp.write('    {} -> {} [label="reg 0x{:x}-0x{:x}"]\n'.format(
                 in_trace.seq,
                 reg_use.insn_in_trace.seq,
                 reg_use.start,
-                reg_use.end))
+                reg_use.end,
+            ))
         for mem_use in in_trace.mem_uses:
             fp.write('    {} -> {} [label="mem 0x{:x}-0x{:x}"]\n'.format(
                 in_trace.seq,
                 mem_use.insn_in_trace.seq,
                 mem_use.start,
-                mem_use.end))
+                mem_use.end,
+            ))
     fp.write('}\n')
 
 
