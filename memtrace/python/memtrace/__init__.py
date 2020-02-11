@@ -29,7 +29,9 @@ MT_INSN = 1 << 3
 MT_GET_REG = 1 << 4
 MT_PUT_REG = 1 << 5
 MT_INSN_EXEC = 1 << 6
-MT_SIZE_SHIFT = 8
+MT_GET_REG_NX = 1 << 7
+MT_PUT_REG_NX = 1 << 8
+MT_SIZE_SHIFT = 16
 
 MAGIC2STRUCT = {
     b'MT32': '>I',

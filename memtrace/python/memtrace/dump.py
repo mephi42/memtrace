@@ -3,7 +3,8 @@ import argparse
 import struct
 
 from memtrace import EM2STR, MT_LOAD, MT_STORE, MT_REGS, MT_INSN, MT_GET_REG, \
-    MT_PUT_REG, MT_INSN_EXEC, MT_SIZE_SHIFT, read_entries
+    MT_PUT_REG, MT_INSN_EXEC, MT_GET_REG_NX, MT_PUT_REG_NX, MT_SIZE_SHIFT, \
+    read_entries
 from memtrace.disasm import disasm_init, disasm_str
 
 
@@ -59,6 +60,10 @@ def main():
         elif flags & MT_INSN_EXEC:
             op = 'MT_INSN_EXEC'
             insn_exec_count += 1
+        elif flags & MT_GET_REG_NX:
+            op = 'MT_GET_REG_NX'
+        elif flags & MT_PUT_REG_NX:
+            op = 'MT_PUT_REG_NX'
         else:
             raise Exception('Unsupported flags')
         if flags & MT_INSN:

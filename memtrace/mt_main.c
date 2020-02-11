@@ -13,6 +13,7 @@
 #include "pub_tool_tooliface.h"
 #include "pub_tool_vki.h"
 #include "pub_tool_vkiscnums.h"
+#include "pub_tool_xarray.h"
 
 #include <elf.h>
 
@@ -59,7 +60,9 @@ static IRExpr* mkPtr(void* ptr)
 #define MT_GET_REG (1 << 4)
 #define MT_PUT_REG (1 << 5)
 #define MT_INSN_EXEC (1 << 6)
-#define MT_SIZE_SHIFT 8
+#define MT_GET_REG_NX (1 << 7)
+#define MT_PUT_REG_NX (1 << 8)
+#define MT_SIZE_SHIFT 16
 
 typedef struct {
    union {
@@ -81,7 +84,7 @@ typedef struct {
 #define MAX_VALUE_SIZE sizeof(((MTEntry*)0)->value)
 
 #define TRACE_BUFFER_SIZE (1024 * 1024 * 1024)
-static const char trace_file_name[] = "memtrace.out";
+static const HChar trace_file_name[] = "memtrace.out";
 static Int trace_fd;
 static MTEntry* trace_start;
 static MTEntry* trace;
@@ -129,10 +132,10 @@ static void open_trace_file(void)
 
 static void flush_trace_buffer(void)
 {
-   Int trace_size = (trace - trace_start) * sizeof(MTEntry);
+   Int traceSize = (trace - trace_start) * sizeof(MTEntry);
 
-   VG_(write)(trace_fd, trace_start, trace_size);
-   VG_(memset)(trace_start, 0, trace_size);
+   VG_(write)(trace_fd, trace_start, traceSize);
+   VG_(memset)(trace_start, 0, traceSize);
    trace = trace_start;
 }
 
@@ -220,7 +223,8 @@ static void store_value(IRSB* out, IRTemp currentEntryPtr, IRExpr* value)
                                    IRExpr_RdTmp(valueTmp)));
 }
 
-static void update_current_entry_ptr(IRSB* out, IRTemp currentEntryPtr)
+static void update_current_entry_ptr(IRSB* out,
+                                     IRTemp currentEntryPtr)
 {
    IRTemp updatedEntryPtr, isFlushNeeded;
    IRExpr* incEntryPtr;
@@ -300,6 +304,8 @@ static void add_reg_entries(IRSB* out, Addr pc)
 
 static void add_insn_entry(Addr pc, UInt len)
 {
+   if (trace + 1 >= trace_end)
+      flush_trace_buffer();
    trace->pc = pc;
    trace->flags = len << MT_SIZE_SHIFT | MT_INSN;
    VG_(memcpy)(trace->value, (void*)pc, len);
@@ -316,19 +322,31 @@ static void add_insn_exec_entry(IRSB* out, Addr pc)
    update_current_entry_ptr(out, currentEntryPtr);
 }
 
+static void add_raw_entries(XArray* entries)
+{
+   void* ptr;
+   Word n;
+
+   VG_(getContentsXA_UNSAFE)(entries, &ptr, &n);
+   if (trace + n >= trace_end)
+      flush_trace_buffer();
+   VG_(memcpy)(trace, ptr, sizeof(MTEntry) * n);
+   trace += n;
+}
+
 static void show_segments(void)
 {
-   Int n_seg_starts;
-   Addr* seg_starts;
+   Addr* segStarts;
+   Int nSegStarts;
    Int i;
 
    VG_(umsg)("Segments:\n");
-   seg_starts = VG_(get_segment_starts)(SkFileC | SkAnonC | SkShmC,
-                                        &n_seg_starts);
-   for (i = 0; i < n_seg_starts; i++) {
+   segStarts = VG_(get_segment_starts)(SkFileC | SkAnonC | SkShmC,
+                                       &nSegStarts);
+   for (i = 0; i < nSegStarts; i++) {
       const NSegment* seg;
 
-      seg = VG_(am_find_nsegment)(seg_starts[i]);
+      seg = VG_(am_find_nsegment)(segStarts[i]);
       VG_(umsg)("%016llx-%016llx %c%c%c %s\n",
                 (ULong)seg->start,
                 (ULong)seg->end + 1,
@@ -413,10 +431,10 @@ static Bool add_pc_range(const HChar* spec)
 
 static Bool mt_process_cmd_line_option(const HChar* arg)
 {
-   const HChar* tmp_str;
+   const HChar* tmpStr;
 
-   if (VG_STR_CLO(arg, "--pc-range", tmp_str))
-      return add_pc_range(tmp_str);
+   if (VG_STR_CLO(arg, "--pc-range", tmpStr))
+      return add_pc_range(tmpStr);
    else
       return False;
 }
@@ -450,29 +468,27 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
                     IRType gWordTy,
                     IRType hWordTy)
 {
-   Int pc_flags = 0;
-   IRExpr* addr;
-   IRExpr* data;
-   IRStmt* stmt;
+   Int pcFlags = 0;
    Addr pc = 0;
    IRSB* out;
    Int i;
 
    out = deepCopyIRSBExceptStmts(bb);
    for (i = 0; i < bb->stmts_used; i++) {
-      stmt = bb->stmts[i];
+      IRStmt* stmt = bb->stmts[i];
+
       switch (stmt->tag) {
       case Ist_NoOp:
          addStmtToIRSB(out, stmt);
          break;
       case Ist_IMark:
          pc = stmt->Ist.IMark.addr;
-         pc_flags = get_pc_flags(pc);
-         if (pc_flags)
+         pcFlags = get_pc_flags(pc);
+         if (pcFlags)
             add_insn_entry(pc, stmt->Ist.IMark.len);
-         if (pc_flags & AR_INSNS)
+         if (pcFlags & AR_INSNS)
             add_insn_exec_entry(out, pc);
-         if (pc_flags & AR_ALL_REGS)
+         if (pcFlags & AR_ALL_REGS)
             add_reg_entries(out, pc);
          addStmtToIRSB(out, stmt);
          break;
@@ -480,9 +496,10 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          addStmtToIRSB(out, stmt);
          break;
       case Ist_Put:
-         if (pc_flags & AR_REGS) {
-            addr = mkUIntPtr(stmt->Ist.Put.offset);
-            data = stmt->Ist.Put.data;
+         if (pcFlags & AR_REGS) {
+            IRExpr* addr = mkUIntPtr(stmt->Ist.Put.offset);
+            IRExpr* data = stmt->Ist.Put.data;
+
             add_ldst_entry(out, pc, addr, MT_PUT_REG, data);
          }
          addStmtToIRSB(out, stmt);
@@ -490,21 +507,26 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
       case Ist_PutI:
          addStmtToIRSB(out, stmt);
          break;
-      case Ist_WrTmp:
-         data = stmt->Ist.WrTmp.data;
-         if ((pc_flags & AR_MEM) && data->tag == Iex_Load) {
-            addr = data->Iex.Load.addr;
+      case Ist_WrTmp: {
+         IRExpr* data = stmt->Ist.WrTmp.data;
+
+         if ((pcFlags & AR_MEM) && data->tag == Iex_Load) {
+            IRExpr* addr = data->Iex.Load.addr;
+
             add_ldst_entry(out, pc, addr, MT_LOAD, data);
-         } else if ((pc_flags & AR_REGS) && data->tag == Iex_Get) {
-            addr = mkUIntPtr(data->Iex.Get.offset);
+         } else if ((pcFlags & AR_REGS) && data->tag == Iex_Get) {
+            IRExpr* addr = mkUIntPtr(data->Iex.Get.offset);
+
             add_ldst_entry(out, pc, addr, MT_GET_REG, data);
          }
          addStmtToIRSB(out, stmt);
          break;
+      }
       case Ist_Store:
-         if (pc_flags & AR_MEM) {
-            addr = stmt->Ist.Store.addr;
-            data = stmt->Ist.Store.data;
+         if (pcFlags & AR_MEM) {
+            IRExpr* addr = stmt->Ist.Store.addr;
+            IRExpr* data = stmt->Ist.Store.data;
+
             add_ldst_entry(out, pc, addr, MT_STORE, data);
          }
          addStmtToIRSB(out, stmt);
@@ -527,9 +549,70 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
       case Ist_MBE:
          addStmtToIRSB(out, stmt);
          break;
-      case Ist_Exit:
+      case Ist_Exit: {
+         Int pcFlagsNx = pcFlags;
+         XArray* entries;
+         Addr pcNx = pc;
+         MTEntry entry;
+         IRDirty* d;
+         Int j;
+
+         entries = VG_(newXA)(VG_(malloc),
+                              "mt.nx.1",
+                              VG_(free),
+                              sizeof(MTEntry));
+         VG_(memset)(&entry, 0, sizeof(entry));
+         for (j = i + 1; j < bb->stmts_used; j++) {
+            IRStmt* stmtNx = bb->stmts[j];
+
+            switch (stmtNx->tag) {
+            case Ist_IMark:
+               pcNx = stmtNx->Ist.IMark.addr;
+               pcFlagsNx = get_pc_flags(pcNx);
+               break;
+            case Ist_Put:
+               if (pcFlagsNx & AR_REGS) {
+                  IRExpr* data = stmtNx->Ist.Put.data;
+                  Int size;
+
+                  size = sizeofIRType(typeOfIRExpr(out->tyenv, data));
+                  entry.pc = pcNx;
+                  entry.addr = stmtNx->Ist.Put.offset;
+                  entry.flags = size << MT_SIZE_SHIFT | MT_PUT_REG_NX;
+                  VG_(addToXA)(entries, &entry);
+               }
+               break;
+            case Ist_WrTmp: {
+               IRExpr* data = stmtNx->Ist.WrTmp.data;
+
+               if ((pcFlagsNx & AR_REGS) && data->tag == Iex_Get) {
+                  Int size = sizeofIRType(typeOfIRExpr(out->tyenv, data));
+
+                  entry.pc = pcNx;
+                  entry.addr = data->Iex.Get.offset;
+                  entry.flags = size << MT_SIZE_SHIFT | MT_GET_REG_NX;
+                  VG_(addToXA)(entries, &entry);
+               }
+               break;
+            }
+            default:
+               break;
+            }
+         }
+
+         d = unsafeIRDirty_0_N(0,
+                               "add_raw_entries",
+                               add_raw_entries,
+                               mkIRExprVec_1(mkPtr(entries)));
+         d->guard = stmt->Ist.Exit.guard;
+         d->mFx   = Ifx_Write;
+         d->mAddr = mkPtr(&trace);
+         d->mSize = sizeof(trace);
+         addStmtToIRSB(out, IRStmt_Dirty(d));
+
          addStmtToIRSB(out, stmt);
          break;
+      }
       default:
          ppIRStmt(stmt);
          tl_assert(0);
