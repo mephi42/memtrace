@@ -29,6 +29,8 @@ def format_value(value, endian, size):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
+    parser.add_argument('--start', type=int)
+    parser.add_argument('--end', type=int)
     args = parser.parse_args()
     endian, word, e_machine, gen = read_entries(args.memtrace_out)
     print('Endian            : {}'.format(endian))
@@ -36,7 +38,11 @@ def main():
     print('Machine           : {}'.format(EM2STR[e_machine]))
     disasm = disasm_init(endian, word, e_machine)
     insn_exec_count = 0
-    for pc, addr, flags, value in gen:
+    for i, (pc, addr, flags, value) in enumerate(gen):
+        if args.start is not None and i < args.start:
+            continue
+        if args.end is not None and i >= args.end:
+            break
         size = flags >> MT_SIZE_SHIFT
         if flags & MT_LOAD:
             op = 'MT_LOAD'
@@ -58,10 +64,11 @@ def main():
         if flags & MT_INSN:
             hex_str = value[:size].hex()
             insn_str = disasm_str(disasm, pc, value[:size])
-            print('0x{:016x}: {} {} {}'.format(pc, op, hex_str, insn_str))
+            print('[{:10d}] 0x{:016x}: {} {} {}'.format(
+                i, pc, op, hex_str, insn_str))
         else:
-            print('0x{:016x}: {} uint{}_t [0x{:x}] {}'.format(
-                pc, op, size * 8, addr, format_value(value, endian, size)))
+            print('[{:10d}] 0x{:016x}: {} uint{}_t [0x{:x}] {}'.format(
+                i, pc, op, size * 8, addr, format_value(value, endian, size)))
     if insn_exec_count > 0:
         print('Insns             : {}'.format(insn_exec_count))
 
