@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 from dataclasses import dataclass, field
+import os
 from typing import Dict, Generator, List
 
+from jinja2 import Template
 from sortedcontainers import SortedKeyList
 
 from memtrace import MT_LOAD, MT_STORE, MT_REGS, MT_INSN, MT_GET_REG, \
@@ -177,12 +179,23 @@ def output_dot(fp, ud: UD, disasm):
     fp.write('}\n')
 
 
+def output_html(fp, ud: UD, disasm):
+    with open(os.path.join(os.path.dirname(__file__), 'ud_html.j2')) as tfp:
+        template = Template(tfp.read())
+    template.stream(
+        ud=ud,
+        disasm=disasm,
+        disasm_str=disasm_str,
+    ).dump(fp)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
     parser.add_argument('--start', type=int)
     parser.add_argument('--end', type=int)
     parser.add_argument('--dot')
+    parser.add_argument('--html')
     args = parser.parse_args()
     endian, word, e_machine, gen = read_entries(args.memtrace_out)
     disasm = disasm_init(endian, word, e_machine)
@@ -208,6 +221,9 @@ def main():
     if args.dot is not None:
         with open(args.dot, 'w') as fp:
             output_dot(fp, ud, disasm)
+    if args.html is not None:
+        with open(args.html, 'w') as fp:
+            output_html(fp, ud, disasm)
 
 
 if __name__ == '__main__':
