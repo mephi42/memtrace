@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>ud</title>
+</head>
+<body>
+<table>
+    <tr>
+        <th>Seq</th>
+        <th>Address</th>
+        <th>Bytes</th>
+        <th>Instruction</th>
+        <th>Uses</th>
+        <th>Defs</th>
+    </tr>
+    {% for in_trace in ud.insns_in_trace %}
+    <tr id="{{ in_trace.seq }}">
+        <td>{{ in_trace.seq }}</td>
+        <td>{{ '0x%x' % in_trace.in_code.pc }}</td>
+        <td>{{ in_trace.in_code.raw.hex() }}</td>
+        <td>{{ disasm_str(disasm, in_trace.in_code.pc, in_trace.in_code.raw) | e }}</td>
+        <td>
+            {% for reg_use in in_trace.reg_uses %}
+            <a href="#{{ reg_use.insn_in_trace.seq }}">{{ 'r0x%x-0x%x' % (reg_use.start, reg_use.end) }}</a>
+            {% endfor %}
+            {% for mem_use in in_trace.mem_uses %}
+            <a href="#{{ mem_use.insn_in_trace.seq }}">{{ 'm0x%x-0x%x' % (mem_use.start, mem_use.end) }}</a>
+            {% endfor %}
+        </td>
+        <td>
+            {% for reg_def in in_trace.reg_defs %}
+            {{ 'r0x%x-0x%x' % (reg_def.start, reg_def.end) }}
+            {% endfor %}
+            {% for mem_def in in_trace.mem_defs %}
+            {{ 'm0x%x-0x%x' % (mem_def.start, mem_def.end) }}
+            {% endfor %}
+        </td>
+        <td></td>
+    </tr>
+    {% endfor %}
+</table>
+</body>
+</html>
