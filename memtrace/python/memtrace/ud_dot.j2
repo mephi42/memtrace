@@ -1,0 +1,11 @@
+digraph ud {
+    {% for in_trace in ud.insns_in_trace -%}
+    {{ in_trace.seq }} [label="[{{ in_trace.seq }}] {{ '0x%x' % in_trace.in_code.pc }}: {{ disasm_str(disasm, in_trace.in_code.pc, in_trace.in_code.raw) }}"]
+    {% for reg_use in in_trace.reg_uses -%}
+    {{ in_trace.seq }} -> {{ reg_use.insn_in_trace.seq }} [label="{{ 'r0x%x-0x%x' % (reg_use.start, reg_use.end) }}"]
+    {% endfor -%}
+    {% for mem_use in in_trace.mem_uses -%}
+    {{ in_trace.seq }} -> {{ mem_use.insn_in_trace.seq }} [label="{{ 'm0x%x-0x%x' % (mem_use.start, mem_use.end) }}"]
+    {% endfor -%}
+    {% endfor %}
+}
