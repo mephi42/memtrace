@@ -152,36 +152,13 @@ def format_defs(defs):
     )
 
 
-def output_dot(fp, ud: UD, disasm):
-    fp.write('digraph ud {\n')
-    for in_trace in ud.insns_in_trace:
-        in_code = in_trace.in_code
-        fp.write('    {} [label="[{}] 0x{:x}: {}"]\n'.format(
-            in_trace.seq,
-            in_trace.seq,
-            in_code.pc,
-            disasm_str(disasm, in_code.pc, in_code.raw),
-        ))
-        for reg_use in in_trace.reg_uses:
-            fp.write('    {} -> {} [label="reg 0x{:x}-0x{:x}"]\n'.format(
-                in_trace.seq,
-                reg_use.insn_in_trace.seq,
-                reg_use.start,
-                reg_use.end,
-            ))
-        for mem_use in in_trace.mem_uses:
-            fp.write('    {} -> {} [label="mem 0x{:x}-0x{:x}"]\n'.format(
-                in_trace.seq,
-                mem_use.insn_in_trace.seq,
-                mem_use.start,
-                mem_use.end,
-            ))
-    fp.write('}\n')
-
-
-def output_html(fp, ud: UD, disasm):
-    with open(os.path.join(os.path.dirname(__file__), 'ud_html.j2')) as tfp:
-        template = Template(tfp.read())
+def output_template(fp, kind, ud: UD, disasm):
+    template_path = os.path.join(
+        os.path.dirname(__file__),
+        'ud_{}.j2'.format(kind),
+    )
+    with open(template_path) as template_fp:
+        template = Template(template_fp.read())
     template.stream(
         ud=ud,
         disasm=disasm,
@@ -220,10 +197,10 @@ def main():
         analyze_insn(ud, pc, addr, flags, data)
     if args.dot is not None:
         with open(args.dot, 'w') as fp:
-            output_dot(fp, ud, disasm)
+            output_template(fp, 'dot', ud, disasm)
     if args.html is not None:
         with open(args.html, 'w') as fp:
-            output_html(fp, ud, disasm)
+            output_template(fp, 'html', ud, disasm)
 
 
 if __name__ == '__main__':
