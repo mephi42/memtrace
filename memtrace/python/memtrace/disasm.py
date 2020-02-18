@@ -7,7 +7,7 @@ from memtrace import EM_386, EM_X86_64, EM_PPC64, EM_ARM, EM_AARCH64, \
     EM_S390, EM_MIPS
 
 
-def disasm_init(endian, word, e_machine):
+def disasm_init(endian, word_size, e_machine):
     if capstone is None:
         return None
     # See cstool.c for valid combinations
@@ -43,7 +43,7 @@ def disasm_init(endian, word, e_machine):
         mode = capstone.CS_MODE_BIG_ENDIAN
     elif e_machine == EM_MIPS:
         arch = capstone.CS_ARCH_MIPS
-        if word == 'I':
+        if word_size == 4:
             mode = capstone.CS_MODE_MIPS32
         else:
             mode = capstone.CS_MODE_MIPS64

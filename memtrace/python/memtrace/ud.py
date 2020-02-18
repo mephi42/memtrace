@@ -7,9 +7,8 @@ from typing import Dict, List
 from jinja2 import Template
 from sortedcontainers import SortedKeyList
 
-from memtrace import MT_LOAD, MT_STORE, MT_REGS, MT_INSN, MT_GET_REG, \
-    MT_PUT_REG, MT_INSN_EXEC, MT_GET_REG_NX, MT_PUT_REG_NX, MT_SIZE_SHIFT, \
-    read_entries
+from memtrace import MT_LOAD, MT_STORE, MT_REG, MT_INSN, MT_GET_REG, \
+    MT_PUT_REG, MT_INSN_EXEC, MT_GET_REG_NX, MT_PUT_REG_NX, read_entries
 from memtrace.disasm import disasm_init, disasm_str, UNKNOWN
 
 
@@ -99,12 +98,12 @@ class UD:
         default_factory=lambda: SortedKeyList((INITIAL_DEF,), key=node_key))
 
 
-def analyze_insn(ud: UD, disasm, pc: int, addr: int, flags: int, data: bytes):
-    insn_in_code = ud.pc2insn.get(pc)
+def analyze_insn(ud: UD, disasm, tag, data):
+    insn_in_code = ud.pc2insn.get(data.pc)
     if insn_in_code is None:
-        insn_in_code = InsnInCode(pc)
-        ud.pc2insn[pc] = insn_in_code
-    if pc != ud.insns_in_trace[-1].in_code.pc:
+        insn_in_code = InsnInCode(data.pc)
+        ud.pc2insn[data.pc] = insn_in_code
+    if data.pc != ud.insns_in_trace[-1].in_code.pc:
         insn_in_trace = InsnInTrace(
             seq=len(ud.insns_in_trace),
             in_code=insn_in_code,
@@ -112,28 +111,27 @@ def analyze_insn(ud: UD, disasm, pc: int, addr: int, flags: int, data: bytes):
         ud.insns_in_trace.append(insn_in_trace)
     else:
         insn_in_trace = ud.insns_in_trace[-1]
-    end = addr + (flags >> MT_SIZE_SHIFT)
-    if flags & MT_LOAD:
-        append_defs(insn_in_trace.mem_uses, ud.mem, addr, end)
-    elif flags & MT_STORE:
-        def_ = Def(addr, end, insn_in_trace)
+    if tag == MT_LOAD:
+        append_defs(insn_in_trace.mem_uses, ud.mem, data.addr, data.end_addr)
+    elif tag == MT_STORE:
+        def_ = Def(data.addr, data.end_addr, insn_in_trace)
         insn_in_trace.mem_defs.append(def_)
         add_def(ud.mem, def_)
-    elif flags & MT_REGS:
+    elif tag == MT_REG:
         pass
-    elif flags & MT_INSN:
-        insn_in_code.raw = data[:flags >> MT_SIZE_SHIFT]
-        insn_in_code.disasm = disasm_str(disasm, pc, insn_in_code.raw)
-    elif flags & (MT_GET_REG | MT_GET_REG_NX):
-        append_defs(insn_in_trace.reg_uses, ud.regs, addr, end)
-    elif flags & (MT_PUT_REG | MT_PUT_REG_NX):
-        def_ = Def(addr, end, insn_in_trace)
+    elif tag == MT_INSN:
+        insn_in_code.raw = data.value
+        insn_in_code.disasm = disasm_str(disasm, data.pc, insn_in_code.raw)
+    elif tag in (MT_GET_REG, MT_GET_REG_NX):
+        append_defs(insn_in_trace.reg_uses, ud.regs, data.addr, data.end_addr)
+    elif tag in (MT_PUT_REG, MT_PUT_REG_NX):
+        def_ = Def(data.addr, data.end_addr, insn_in_trace)
         insn_in_trace.reg_defs.append(def_)
         add_def(ud.regs, def_)
-    elif flags & MT_INSN_EXEC:
+    elif tag == MT_INSN_EXEC:
         pass
     else:
-        raise Exception('Unsupported flags')
+        raise Exception(f'Unsupported tag: 0x{tag:x}')
 
 
 def format_uses(uses):
@@ -177,16 +175,16 @@ def main():
     parser.add_argument('--dot')
     parser.add_argument('--html')
     args = parser.parse_args()
-    endian, word, e_machine, gen = read_entries(args.memtrace_out)
-    disasm = disasm_init(endian, word, e_machine)
+    endian, word, word_size, e_machine, gen = read_entries(args.memtrace_out)
+    disasm = disasm_init(endian, word_size, e_machine)
     ud = UD()
-    for i, (pc, addr, flags, data) in enumerate(gen):
+    for i, (tag, data) in enumerate(gen):
         if args.start is not None and i < args.start:
             continue
         if args.end is not None and i >= args.end:
             break
         prev = ud.insns_in_trace[-1]
-        if pc != prev.in_code.pc:
+        if data.pc != prev.in_code.pc:
             print('[{}]0x{:x}: {} {} reg_uses=[{}] reg_defs=[{}] mem_uses=[{}] mem_defs=[{}]'.format(  # noqa: E501
                 prev.seq,
                 prev.in_code.pc,
@@ -197,7 +195,7 @@ def main():
                 format_uses(prev.mem_uses),
                 format_defs(prev.mem_defs),
             ))
-        analyze_insn(ud, disasm, pc, addr, flags, data)
+        analyze_insn(ud, disasm, tag, data)
     if args.dot is not None:
         with open(args.dot, 'w') as fp:
             output_template(fp, 'dot', ud, disasm)
