@@ -2,3 +2,4 @@
 /dist/
 /memtrace.egg-info/
 /memtrace/__pycache__/
+/.mypy_cache/
