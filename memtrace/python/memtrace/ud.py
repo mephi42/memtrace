@@ -10,13 +10,14 @@ from sortedcontainers import SortedKeyList
 from memtrace import MT_LOAD, MT_STORE, MT_REGS, MT_INSN, MT_GET_REG, \
     MT_PUT_REG, MT_INSN_EXEC, MT_GET_REG_NX, MT_PUT_REG_NX, MT_SIZE_SHIFT, \
     read_entries
-from memtrace.disasm import disasm_init, disasm_str
+from memtrace.disasm import disasm_init, disasm_str, UNKNOWN
 
 
 @dataclass
 class InsnInCode:
     pc: int
     raw: bytes = b''
+    disasm: str = UNKNOWN
 
 
 @dataclass
@@ -97,7 +98,7 @@ class UD:
         default_factory=lambda: SortedKeyList((INITIAL_DEF,), key=node_key))
 
 
-def analyze_insn(ud: UD, pc, addr, flags, data):
+def analyze_insn(ud: UD, disasm, pc: int, addr: int, flags: int, data: bytes):
     insn_in_code = ud.pc2insn.get(pc)
     if insn_in_code is None:
         insn_in_code = InsnInCode(pc)
@@ -121,6 +122,7 @@ def analyze_insn(ud: UD, pc, addr, flags, data):
         pass
     elif flags & MT_INSN:
         insn_in_code.raw = data[:flags >> MT_SIZE_SHIFT]
+        insn_in_code.disasm = disasm_str(disasm, pc, insn_in_code.raw)
     elif flags & (MT_GET_REG | MT_GET_REG_NX):
         insn_in_trace.reg_uses.extend(find_defs(ud.regs, addr, end))
     elif flags & (MT_PUT_REG | MT_PUT_REG_NX):
@@ -188,13 +190,13 @@ def main():
                 prev.seq,
                 prev.in_code.pc,
                 prev.in_code.raw.hex(),
-                disasm_str(disasm, pc, prev.in_code.raw),
+                prev.in_code.disasm,
                 format_uses(prev.reg_uses),
                 format_defs(prev.reg_defs),
                 format_uses(prev.mem_uses),
                 format_defs(prev.mem_defs),
             ))
-        analyze_insn(ud, pc, addr, flags, data)
+        analyze_insn(ud, disasm, pc, addr, flags, data)
     if args.dot is not None:
         with open(args.dot, 'w') as fp:
             output_template(fp, 'dot', ud, disasm)

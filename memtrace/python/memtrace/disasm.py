@@ -66,9 +66,12 @@ def disasm_cs(disasm, pc, buf):
         return None
 
 
+UNKNOWN = '<unknown>'
+
+
 def disasm_str(disasm, pc, buf):
     cs_insn = disasm_cs(disasm, pc, buf)
     if cs_insn is None:
-        return '<unknown>'
+        return UNKNOWN
     else:
         return '{} {}'.format(cs_insn.mnemonic, cs_insn.op_str)
