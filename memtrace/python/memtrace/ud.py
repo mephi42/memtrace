@@ -2,7 +2,7 @@
 import argparse
 from dataclasses import dataclass, field
 import os
-from typing import Dict, Generator, List
+from typing import Dict, List
 
 from jinja2 import Template
 from sortedcontainers import SortedKeyList
@@ -42,45 +42,46 @@ def node_key(node: Def) -> int:
 
 
 def add_def(store: SortedKeyList, def_: Def) -> None:
+    defs: List[Def] = [def_]
     first_idx = store.bisect_key_left(def_.start + 1)
-    last_idx = len(store)
-    for idx in range(first_idx, last_idx):
-        node = store[idx]
+    last_idx = first_idx
+    for node in store.islice(first_idx):
         if node.start >= def_.end:
-            last_idx = idx
             break
-    affected: List[Def] = store[first_idx:last_idx]
-    del store[first_idx:last_idx]
-    for node in affected:
         if def_.start <= node.start:
             if def_.end < node.end:
                 # Left overlap
-                store.add(Def(def_.end, node.end, node.insn_in_trace))
+                defs.append(Def(def_.end, node.end, node.insn_in_trace))
             else:
                 # Outer overlap
                 pass
         else:
             if def_.end < node.end:
                 # Inner overlap
-                store.add(Def(node.start, def_.start, node.insn_in_trace))
-                store.add(Def(def_.end, node.end, node.insn_in_trace))
+                defs.append(Def(node.start, def_.start, node.insn_in_trace))
+                defs.append(Def(def_.end, node.end, node.insn_in_trace))
             else:
                 # Right overlap
-                store.add(Def(node.start, def_.start, node.insn_in_trace))
-    store.add(def_)
+                defs.append(Def(node.start, def_.start, node.insn_in_trace))
+        last_idx += 1
+    del store[first_idx:last_idx]
+    store.update(defs)
 
 
-def find_defs(store: SortedKeyList, start: int, end: int) \
-        -> Generator[Def, None, None]:
-    for idx in range(store.bisect_key_left(start + 1), len(store)):
-        node = store[idx]
+def append_defs(
+        defs: List[Def],
+        store: SortedKeyList,
+        start: int,
+        end: int
+) -> None:
+    for node in store.irange_key(start + 1):
         if node.start >= end:
             break
-        yield Def(
+        defs.append(Def(
             max(start, node.start),
             min(end, node.end),
             node.insn_in_trace,
-        )
+        ))
 
 
 INITIAL_INSN = InsnInTrace(seq=0, in_code=InsnInCode(pc=0))
@@ -113,7 +114,7 @@ def analyze_insn(ud: UD, disasm, pc: int, addr: int, flags: int, data: bytes):
         insn_in_trace = ud.insns_in_trace[-1]
     end = addr + (flags >> MT_SIZE_SHIFT)
     if flags & MT_LOAD:
-        insn_in_trace.mem_uses.extend(find_defs(ud.mem, addr, end))
+        append_defs(insn_in_trace.mem_uses, ud.mem, addr, end)
     elif flags & MT_STORE:
         def_ = Def(addr, end, insn_in_trace)
         insn_in_trace.mem_defs.append(def_)
@@ -124,7 +125,7 @@ def analyze_insn(ud: UD, disasm, pc: int, addr: int, flags: int, data: bytes):
         insn_in_code.raw = data[:flags >> MT_SIZE_SHIFT]
         insn_in_code.disasm = disasm_str(disasm, pc, insn_in_code.raw)
     elif flags & (MT_GET_REG | MT_GET_REG_NX):
-        insn_in_trace.reg_uses.extend(find_defs(ud.regs, addr, end))
+        append_defs(insn_in_trace.reg_uses, ud.regs, addr, end)
     elif flags & (MT_PUT_REG | MT_PUT_REG_NX):
         def_ = Def(addr, end, insn_in_trace)
         insn_in_trace.reg_defs.append(def_)

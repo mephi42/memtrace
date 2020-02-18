@@ -48,7 +48,7 @@ def read_entries(memtrace):
         try:
             endian, word = MAGIC2STRUCT[magic]
         except KeyError:
-            raise Exception('Unsupported magic: %s'.format(magic))
+            raise Exception('Unsupported magic: {}'.format(magic))
         e_machine, = struct.unpack(endian + 'H', fp.read(2))
         fp.read(58)
     except:  # noqa: E722
