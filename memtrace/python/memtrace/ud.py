@@ -9,14 +9,14 @@ from sortedcontainers import SortedKeyList
 
 from memtrace import MT_LOAD, MT_STORE, MT_REG, MT_INSN, MT_GET_REG, \
     MT_PUT_REG, MT_INSN_EXEC, MT_GET_REG_NX, MT_PUT_REG_NX, read_entries
-from memtrace.disasm import disasm_init, disasm_str, UNKNOWN
+from memtrace.disasm import disasm_init, disasm_str
 
 
 @dataclass
 class InsnInCode:
     pc: int
     raw: bytes = b''
-    disasm: str = UNKNOWN
+    disasm: str = None
 
 
 @dataclass
@@ -98,7 +98,7 @@ class UD:
         default_factory=lambda: SortedKeyList((INITIAL_DEF,), key=node_key))
 
 
-def analyze_insn(ud: UD, disasm, tag, data):
+def analyze_insn(ud: UD, tag, data):
     insn_in_code = ud.pc2insn.get(data.pc)
     if insn_in_code is None:
         insn_in_code = InsnInCode(data.pc)
@@ -121,7 +121,6 @@ def analyze_insn(ud: UD, disasm, tag, data):
         pass
     elif tag == MT_INSN:
         insn_in_code.raw = data.value
-        insn_in_code.disasm = disasm_str(disasm, data.pc, insn_in_code.raw)
     elif tag in (MT_GET_REG, MT_GET_REG_NX):
         append_defs(insn_in_trace.reg_uses, ud.regs, data.addr, data.end_addr)
     elif tag in (MT_PUT_REG, MT_PUT_REG_NX):
@@ -148,10 +147,17 @@ def format_defs(defs):
     ])
 
 
-def format_insn_in_trace(insn_in_trace: InsnInTrace) -> str:
+def disasm_insn_in_code(in_code: InsnInCode, disasm) -> None:
+    if in_code.disasm is None:
+        in_code.disasm = disasm_str(disasm, in_code.pc, in_code.raw)
+
+
+def format_insn_in_trace(insn_in_trace: InsnInTrace, disasm) -> str:
+    in_code = insn_in_trace.in_code
+    disasm_insn_in_code(in_code, disasm)
     return (
-        f'[{insn_in_trace.seq}]0x{insn_in_trace.in_code.pc:x}: '
-        f'{insn_in_trace.in_code.raw.hex()} {insn_in_trace.in_code.disasm} '
+        f'[{insn_in_trace.seq}]0x{in_code.pc:x}: '
+        f'{in_code.raw.hex()} {in_code.disasm} '
         f'reg_uses=[{format_uses(insn_in_trace.reg_uses)}] '
         f'reg_defs=[{format_defs(insn_in_trace.reg_defs)}] '
         f'mem_uses=[{format_uses(insn_in_trace.mem_uses)}] '
@@ -159,18 +165,14 @@ def format_insn_in_trace(insn_in_trace: InsnInTrace) -> str:
     )
 
 
-def output_template(fp, kind, ud: UD, disasm):
+def output_template(fp, kind, ud: UD):
     template_path = os.path.join(
         os.path.dirname(__file__),
         'ud_{}.j2'.format(kind),
     )
     with open(template_path) as template_fp:
         template = Template(template_fp.read())
-    template.stream(
-        ud=ud,
-        disasm=disasm,
-        disasm_str=disasm_str,
-    ).dump(fp)
+    template.stream(ud=ud).dump(fp)
 
 
 def main():
@@ -193,14 +195,18 @@ def main():
             break
         prev = ud.insns_in_trace[-1]
         if args.verbose and data.pc != prev.in_code.pc:
-            print(format_insn_in_trace(prev))
-        analyze_insn(ud, disasm, tag, data)
+            print(format_insn_in_trace(prev, disasm))
+        analyze_insn(ud, tag, data)
+    need_disasm = args.dot is not None or args.html is not None
+    if need_disasm:
+        for insn_in_trace in ud.insns_in_trace:
+            disasm_insn_in_code(insn_in_trace.in_code, disasm)
     if args.dot is not None:
         with open(args.dot, 'w') as fp:
-            output_template(fp, 'dot', ud, disasm)
+            output_template(fp, 'dot', ud)
     if args.html is not None:
         with open(args.html, 'w') as fp:
-            output_template(fp, 'html', ud, disasm)
+            output_template(fp, 'html', ud)
 
 
 if __name__ == '__main__':
