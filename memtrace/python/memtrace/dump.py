@@ -18,7 +18,7 @@ def format_value(value, endian):
     format = SIZE2STRUCT.get(len(value))
     if format is None:
         return ('b\'' +
-                ''.join(f'\\x{b:02x}' for b in value) +
+                ''.join([f'\\x{b:02x}' for b in value]) +
                 '\'')
     value, = struct.unpack(endian + format, value)
     return hex(value)

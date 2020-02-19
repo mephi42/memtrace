@@ -33,7 +33,7 @@ class InsnInTrace:
 class Def:
     start: int
     end: int
-    insn_in_trace: InsnInTrace
+    seq_in_trace: int
 
 
 def node_key(node: Def) -> int:
@@ -50,18 +50,18 @@ def add_def(store: SortedKeyList, def_: Def) -> None:
         if def_.start <= node.start:
             if def_.end < node.end:
                 # Left overlap
-                defs.append(Def(def_.end, node.end, node.insn_in_trace))
+                defs.append(Def(def_.end, node.end, node.seq_in_trace))
             else:
                 # Outer overlap
                 pass
         else:
             if def_.end < node.end:
                 # Inner overlap
-                defs.append(Def(node.start, def_.start, node.insn_in_trace))
-                defs.append(Def(def_.end, node.end, node.insn_in_trace))
+                defs.append(Def(node.start, def_.start, node.seq_in_trace))
+                defs.append(Def(def_.end, node.end, node.seq_in_trace))
             else:
                 # Right overlap
-                defs.append(Def(node.start, def_.start, node.insn_in_trace))
+                defs.append(Def(node.start, def_.start, node.seq_in_trace))
         last_idx += 1
     del store[first_idx:last_idx]
     store.update(defs)
@@ -79,12 +79,12 @@ def append_defs(
         defs.append(Def(
             max(start, node.start),
             min(end, node.end),
-            node.insn_in_trace,
+            node.seq_in_trace,
         ))
 
 
 INITIAL_INSN = InsnInTrace(seq=0, in_code=InsnInCode(pc=0))
-INITIAL_DEF = Def(0, (1 << 64) - 1, INITIAL_INSN)
+INITIAL_DEF = Def(0, (1 << 64) - 1, 0)
 
 
 @dataclass
@@ -114,7 +114,7 @@ def analyze_insn(ud: UD, disasm, tag, data):
     if tag == MT_LOAD:
         append_defs(insn_in_trace.mem_uses, ud.mem, data.addr, data.end_addr)
     elif tag == MT_STORE:
-        def_ = Def(data.addr, data.end_addr, insn_in_trace)
+        def_ = Def(data.addr, data.end_addr, insn_in_trace.seq)
         insn_in_trace.mem_defs.append(def_)
         add_def(ud.mem, def_)
     elif tag == MT_REG:
@@ -125,7 +125,7 @@ def analyze_insn(ud: UD, disasm, tag, data):
     elif tag in (MT_GET_REG, MT_GET_REG_NX):
         append_defs(insn_in_trace.reg_uses, ud.regs, data.addr, data.end_addr)
     elif tag in (MT_PUT_REG, MT_PUT_REG_NX):
-        def_ = Def(data.addr, data.end_addr, insn_in_trace)
+        def_ = Def(data.addr, data.end_addr, insn_in_trace.seq)
         insn_in_trace.reg_defs.append(def_)
         add_def(ud.regs, def_)
     elif tag == MT_INSN_EXEC:
@@ -135,21 +135,27 @@ def analyze_insn(ud: UD, disasm, tag, data):
 
 
 def format_uses(uses):
-    return ', '.join(
-        '0x{:x}-0x{:x}@[{}]0x{:x}'.format(
-            use.start,
-            use.end,
-            use.insn_in_trace.seq,
-            use.insn_in_trace.in_code.pc,
-        )
+    return ', '.join([
+        f'0x{use.start:x}-0x{use.end:x}@[{use.seq_in_trace}]'
         for use in uses
-    )
+    ])
 
 
 def format_defs(defs):
-    return ', '.join(
-        '0x{:x}-0x{:x}'.format(def_.start, def_.end)
+    return ', '.join([
+        f'0x{def_.start:x}-0x{def_.end:x}'
         for def_ in defs
+    ])
+
+
+def format_insn_in_trace(insn_in_trace: InsnInTrace) -> str:
+    return (
+        f'[{insn_in_trace.seq}]0x{insn_in_trace.in_code.pc:x}: '
+        f'{insn_in_trace.in_code.raw.hex()} {insn_in_trace.in_code.disasm} '
+        f'reg_uses=[{format_uses(insn_in_trace.reg_uses)}] '
+        f'reg_defs=[{format_defs(insn_in_trace.reg_defs)}] '
+        f'mem_uses=[{format_uses(insn_in_trace.mem_uses)}] '
+        f'mem_defs=[{format_defs(insn_in_trace.mem_defs)}]'
     )
 
 
@@ -170,31 +176,24 @@ def output_template(fp, kind, ud: UD, disasm):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
-    parser.add_argument('--start', type=int)
+    parser.add_argument('--start', default=0, type=int)
     parser.add_argument('--end', type=int)
     parser.add_argument('--dot')
     parser.add_argument('--html')
+    parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
     endian, word, word_size, e_machine, gen = read_entries(args.memtrace_out)
     disasm = disasm_init(endian, word_size, e_machine)
     ud = UD()
-    for i, (tag, data) in enumerate(gen):
-        if args.start is not None and i < args.start:
-            continue
+    it = enumerate(gen)
+    for _ in range(args.start):
+        next(it)
+    for i, (tag, data) in it:
         if args.end is not None and i >= args.end:
             break
         prev = ud.insns_in_trace[-1]
-        if data.pc != prev.in_code.pc:
-            print('[{}]0x{:x}: {} {} reg_uses=[{}] reg_defs=[{}] mem_uses=[{}] mem_defs=[{}]'.format(  # noqa: E501
-                prev.seq,
-                prev.in_code.pc,
-                prev.in_code.raw.hex(),
-                prev.in_code.disasm,
-                format_uses(prev.reg_uses),
-                format_defs(prev.reg_defs),
-                format_uses(prev.mem_uses),
-                format_defs(prev.mem_defs),
-            ))
+        if args.verbose and data.pc != prev.in_code.pc:
+            print(format_insn_in_trace(prev))
         analyze_insn(ud, disasm, tag, data)
     if args.dot is not None:
         with open(args.dot, 'w') as fp:
