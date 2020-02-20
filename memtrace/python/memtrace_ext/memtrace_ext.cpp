@@ -1,4 +1,6 @@
 // Copyright (C) 2019-2020, and GNU GPL'd, by mephi42.
+#include <algorithm>
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -6,6 +8,11 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <map>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 // clang-format off
 #include <boost/python.hpp>
@@ -306,8 +313,8 @@ int Parse(V* visitor, Buffer* buf, size_t* i, size_t start, size_t end) {
   return 0;
 }
 
-void HexDump(const uint8_t* buf, size_t n) {
-  for (size_t i = 0; i < n; i++) std::printf("%02x", buf[i]);
+void HexDump(std::FILE* f, const uint8_t* buf, size_t n) {
+  for (size_t i = 0; i < n; i++) std::fprintf(f, "%02x", buf[i]);
 }
 
 void ReprDump(const uint8_t* buf, size_t n) {
@@ -337,11 +344,48 @@ void ValueDump(const uint8_t* buf, size_t n) {
   }
 }
 
-template <Endianness E, typename W>
-class Dumper {
+void HtmlDump(std::FILE* f, const char* s) {
+  std::string escaped;
+  for (; *s; s++) {
+    switch (*s) {
+      case '"':
+        escaped += "&quot;";
+        break;
+      case '&':
+        escaped += "&amp;";
+        break;
+      case '\'':
+        escaped += "&#39;";
+        break;
+      case '<':
+        escaped += "&lt;";
+        break;
+      case '>':
+        escaped += "&gt;";
+        break;
+      default:
+        escaped += *s;
+        break;
+    }
+  }
+  fprintf(f, "%s", escaped.c_str());
+}
+
+class CsFree {
  public:
-  Dumper() : insnCount_(0), capstone_(0) {}
-  ~Dumper() {
+  explicit CsFree(size_t count) : count_(count) {}
+
+  void operator()(cs_insn* insn) { cs_free(insn, count_); }
+
+ private:
+  const size_t count_;
+};
+
+template <Endianness E, typename W>
+class Disasm {
+ public:
+  Disasm() : capstone_(0) {}
+  ~Disasm() {
     if (capstone_ != 0) cs_close(&capstone_);
   }
 
@@ -412,6 +456,33 @@ class Dumper {
     return 0;
   }
 
+  std::unique_ptr<cs_insn, CsFree> DoDisasm(const uint8_t* code,
+                                            size_t codeSize, uint64_t address,
+                                            size_t count) {
+    cs_insn* insn = nullptr;
+    size_t actualCount =
+        cs_disasm(capstone_, code, codeSize, address, count, &insn);
+    return std::unique_ptr<cs_insn, CsFree>(insn, CsFree(actualCount));
+  }
+
+ private:
+  csh capstone_;
+};
+
+template <Endianness E, typename W>
+class Dumper {
+ public:
+  Dumper() : insnCount_(0) {}
+
+  int Init(HeaderEntry<E, W> entry) {
+    std::printf("Endian            : %s\n", GetEndiannessStr(E));
+    std::printf("Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
+    std::printf("Word size         : %zu\n", sizeof(W));
+    std::printf("Machine           : %s\n",
+                GetMachineTypeStr(entry.GetMachineType()));
+    return disasm_.Init(entry.GetMachineType());
+  }
+
   int operator()(size_t i, LdStEntry<E, W> entry) {
     std::printf("[%10zu] 0x%016" PRIx64 ": %s uint%zu_t [0x%" PRIx64 "] ", i,
                 (std::uint64_t)entry.GetPc(),
@@ -426,15 +497,13 @@ class Dumper {
     std::printf("[%10zu] 0x%016" PRIx64 ": %s ", i,
                 (std::uint64_t)entry.GetPc(),
                 GetTagStr(entry.GetTlv().GetTag()));
-    HexDump(entry.GetValue(), entry.GetSize());
-    cs_insn* insn = nullptr;
-    size_t count = cs_disasm(capstone_, entry.GetValue(), entry.GetSize(),
-                             entry.GetPc(), 0, &insn);
+    HexDump(stdout, entry.GetValue(), entry.GetSize());
+    std::unique_ptr<cs_insn, CsFree> insn =
+        disasm_.DoDisasm(entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
     if (insn)
       std::printf(" %s %s\n", insn->mnemonic, insn->op_str);
     else
       std::printf(" <unknown>\n");
-    cs_free(insn, count);
     return 0;
   }
 
@@ -454,30 +523,30 @@ class Dumper {
     return 0;
   }
 
-  size_t GetInsnCount() const { return insnCount_; }
+  int Complete() {
+    std::printf("Insns             : %zu\n", insnCount_);
+    return 0;
+  }
 
  private:
   size_t insnCount_;
-  csh capstone_;
+  Disasm<E, W> disasm_;
 };
 
-template <Endianness E, typename W>
-int Rest(std::istream* is, Buffer* buf, size_t start, size_t end) {
-  HeaderEntry<E, std::uint64_t> entry(buf->GetData());
-  std::printf("Endian            : %s\n", GetEndiannessStr(E));
-  std::printf("Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
-  std::printf("Word size         : %zu\n", sizeof(W));
-  std::printf("Machine           : %s\n",
-              GetMachineTypeStr(entry.GetMachineType()));
+template <Endianness E, typename W, template <Endianness, typename> typename V,
+          typename... Args>
+int Rest(std::istream* is, Buffer* buf, size_t start, size_t end,
+         Args&&... args) {
+  HeaderEntry<E, W> entry(buf->GetData());
   buf->Advance(entry.GetTlv().GetAlignedLength());
-  Dumper<E, W> dumper;
-  if (dumper.Init(entry.GetMachineType()) < 0) {
-    std::cerr << "dumper.Init() failed" << std::endl;
+  V<E, W> visitor(std::forward<Args>(args)...);
+  if (visitor.Init(entry) < 0) {
+    std::cerr << "visitor.Init() failed" << std::endl;
     return EXIT_FAILURE;
   }
   size_t i = 0;
   while (buf->GetSize() > 0) {
-    if (Parse<E, W>(&dumper, buf, &i, start, end) < 0) {
+    if (Parse<E, W>(&visitor, buf, &i, start, end) < 0) {
       std::cerr << "Parse(buf) failed" << std::endl;
       return EXIT_FAILURE;
     }
@@ -486,11 +555,15 @@ int Rest(std::istream* is, Buffer* buf, size_t start, size_t end) {
       return EXIT_FAILURE;
     }
   }
-  std::printf("Insns             : %zu\n", dumper.GetInsnCount());
+  if (visitor.Complete() < 0) {
+    std::cerr << "visitor.Complete() failed" << std::endl;
+    return EXIT_FAILURE;
+  }
   return EXIT_SUCCESS;
 }
 
-int DumpFile(const char* path, size_t start, size_t end) {
+template <template <Endianness, typename> typename V, typename... Args>
+int VisitFile(const char* path, size_t start, size_t end, Args&&... args) {
   std::ifstream is(path);
   if (!is) {
     std::cerr << "Could not open " << path << std::endl;
@@ -502,19 +575,448 @@ int DumpFile(const char* path, size_t start, size_t end) {
     return EXIT_FAILURE;
   }
   if (buf.GetData()[0] == 'M' && buf.GetData()[1] == '4') {
-    return Rest<Endianness::Big, std::uint32_t>(&is, &buf, start, end);
+    return Rest<Endianness::Big, std::uint32_t, V>(&is, &buf, start, end,
+                                                   std::forward<Args>(args)...);
   } else if (buf.GetData()[0] == 'M' && buf.GetData()[1] == '8') {
-    return Rest<Endianness::Big, std::uint64_t>(&is, &buf, start, end);
+    return Rest<Endianness::Big, std::uint64_t, V>(&is, &buf, start, end,
+                                                   std::forward<Args>(args)...);
   } else if (buf.GetData()[0] == '4' && buf.GetData()[1] == 'M') {
-    return Rest<Endianness::Little, std::uint32_t>(&is, &buf, start, end);
+    return Rest<Endianness::Little, std::uint32_t, V>(
+        &is, &buf, start, end, std::forward<Args>(args)...);
   } else if (buf.GetData()[0] == '8' && buf.GetData()[1] == 'M') {
-    return Rest<Endianness::Little, std::uint64_t>(&is, &buf, start, end);
+    return Rest<Endianness::Little, std::uint64_t, V>(
+        &is, &buf, start, end, std::forward<Args>(args)...);
   } else {
     std::cerr << "Unsupported magic" << std::endl;
     return EXIT_FAILURE;
   }
 }
 
+int DumpFile(const char* path, size_t start, size_t end) {
+  return VisitFile<Dumper>(path, start, end);
+}
+
+template <typename W>
+struct Def {
+  W startAddr;
+  W endAddr;
+};
+
+template <typename W>
+struct InsnInCode {
+  W pc;
+  std::unique_ptr<std::uint8_t[]> raw;
+  size_t rawSize;
+  std::string disasm;
+};
+
+struct InsnInTrace {
+  size_t codeIndex;
+  size_t regUseStartIndex;
+  size_t regUseEndIndex;
+  size_t memUseStartIndex;
+  size_t memUseEndIndex;
+  size_t regDefStartIndex;
+  size_t regDefEndIndex;
+  size_t memDefStartIndex;
+  size_t memDefEndIndex;
+};
+
+template <typename W>
+class UdState {
+ public:
+  void Init() { AddDef(0, std::numeric_limits<W>::max()); }
+
+  void AddUses(W startAddr, W size) {
+    W endAddr = startAddr + size;
+    for (It it = addressSpace_.lower_bound(startAddr + 1);
+         it != addressSpace_.end() && it->second.startAddr < endAddr; ++it) {
+      uses_.push_back(it->second.defIndex);
+      const Def<W>& def = defs_[it->second.defIndex];
+      W maxStartAddr = std::max(startAddr, it->second.startAddr);
+      W minEndAddr = std::min(endAddr, it->first);
+      if (def.startAddr != maxStartAddr || def.endAddr != minEndAddr)
+        partialUses_[uses_.size() - 1] = Def<W>{maxStartAddr, minEndAddr};
+    }
+  }
+
+  void AddDefs(W startAddr, W size) {
+    W endAddr = startAddr + size;
+    It first = addressSpace_.lower_bound(startAddr + 1);
+    It last;
+    for (last = first;
+         last != addressSpace_.end() && last->second.startAddr < endAddr;
+         ++last) {
+    }
+    std::vector<Entry> affected(first, last);
+    addressSpace_.erase(first, last);
+    for (const Entry& entry : affected) {
+      W entryStartAddr = entry.second.startAddr;
+      W entryEndAddr = entry.first;
+      size_t entryDefIndex = entry.second.defIndex;
+      if (startAddr <= entryStartAddr) {
+        if (endAddr < entryEndAddr) {
+          // Left overlap.
+          addressSpace_[entryEndAddr] = EntryValue{endAddr, entryDefIndex};
+        } else {
+          // Outer overlap.
+        }
+      } else {
+        if (endAddr < entryEndAddr) {
+          // Inner overlap.
+          addressSpace_[startAddr] = EntryValue{entryStartAddr, entryDefIndex};
+          addressSpace_[entryEndAddr] = EntryValue{endAddr, entryDefIndex};
+        } else {
+          // Right overlap.
+          addressSpace_[startAddr] = EntryValue{entryStartAddr, entryDefIndex};
+        }
+      }
+    }
+    AddDef(startAddr, endAddr);
+  }
+
+  size_t GetUseCount() const { return uses_.size(); }
+  size_t GetDefCount() const { return defs_.size(); }
+
+  void DumpUses(size_t startIndex, size_t endIndex,
+                const std::vector<InsnInTrace>& trace,
+                size_t InsnInTrace::*startIndexMember) const {
+    for (size_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
+      std::pair<const Def<W>*, size_t> use =
+          ResolveUse(useIndex, trace, startIndexMember);
+      std::printf(useIndex == startIndex ? "0x%" PRIx64 "-0x%" PRIx64 "@[%zu]"
+                                         : ", 0x%" PRIx64 "-0x%" PRIx64
+                                           "@[%zu]",
+                  (std::uint64_t)use.first->startAddr,
+                  (std::uint64_t)use.first->endAddr, use.second);
+    }
+  }
+
+  void DumpDefs(size_t startIndex, size_t endIndex) const {
+    for (size_t i = startIndex; i < endIndex; i++)
+      std::printf(i == startIndex ? "0x%" PRIx64 "-0x%" PRIx64
+                                  : ", 0x%" PRIx64 "-0x%" PRIx64,
+                  (std::uint64_t)defs_[i].startAddr,
+                  (std::uint64_t)defs_[i].endAddr);
+  }
+
+  void DumpUsesDot(std::FILE* f, size_t traceIndex, size_t startIndex,
+                   size_t endIndex, const std::vector<InsnInTrace>& trace,
+                   size_t InsnInTrace::*startIndexMember,
+                   const char* prefix) const {
+    for (size_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
+      std::pair<const Def<W>*, size_t> use =
+          ResolveUse(useIndex, trace, startIndexMember);
+      fprintf(f, "    %zu -> %zu [label=\"%s0x%" PRIx64 "-0x%" PRIx64 "\"]\n",
+              traceIndex, use.second, prefix,
+              (std::uint64_t)use.first->startAddr,
+              (std::uint64_t)use.first->endAddr);
+    }
+  }
+
+  void DumpUsesHtml(std::FILE* f, size_t startIndex, size_t endIndex,
+                    const std::vector<InsnInTrace>& trace,
+                    size_t InsnInTrace::*startIndexMember,
+                    const char* prefix) const {
+    for (size_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
+      std::pair<const Def<W>*, size_t> use =
+          ResolveUse(useIndex, trace, startIndexMember);
+      fprintf(
+          f, "            <a href=\"#%zu\">%s0x%" PRIx64 "-0x%" PRIx64 "</a>\n",
+          use.second, prefix, (std::uint64_t)use.first->startAddr,
+          (std::uint64_t)use.first->endAddr);
+    }
+  }
+
+  void DumpDefsHtml(std::FILE* f, size_t startIndex, size_t endIndex,
+                    const char* prefix) const {
+    for (size_t i = startIndex; i < endIndex; i++)
+      std::fprintf(f, "            %s0x%" PRIx64 "-0x%" PRIx64 "\n", prefix,
+                   (std::uint64_t)defs_[i].startAddr,
+                   (std::uint64_t)defs_[i].endAddr);
+  }
+
+ private:
+  void AddDef(W startAddr, W endAddr) {
+    size_t defIndex = defs_.size();
+    Def<W>& def = defs_.emplace_back();
+    def.startAddr = startAddr;
+    def.endAddr = endAddr;
+    addressSpace_[endAddr] = EntryValue{startAddr, defIndex};
+  }
+
+  std::pair<const Def<W>*, size_t> ResolveUse(
+      size_t useIndex, const std::vector<InsnInTrace>& trace,
+      size_t InsnInTrace::*startIndexMember) const {
+    size_t defIndex = uses_[useIndex];
+    const Def<W>* def;
+    typename std::unordered_map<size_t, Def<W>>::const_iterator partialUse =
+        partialUses_.find(useIndex);
+    if (partialUse == partialUses_.end())
+      def = &defs_[defIndex];
+    else
+      def = &partialUse->second;
+
+    std::vector<InsnInTrace>::const_iterator it = std::upper_bound(
+        trace.begin(), trace.end(), defIndex,
+        [startIndexMember](size_t defIndex, const InsnInTrace& trace) -> bool {
+          return defIndex < trace.*startIndexMember;
+        });
+    --it;
+    size_t traceIndex = it - trace.begin();
+
+    return std::make_pair(def, traceIndex);
+  }
+
+  std::vector<size_t> uses_;  // defs_ indices.
+  // The assumption is that partial uses are rare.
+  // uses_ index -> range.
+  std::unordered_map<size_t, Def<W>> partialUses_;
+  std::vector<Def<W>> defs_;
+  struct EntryValue {
+    W startAddr;
+    size_t defIndex;
+  };
+  // endAddr -> EntryValue.
+  using AddressSpace = typename std::map<W, EntryValue>;
+  using Entry = typename AddressSpace::value_type;
+  using It = typename AddressSpace::const_iterator;
+  AddressSpace addressSpace_;
+};
+
+template <Endianness E, typename W>
+class Ud {
+ public:
+  Ud(const char* dot, const char* html, bool verbose)
+      : dot_(dot), html_(html), verbose_(verbose) {}
+
+  int Init(HeaderEntry<E, W> entry) {
+    size_t codeIndex = code_.size();
+    InsnInCode<W>& code = code_.emplace_back();
+    code.pc = 0;
+    code.rawSize = 0;
+    code.disasm = "<unknown>";
+
+    AddTrace(codeIndex);
+    regState_.Init();
+    memState_.Init();
+
+    return disasm_.Init(entry.GetMachineType());
+  }
+
+  int operator()(size_t /* i */, LdStEntry<E, W> entry) {
+    HandlePc(entry.GetPc());
+    switch (entry.GetTlv().GetTag()) {
+      case Tag::MT_LOAD:
+        memState_.AddUses(entry.GetAddr(), entry.GetSize());
+        return 0;
+      case Tag::MT_STORE:
+        memState_.AddDefs(entry.GetAddr(), entry.GetSize());
+        return 0;
+      case Tag::MT_REG:
+        return 0;
+      case Tag::MT_GET_REG:
+        regState_.AddUses(entry.GetAddr(), entry.GetSize());
+        return 0;
+      case Tag::MT_PUT_REG:
+        regState_.AddDefs(entry.GetAddr(), entry.GetSize());
+        return 0;
+      default:
+        return -EINVAL;
+    }
+  }
+
+  int operator()(size_t /* i */, InsnEntry<E, W> entry) {
+    pcs_[entry.GetPc()] = code_.size();
+    InsnInCode<W>& code = code_.emplace_back();
+    code.pc = entry.GetPc();
+    code.raw.reset(new uint8_t[entry.GetSize()]);
+    std::memcpy(code.raw.get(), entry.GetValue(), entry.GetSize());
+    code.rawSize = entry.GetSize();
+    std::unique_ptr<cs_insn, CsFree> insn =
+        disasm_.DoDisasm(entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
+    if (insn) {
+      code.disasm = insn->mnemonic;
+      code.disasm += " ";
+      code.disasm += insn->op_str;
+    } else {
+      code.disasm = "<unknown>";
+    }
+    return 0;
+  }
+
+  int operator()(size_t /* i */, InsnExecEntry<E, W> entry) {
+    HandlePc(entry.GetPc());
+    return 0;
+  }
+
+  int operator()(size_t /* i */, LdStNxEntry<E, W> entry) {
+    HandlePc(entry.GetPc());
+    switch (entry.GetTlv().GetTag()) {
+      case Tag::MT_GET_REG_NX:
+        regState_.AddUses(entry.GetAddr(), entry.GetSize());
+        return 0;
+      case Tag::MT_PUT_REG_NX:
+        regState_.AddDefs(entry.GetAddr(), entry.GetSize());
+        return 0;
+      default:
+        return -EINVAL;
+    }
+  }
+
+  int Complete() {
+    Flush();
+    int ret;
+    if ((ret = DumpDot()) < 0) return ret;
+    if ((ret = DumpHtml()) < 0) return ret;
+    return 0;
+  }
+
+ private:
+  void Flush() {
+    InsnInTrace& trace = trace_.back();
+    trace.regUseEndIndex = regState_.GetUseCount();
+    trace.memUseEndIndex = memState_.GetUseCount();
+    trace.regDefEndIndex = regState_.GetDefCount();
+    trace.memDefEndIndex = memState_.GetDefCount();
+
+    if (verbose_) {
+      InsnInCode<W>& code = code_[trace.codeIndex];
+      std::printf("[%zu]0x%" PRIx64 ": ", trace_.size() - 1,
+                  (std::uint64_t)code.pc);
+      HexDump(stdout, code.raw.get(), code.rawSize);
+      std::printf(" %s reg_uses=[", code.disasm.c_str());
+      regState_.DumpUses(trace.regUseStartIndex, trace.regUseEndIndex, trace_,
+                         &InsnInTrace::regDefStartIndex);
+      std::printf("] reg_defs=[");
+      regState_.DumpDefs(trace.regDefStartIndex, trace.regDefEndIndex);
+      std::printf("] mem_uses=[");
+      memState_.DumpUses(trace.memUseStartIndex, trace.memUseEndIndex, trace_,
+                         &InsnInTrace::memDefStartIndex);
+      std::printf("] mem_defs=[");
+      memState_.DumpDefs(trace.memDefStartIndex, trace.memDefEndIndex);
+      std::printf("]\n");
+    }
+  }
+
+  void AddTrace(size_t codeIndex) {
+    InsnInTrace& trace = trace_.emplace_back();
+    trace.codeIndex = codeIndex;
+    trace.regUseStartIndex = regState_.GetUseCount();
+    trace.memUseStartIndex = memState_.GetUseCount();
+    trace.regDefStartIndex = regState_.GetDefCount();
+    trace.memDefStartIndex = memState_.GetDefCount();
+  }
+
+  void HandlePc(W pc) {
+    if (code_[trace_.back().codeIndex].pc == pc) return;
+    Flush();
+    AddTrace(pcs_[pc]);
+  }
+
+  int DumpDot() const {
+    if (dot_ == nullptr) return 0;
+    std::FILE* f = std::fopen(dot_, "w");
+    if (f == nullptr) return -errno;
+    std::fprintf(f, "digraph ud {\n");
+    for (size_t traceIndex = 0; traceIndex < trace_.size(); traceIndex++) {
+      const InsnInTrace& trace = trace_[traceIndex];
+      const InsnInCode<W>& code = code_[trace.codeIndex];
+      std::fprintf(f, "    %zu [label=\"[%zu] 0x%" PRIx64 ": %s\"]\n",
+                   traceIndex, traceIndex, (std::uint64_t)code.pc,
+                   code.disasm.c_str());
+      regState_.DumpUsesDot(f, traceIndex, trace.regUseStartIndex,
+                            trace.regUseEndIndex, trace_,
+                            &InsnInTrace::regDefStartIndex, "r");
+      memState_.DumpUsesDot(f, traceIndex, trace.memUseStartIndex,
+                            trace.memUseEndIndex, trace_,
+                            &InsnInTrace::memDefStartIndex, "m");
+    }
+    std::fprintf(f, "}\n");
+    std::fclose(f);
+    return 0;
+  }
+
+  int DumpHtml() const {
+    if (html_ == nullptr) return 0;
+    std::FILE* f = std::fopen(html_, "w");
+    if (f == nullptr) return -errno;
+    std::fprintf(f,
+                 "<!DOCTYPE html>\n"
+                 "<html>\n"
+                 "<head>\n"
+                 "<title>ud</title>\n"
+                 "</head>\n"
+                 "<body>\n"
+                 "<table>\n"
+                 "    <tr>\n"
+                 "        <th>Seq</th>\n"
+                 "        <th>Address</th>\n"
+                 "        <th>Bytes</th>\n"
+                 "        <th>Instruction</th>\n"
+                 "        <th>Uses</th>\n"
+                 "        <th>Defs</th>\n"
+                 "    </tr>\n");
+    for (size_t traceIndex = 0; traceIndex < trace_.size(); traceIndex++) {
+      const InsnInTrace& trace = trace_[traceIndex];
+      const InsnInCode<W>& code = code_[trace.codeIndex];
+      std::fprintf(f,
+                   "    <tr id=\"%zu\">\n"
+                   "        <td>%zu</td>\n"
+                   "        <td>0x%" PRIx64
+                   "</td>\n"
+                   "        <td>",
+                   traceIndex, traceIndex, (std::uint64_t)code.pc);
+      HexDump(f, code.raw.get(), code.rawSize);
+      std::fprintf(f,
+                   "</td>\n"
+                   "        <td>");
+      HtmlDump(f, code.disasm.c_str());
+      std::fprintf(f,
+                   "</td>\n"
+                   "        <td>\n");
+      regState_.DumpUsesHtml(f, trace.regUseStartIndex, trace.regUseEndIndex,
+                             trace_, &InsnInTrace::regDefStartIndex, "r");
+      memState_.DumpUsesHtml(f, trace.memUseStartIndex, trace.memUseEndIndex,
+                             trace_, &InsnInTrace::memDefStartIndex, "m");
+      std::fprintf(f,
+                   "        </td>\n"
+                   "        <td>\n");
+      regState_.DumpDefsHtml(f, trace.regDefStartIndex, trace.regDefEndIndex,
+                             "r");
+      memState_.DumpDefsHtml(f, trace.memDefStartIndex, trace.memDefEndIndex,
+                             "m");
+      std::fprintf(f,
+                   "        </td>\n"
+                   "    </tr>\n");
+    }
+    std::fprintf(f,
+                 "</table>\n"
+                 "</body>\n"
+                 "</html>\n");
+    std::fclose(f);
+    return 0;
+  }
+
+  const char* dot_;
+  const char* html_;
+  const bool verbose_;
+  Disasm<E, W> disasm_;
+  std::vector<InsnInCode<W>> code_;
+  std::unordered_map<W, size_t> pcs_;
+  std::vector<InsnInTrace> trace_;
+  UdState<W> regState_;
+  UdState<W> memState_;
+};
+
+int UdFile(const char* path, size_t start, size_t end, const char* dot,
+           const char* html, bool verbose) {
+  return VisitFile<Ud>(path, start, end, dot, html, verbose);
+}
+
 }  // namespace
 
-BOOST_PYTHON_MODULE(memtrace_ext) { boost::python::def("dump_file", DumpFile); }
+BOOST_PYTHON_MODULE(memtrace_ext) {
+  boost::python::def("dump_file", DumpFile);
+  boost::python::def("ud_file", UdFile);
+}

@@ -3,7 +3,7 @@ import sys
 
 setuptools.setup(
     name='memtrace',
-    version='0.0.5',
+    version='0.0.6',
     author='mephi42',
     author_email='mephi42@gmail.com',
     description='memtrace post-processing scripts',
@@ -25,6 +25,7 @@ setuptools.setup(
                  str(sys.version_info[1])),
                 'capstone',
             ],
+            extra_compile_args=['-std=c++17', '-Wextra', '-pedantic'],
         )
     ],
 )
