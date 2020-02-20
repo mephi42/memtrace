@@ -24,20 +24,20 @@ def disasm_init(endian, word_size, e_machine):
         if endian == '<':
             mode |= capstone.CS_MODE_LITTLE_ENDIAN
         else:
-            mode |= capstone.CS_MODE_BIG_ENDIAN_ENDIAN
+            mode |= capstone.CS_MODE_BIG_ENDIAN
     elif e_machine == EM_ARM:
         arch = capstone.CS_ARCH_ARM
         mode = capstone.CS_MODE_ARM
         if endian == '<':
             mode |= capstone.CS_MODE_LITTLE_ENDIAN
         else:
-            mode |= capstone.CS_MODE_BIG_ENDIAN_ENDIAN
+            mode |= capstone.CS_MODE_BIG_ENDIAN
     elif e_machine == EM_AARCH64:
         arch = capstone.CS_ARCH_ARM64
         if endian == '<':
             mode = capstone.CS_MODE_LITTLE_ENDIAN
         else:
-            mode = capstone.CS_MODE_BIG_ENDIAN_ENDIAN
+            mode = capstone.CS_MODE_BIG_ENDIAN
     elif e_machine == EM_S390:
         arch = capstone.CS_ARCH_SYSZ
         mode = capstone.CS_MODE_BIG_ENDIAN
@@ -50,7 +50,7 @@ def disasm_init(endian, word_size, e_machine):
         if endian == '<':
             mode |= capstone.CS_MODE_LITTLE_ENDIAN
         else:
-            mode |= capstone.CS_MODE_BIG_ENDIAN_ENDIAN
+            mode |= capstone.CS_MODE_BIG_ENDIAN
     # EM_NANOMIPS is not supported
     else:
         return None
