@@ -498,7 +498,7 @@ class Dumper {
  public:
   Dumper() : insnCount_(0) {}
 
-  int Init(HeaderEntry<E, W> entry) {
+  int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
     std::printf("Endian            : %s\n", GetEndiannessStr(E));
     std::printf("Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
     std::printf("Word size         : %zu\n", sizeof(W));
@@ -568,12 +568,12 @@ class Dumper {
 
 template <Endianness E, typename W, template <Endianness, typename> typename V,
           typename... Args>
-int Rest(std::istream* is, Buffer* buf, size_t start, size_t end,
-         Args&&... args) {
+int Rest(std::istream* is, size_t expectedInsnCount, Buffer* buf, size_t start,
+         size_t end, Args&&... args) {
   HeaderEntry<E, W> entry(buf->GetData());
   buf->Advance(entry.GetTlv().GetAlignedLength());
   V<E, W> visitor(std::forward<Args>(args)...);
-  if (visitor.Init(entry) < 0) {
+  if (visitor.Init(entry, expectedInsnCount) < 0) {
     std::cerr << "visitor.Init() failed" << std::endl;
     return EXIT_FAILURE;
   }
@@ -597,28 +597,32 @@ int Rest(std::istream* is, Buffer* buf, size_t start, size_t end,
 
 template <template <Endianness, typename> typename V, typename... Args>
 int VisitFile(const char* path, size_t start, size_t end, Args&&... args) {
-  std::ifstream is(path);
+  std::ifstream is(path, std::ios::binary | std::ios::ate);
   if (!is) {
     std::cerr << "Could not open " << path << std::endl;
     return EXIT_FAILURE;
   }
+  size_t size = is.tellg();
+  // On average, one executed instruction takes 132.7 bytes in the trace file.
+  size_t expectedInsnCount = size / 128;
+  is.seekg(0, std::ios::beg);
   Buffer buf;
   if (buf.Update(&is) < 0 || buf.GetSize() < 2) {
     std::cerr << "buf.Update() failed" << std::endl;
     return EXIT_FAILURE;
   }
   if (buf.GetData()[0] == 'M' && buf.GetData()[1] == '4') {
-    return Rest<Endianness::Big, std::uint32_t, V>(&is, &buf, start, end,
-                                                   std::forward<Args>(args)...);
+    return Rest<Endianness::Big, std::uint32_t, V>(
+        &is, expectedInsnCount, &buf, start, end, std::forward<Args>(args)...);
   } else if (buf.GetData()[0] == 'M' && buf.GetData()[1] == '8') {
-    return Rest<Endianness::Big, std::uint64_t, V>(&is, &buf, start, end,
-                                                   std::forward<Args>(args)...);
+    return Rest<Endianness::Big, std::uint64_t, V>(
+        &is, expectedInsnCount, &buf, start, end, std::forward<Args>(args)...);
   } else if (buf.GetData()[0] == '4' && buf.GetData()[1] == 'M') {
     return Rest<Endianness::Little, std::uint32_t, V>(
-        &is, &buf, start, end, std::forward<Args>(args)...);
+        &is, expectedInsnCount, &buf, start, end, std::forward<Args>(args)...);
   } else if (buf.GetData()[0] == '8' && buf.GetData()[1] == 'M') {
     return Rest<Endianness::Little, std::uint64_t, V>(
-        &is, &buf, start, end, std::forward<Args>(args)...);
+        &is, expectedInsnCount, &buf, start, end, std::forward<Args>(args)...);
   } else {
     std::cerr << "Unsupported magic" << std::endl;
     return EXIT_FAILURE;
@@ -823,7 +827,9 @@ class Ud {
   Ud(const char* dot, const char* html, bool verbose)
       : dot_(dot), html_(html), verbose_(verbose) {}
 
-  int Init(HeaderEntry<E, W> entry) {
+  int Init(HeaderEntry<E, W> entry, size_t expectedInsnCount) {
+    trace_.reserve(expectedInsnCount);
+
     size_t codeIndex = code_.size();
     InsnInCode<W>& code = code_.emplace_back();
     code.pc = 0;
