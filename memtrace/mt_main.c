@@ -62,6 +62,7 @@ static IRExpr* mkPtr(void* ptr)
 #define MT_INSN_EXEC 0x5858
 #define MT_GET_REG_NX 0x6767
 #define MT_PUT_REG_NX 0x7070
+#define MT_MMAP 0x4d4d
 
 #define TRACE_BUFFER_SIZE (1024 * 1024 * 1024)
 #define MAX_ENTRY_LENGTH (4 * 1024)
@@ -131,6 +132,15 @@ struct LdStNxEntry {
    UIntPtr size;
 };
 
+/* Used for MT_MMAP. */
+struct MmapEntry {
+   union Tlv tlv;
+   Addr start;
+   Addr end;
+   UIntPtr flags;
+   UChar value[0];
+};
+
 static void open_trace_file(void)
 {
    struct HeaderEntry* entry;
@@ -156,7 +166,6 @@ static void open_trace_file(void)
                     VG_WORDSIZE == 8 ? sizeof(struct HeaderEntry) == 16 :
                     0);
    entry = (struct HeaderEntry*)trace;
-   entry->tlv.packed = 0;
    entry->tlv.tag = MT_MAGIC;
    entry->tlv.length = sizeof(struct HeaderEntry);
    entry->e_machine = VG_ELF_MACHINE;
@@ -329,7 +338,6 @@ static void add_insn_entry(Addr pc, UInt insn_length)
                     0);
    entryLength = sizeof(struct InsnEntry) + insn_length;
    entry = (struct InsnEntry*)trace;
-   entry->tlv.packed = 0;
    entry->tlv.tag = MT_INSN;
    entry->tlv.length = entryLength;
    entry->pc = pc;
@@ -378,26 +386,43 @@ static void add_raw_entries(XArray* entries)
    trace += n;
 }
 
-static void show_segments(void)
+static void trace_segments(void)
 {
    Addr* segStarts;
    Int nSegStarts;
    Int i;
 
-   VG_(umsg)("Segments:\n");
    segStarts = VG_(get_segment_starts)(SkFileC | SkAnonC | SkShmC,
                                        &nSegStarts);
    for (i = 0; i < nSegStarts; i++) {
+      struct MmapEntry* entry;
+      Int alignedEntryLength;
       const NSegment* seg;
+      const HChar* name;
+      Int entryLength;
+      Int nameLength;
 
       seg = VG_(am_find_nsegment)(segStarts[i]);
-      VG_(umsg)("%016llx-%016llx %c%c%c %s\n",
-                (ULong)seg->start,
-                (ULong)seg->end + 1,
-                seg->hasR ? 'r' : '-',
-                seg->hasW ? 'w' : '-',
-                seg->hasX ? 'x' : '-',
-                VG_(am_get_filename)(seg));
+      name = VG_(am_get_filename)(seg);
+      nameLength = name == NULL ? 1 : VG_(strlen)(name) + 1;
+      entryLength = sizeof(struct MmapEntry) + nameLength;
+      alignedEntryLength = ALIGN_UP(entryLength, sizeof(UIntPtr));
+      tl_assert(alignedEntryLength <= MAX_ENTRY_LENGTH);
+      entry = (struct MmapEntry*)trace;
+      entry->tlv.tag = MT_MMAP;
+      entry->tlv.length = entryLength;
+      entry->start = seg->start;
+      entry->end = seg->end;
+      entry->flags = (seg->hasR ? 1 : 0) |
+                     (seg->hasW ? 2 : 0) |
+                     (seg->hasX ? 4 : 0);
+      if (nameLength == 1)
+         entry->value[0] = 0;
+      else
+         VG_(memcpy)(entry->value, name, nameLength);
+      trace += alignedEntryLength;
+      if (trace > trace_end - MAX_ENTRY_LENGTH)
+         flush_trace_buffer();
    }
 }
 
@@ -671,8 +696,8 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
 
 static void mt_fini(Int exitcode)
 {
+   trace_segments();
    close_trace_file();
-   show_segments();
 }
 
 static void mt_pre_clo_init(void)

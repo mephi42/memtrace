@@ -31,6 +31,7 @@ enum class Tag {
   MT_INSN_EXEC = 0x5858,
   MT_GET_REG_NX = 0x6767,
   MT_PUT_REG_NX = 0x7070,
+  MT_MMAP = 0x4d4d,
 };
 
 const char* GetTagStr(Tag tag) {
@@ -53,6 +54,8 @@ const char* GetTagStr(Tag tag) {
       return "MT_GET_REG_NX";
     case Tag::MT_PUT_REG_NX:
       return "MT_PUT_REG_NX";
+    case Tag::MT_MMAP:
+      return "MT_MMAP";
     default:
       return nullptr;
   }
@@ -274,6 +277,24 @@ class LdStNxEntry {
   const uint8_t* data_;
 };
 
+template <Endianness E, typename W>
+class MmapEntry {
+ public:
+  explicit MmapEntry(const uint8_t* data) : data_(data) {}
+
+  Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
+  W GetStart() const { return RawInt<W, E, W>(data_ + sizeof(W)).GetValue(); }
+  W GetEnd() const { return RawInt<W, E, W>(data_ + sizeof(W) * 2).GetValue(); }
+  W GetFlags() const {
+    return RawInt<W, E, W>(data_ + sizeof(W) * 3).GetValue();
+  }
+  const uint8_t* GetValue() const { return data_ + sizeof(W) * 4; }
+  size_t GetSize() const { return GetTlv().GetLength() - sizeof(W) * 4; }
+
+ private:
+  const uint8_t* data_;
+};
+
 template <Endianness E, typename W, typename V>
 int Parse(V* visitor, Buffer* buf, size_t* i, size_t start, size_t end) {
   while (buf->GetSize() >= 4) {
@@ -299,6 +320,9 @@ int Parse(V* visitor, Buffer* buf, size_t* i, size_t start, size_t end) {
         case Tag::MT_GET_REG_NX:
         case Tag::MT_PUT_REG_NX:
           err = (*visitor)(*i, LdStNxEntry<E, W>(buf->GetData()));
+          break;
+        case Tag::MT_MMAP:
+          err = (*visitor)(*i, MmapEntry<E, W>(buf->GetData()));
           break;
         default:
           std::cerr << "Unsupported tag: 0x" << std::hex << (std::uint16_t)tag
@@ -520,6 +544,15 @@ class Dumper {
                 (std::uint64_t)entry.GetPc(),
                 GetTagStr(entry.GetTlv().GetTag()),
                 (size_t)(entry.GetSize() * 8), (std::uint64_t)entry.GetAddr());
+    return 0;
+  }
+
+  int operator()(size_t i, MmapEntry<E, W> entry) {
+    std::printf(
+        "[%10zu] %016" PRIx64 "-%016" PRIx64 " %c%c%c %s\n", i,
+        (std::uint64_t)entry.GetStart(), (std::uint64_t)(entry.GetEnd() + 1),
+        entry.GetFlags() & 1 ? 'r' : '-', entry.GetFlags() & 2 ? 'w' : '-',
+        entry.GetFlags() & 4 ? 'x' : '-', entry.GetValue());
     return 0;
   }
 
@@ -863,6 +896,8 @@ class Ud {
         return -EINVAL;
     }
   }
+
+  int operator()(size_t /* i */, MmapEntry<E, W> /* entry */) { return 0; }
 
   int Complete() {
     Flush();

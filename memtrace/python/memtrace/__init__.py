@@ -32,6 +32,7 @@ MT_PUT_REG = 0x5050
 MT_INSN_EXEC = 0x5858
 MT_GET_REG_NX = 0x6767
 MT_PUT_REG_NX = 0x7070
+MT_MMAP = 0x4d4d
 
 TAG2STR = {
     MT_LOAD: 'MT_LOAD',
@@ -43,6 +44,7 @@ TAG2STR = {
     MT_INSN_EXEC: 'MT_INSN_EXEC',
     MT_GET_REG_NX: 'MT_GET_REG_NX',
     MT_PUT_REG_NX: 'MT_PUT_REG_NX',
+    MT_MMAP: 'MT_MMAP',
 }
 
 
@@ -79,6 +81,14 @@ class LdStNxEntry:
         return self.addr + self.size
 
 
+@dataclass
+class MmapEntry:
+    start: int
+    end: int
+    flags: int
+    path: bytes
+
+
 TAG2TYPE = {
     MT_LOAD: LdStEntry,
     MT_STORE: LdStEntry,
@@ -89,6 +99,7 @@ TAG2TYPE = {
     MT_INSN_EXEC: InsnExecEntry,
     MT_GET_REG_NX: LdStNxEntry,
     MT_PUT_REG_NX: LdStNxEntry,
+    MT_MMAP: MmapEntry,
 }
 MT_LDST = set(tag for tag, type in TAG2TYPE.items() if type == LdStEntry)
 
@@ -166,6 +177,9 @@ def read_entries(memtrace):
                         fmt.append(word)
                     elif tag in (MT_GET_REG_NX, MT_PUT_REG_NX):
                         fmt.append('{}{}{}'.format(word, word, word))
+                    elif tag == MT_MMAP:
+                        fmt.append('{}{}{}{}s'.format(
+                            word, word, word, length - word_size * 4))
                     else:
                         raise Exception('Unsupported tag: 0x{:x}'.format(tag))
                     low = next_low
