@@ -25,7 +25,12 @@ setuptools.setup(
                  str(sys.version_info[1])),
                 'capstone',
             ],
-            extra_compile_args=['-std=c++17', '-Wextra', '-pedantic'],
+            extra_compile_args=[
+                '-std=c++17',
+                '-Wextra',
+                '-Wconversion',
+                '-pedantic',
+            ],
         )
     ],
 )
