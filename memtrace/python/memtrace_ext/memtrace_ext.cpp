@@ -1,5 +1,6 @@
 // Copyright (C) 2019-2020, and GNU GPL'd, by mephi42.
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
@@ -677,17 +678,25 @@ class UdState {
     }
   }
 
-  void AddDefs(W startAddr, W size) {
+  int AddDefs(W startAddr, W size) {
     W endAddr = startAddr + size;
-    It first = addressSpace_.lower_bound(startAddr + 1);
-    It last;
-    for (last = first;
-         last != addressSpace_.end() && last->second.startAddr < endAddr;
-         ++last) {
+    It firstAffected = addressSpace_.lower_bound(startAddr + 1);
+    It lastAffected;
+    size_t affectedCount;
+    for (lastAffected = firstAffected, affectedCount = 0;
+         lastAffected != addressSpace_.end() &&
+         lastAffected->second.startAddr < endAddr;
+         ++lastAffected, affectedCount++) {
     }
-    std::vector<Entry> affected(first, last);
-    addressSpace_.erase(first, last);
-    for (const Entry& entry : affected) {
+    // sizeofIRType() maximum return value is 32, so affectedCount <= 32.
+    constexpr size_t kMaxAffectedCount = 32;
+    if (affectedCount > kMaxAffectedCount) return -EINVAL;
+    std::array<Entry, kMaxAffectedCount> affected;
+    std::copy(firstAffected, lastAffected, affected.begin());
+    addressSpace_.erase(firstAffected, lastAffected);
+    for (size_t affectedIndex = 0; affectedIndex < affectedCount;
+         affectedIndex++) {
+      const Entry& entry = affected[affectedIndex];
       W entryStartAddr = entry.second.startAddr;
       W entryEndAddr = entry.first;
       size_t entryDefIndex = entry.second.defIndex;
@@ -710,6 +719,7 @@ class UdState {
       }
     }
     AddDef(startAddr, endAddr);
+    return 0;
   }
 
   size_t GetUseCount() const { return uses_.size(); }
@@ -816,7 +826,7 @@ class UdState {
   };
   // endAddr -> EntryValue.
   using AddressSpace = typename std::map<W, EntryValue>;
-  using Entry = typename AddressSpace::value_type;
+  using Entry = typename std::pair<W, EntryValue>;
   using It = typename AddressSpace::const_iterator;
   AddressSpace addressSpace_;
 };
@@ -850,16 +860,14 @@ class Ud {
         memState_.AddUses(entry.GetAddr(), entry.GetSize());
         return 0;
       case Tag::MT_STORE:
-        memState_.AddDefs(entry.GetAddr(), entry.GetSize());
-        return 0;
+        return memState_.AddDefs(entry.GetAddr(), entry.GetSize());
       case Tag::MT_REG:
         return 0;
       case Tag::MT_GET_REG:
         regState_.AddUses(entry.GetAddr(), entry.GetSize());
         return 0;
       case Tag::MT_PUT_REG:
-        regState_.AddDefs(entry.GetAddr(), entry.GetSize());
-        return 0;
+        return regState_.AddDefs(entry.GetAddr(), entry.GetSize());
       default:
         return -EINVAL;
     }
@@ -896,8 +904,7 @@ class Ud {
         regState_.AddUses(entry.GetAddr(), entry.GetSize());
         return 0;
       case Tag::MT_PUT_REG_NX:
-        regState_.AddDefs(entry.GetAddr(), entry.GetSize());
-        return 0;
+        return regState_.AddDefs(entry.GetAddr(), entry.GetSize());
       default:
         return -EINVAL;
     }
