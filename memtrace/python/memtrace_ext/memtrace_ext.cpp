@@ -788,6 +788,21 @@ class UdState {
                    (std::uint64_t)defs_[i].endAddr);
   }
 
+  void DumpUsesCsv(std::FILE* f, std::uint32_t traceIndex,
+                   std::uint32_t startIndex, std::uint32_t endIndex,
+                   const std::vector<InsnInTrace>& trace,
+                   std::uint32_t InsnInTrace::*startIndexMember,
+                   const char* prefix) const {
+    for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
+      std::pair<const Def<W>*, std::uint32_t> use =
+          ResolveUse(useIndex, trace, startIndexMember);
+      fprintf(f, "%" PRIu32 ",%" PRIu32 ",%s,%" PRIu64 ",%" PRIu64 "\n",
+              traceIndex, use.second, prefix,
+              (std::uint64_t)use.first->startAddr,
+              (std::uint64_t)use.first->endAddr);
+    }
+  }
+
  private:
   void AddDef(W startAddr, W endAddr) {
     std::uint32_t defIndex = (std::uint32_t)defs_.size();
@@ -837,13 +852,25 @@ class UdState {
   AddressSpace addressSpace_;
 };
 
+const char kCsvPlaceholder[] = "{}";
+constexpr size_t kCsvPlaceholderLength = sizeof(kCsvPlaceholder) - 1;
+
 template <Endianness E, typename W>
 class Ud {
  public:
-  Ud(const char* dot, const char* html, bool verbose)
-      : dot_(dot), html_(html), verbose_(verbose) {}
+  Ud(const char* dot, const char* html, const char* csv, bool verbose)
+      : dot_(dot), html_(html), csv_(csv), verbose_(verbose) {}
 
   int Init(HeaderEntry<E, W> entry, size_t expectedInsnCount) {
+    if (csv_ != nullptr) {
+      csvPlaceholder_ = std::strstr(csv_, kCsvPlaceholder);
+      if (csvPlaceholder_ == nullptr) {
+        std::cerr << "csv path must contain a " << kCsvPlaceholder
+                  << " placeholder" << std::endl;
+        return -EINVAL;
+      }
+    }
+
     trace_.reserve(expectedInsnCount);
 
     std::uint32_t codeIndex = (std::uint32_t)code_.size();
@@ -926,6 +953,7 @@ class Ud {
     if ((ret = Flush()) < 0) return ret;
     if ((ret = DumpDot()) < 0) return ret;
     if ((ret = DumpHtml()) < 0) return ret;
+    if ((ret = DumpCsv()) < 0) return ret;
     return 0;
   }
 
@@ -1064,9 +1092,71 @@ class Ud {
     return 0;
   }
 
-  const char* dot_;
-  const char* html_;
+  int DumpCodeCsv(const char* path) const {
+    std::FILE* f = std::fopen(path, "w");
+    if (f == nullptr) return -errno;
+    for (std::uint32_t codeIndex = 0; codeIndex < code_.size(); codeIndex++) {
+      std::fprintf(f, "%" PRIu32 ",%" PRIu64 ",", codeIndex,
+                   (std::uint64_t)code_[codeIndex].pc);
+      HexDump(f, code_[codeIndex].raw.get(), code_[codeIndex].rawSize);
+      std::fprintf(f, ",\"%s\"\n", code_[codeIndex].disasm.c_str());
+    }
+    std::fclose(f);
+    return 0;
+  }
+
+  int DumpTraceCsv(const char* path) const {
+    std::FILE* f = std::fopen(path, "w");
+    if (f == nullptr) return -errno;
+    for (std::uint32_t traceIndex = 0; traceIndex < trace_.size(); traceIndex++)
+      std::fprintf(f, "%" PRIu32 ",%" PRIu32 "\n", traceIndex,
+                   trace_[traceIndex].codeIndex);
+    std::fclose(f);
+    return 0;
+  }
+
+  int DumpUsesCsv(const char* path) const {
+    std::FILE* f = std::fopen(path, "w");
+    if (f == nullptr) return -errno;
+    for (std::uint32_t traceIndex = 0; traceIndex < trace_.size();
+         traceIndex++) {
+      const InsnInTrace& trace = trace_[traceIndex];
+      regState_.DumpUsesCsv(f, traceIndex, trace.regUseStartIndex,
+                            trace.regUseEndIndex, trace_,
+                            &InsnInTrace::regDefStartIndex, "r");
+      memState_.DumpUsesCsv(f, traceIndex, trace.memUseStartIndex,
+                            trace.memUseEndIndex, trace_,
+                            &InsnInTrace::memDefStartIndex, "m");
+    }
+    std::fclose(f);
+    return 0;
+  }
+
+  int DumpCsv() const {
+    if (csv_ == nullptr) return 0;
+    size_t prefixLength = csvPlaceholder_ - csv_;
+    const char* suffix = csvPlaceholder_ + kCsvPlaceholderLength;
+    std::string codeCsvPath(csv_, prefixLength);
+    codeCsvPath += "code";
+    codeCsvPath += suffix;
+    std::string traceCsvPath(csv_, prefixLength);
+    traceCsvPath += "trace";
+    traceCsvPath += suffix;
+    std::string usesCsvPath(csv_, prefixLength);
+    usesCsvPath += "uses";
+    usesCsvPath += suffix;
+    int ret;
+    if ((ret = DumpCodeCsv(codeCsvPath.c_str())) < 0) return ret;
+    if ((ret = DumpTraceCsv(traceCsvPath.c_str())) < 0) return ret;
+    if ((ret = DumpUsesCsv(usesCsvPath.c_str())) < 0) return ret;
+    return 0;
+  }
+
+  const char* const dot_;
+  const char* const html_;
+  const char* const csv_;
   const bool verbose_;
+  const char* csvPlaceholder_;
   Disasm<E, W> disasm_;
   std::vector<InsnInCode<W>> code_;
   std::unordered_map<W, std::uint32_t> pcs_;
@@ -1076,8 +1166,8 @@ class Ud {
 };
 
 int UdFile(const char* path, size_t start, size_t end, const char* dot,
-           const char* html, bool verbose) {
-  return VisitFile<Ud>(path, start, end, dot, html, verbose);
+           const char* html, const char* csv, bool verbose) {
+  return VisitFile<Ud>(path, start, end, dot, html, csv, verbose);
 }
 
 }  // namespace

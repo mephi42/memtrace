@@ -12,6 +12,7 @@ def main():
     parser.add_argument('--end', default=999999999, type=int)
     parser.add_argument('--dot')
     parser.add_argument('--html')
+    parser.add_argument('--csv')
     parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
     sys.exit(memtrace_ext.ud_file(
@@ -20,6 +21,7 @@ def main():
         args.end,
         args.dot,
         args.html,
+        args.csv,
         args.verbose,
     ))
 
