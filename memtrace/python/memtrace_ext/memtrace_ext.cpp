@@ -118,9 +118,9 @@ const char* GetEndiannessStr(Endianness endianness) {
 }
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-#define HostEndianness Endianness::Little
+constexpr Endianness kHostEndianness = Endianness::Little;
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#define HostEndianness Endianness::Big
+constexpr Endianness kHostEndianness = Endianness::Big;
 #else
 #error Unsupported __BYTE_ORDER__
 #endif
@@ -166,7 +166,7 @@ struct IntConversions {
 };
 
 template <typename T>
-struct IntConversions<HostEndianness, T> {
+struct IntConversions<kHostEndianness, T> {
   static T ConvertToHost(T value) { return value; }
 };
 
@@ -506,7 +506,7 @@ class Dumper {
     std::printf("Word size         : %zu\n", sizeof(W));
     std::printf("Machine           : %s\n",
                 GetMachineTypeStr(entry.GetMachineType()));
-    return disasm_.Init(entry.GetMachineType());
+    return disasmEngine_.Init(entry.GetMachineType());
   }
 
   int operator()(size_t i, LdStEntry<E, W> entry) {
@@ -524,8 +524,8 @@ class Dumper {
                 (std::uint64_t)entry.GetPc(),
                 GetTagStr(entry.GetTlv().GetTag()));
     HexDump(stdout, entry.GetValue(), entry.GetSize());
-    std::unique_ptr<cs_insn, CsFree> insn =
-        disasm_.DoDisasm(entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
+    std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
+        entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
     if (insn)
       std::printf(" %s %s\n", insn->mnemonic, insn->op_str);
     else
@@ -565,7 +565,7 @@ class Dumper {
 
  private:
   size_t insnCount_;
-  Disasm<E, W> disasm_;
+  Disasm<E, W> disasmEngine_;
 };
 
 template <Endianness E, typename W, template <Endianness, typename> typename V,
@@ -644,9 +644,8 @@ struct Def {
 template <typename W>
 struct InsnInCode {
   W pc;
-  std::unique_ptr<std::uint8_t[]> raw;
-  size_t rawSize;
-  std::string disasm;
+  std::uint32_t textIndex;
+  std::uint32_t textSize;
 };
 
 struct InsnInTrace {
@@ -669,9 +668,7 @@ size_t GetFirstPrimeGreaterThanOrEqualTo(size_t value) {
     while (primes.back() <= valueSqrt)
       primes.push_back(GetFirstPrimeGreaterThanOrEqualTo(primes.back() + 1));
     bool isPrime = true;
-    for (size_t primeIndex = 0;
-         primeIndex < primes.size() && primes[primeIndex] <= valueSqrt;
-         primeIndex++)
+    for (size_t primeIndex = 0; primes[primeIndex] <= valueSqrt; primeIndex++)
       if (value % primes[primeIndex] == 0) {
         isPrime = false;
         break;
@@ -986,8 +983,9 @@ class Ud {
     std::uint32_t codeIndex = (std::uint32_t)code_.size();
     InsnInCode<W>& code = code_.emplace_back();
     code.pc = 0;
-    code.rawSize = 0;
-    code.disasm = "<unknown>";
+    code.textIndex = 0;
+    code.textSize = 0;
+    disasm_.emplace_back("<unknown>");
 
     AddTrace(codeIndex);
     // On average, 1.48 register uses and 1.61 register defs per insn.
@@ -995,7 +993,8 @@ class Ud {
     // On average, 0.4 memory uses and 0.22 memory defs per insn.
     memState_.Init(expectedInsnCount / 2, expectedInsnCount / 4);
 
-    return disasm_.Init(entry.GetMachineType());
+    machineType_ = entry.GetMachineType();
+    return disasmEngine_.Init(machineType_);
   }
 
   int operator()(size_t /* i */, LdStEntry<E, W> entry) {
@@ -1023,17 +1022,18 @@ class Ud {
     pcs_[entry.GetPc()] = (std::uint32_t)code_.size();
     InsnInCode<W>& code = code_.emplace_back();
     code.pc = entry.GetPc();
-    code.raw.reset(new uint8_t[entry.GetSize()]);
-    std::memcpy(code.raw.get(), entry.GetValue(), entry.GetSize());
-    code.rawSize = entry.GetSize();
-    std::unique_ptr<cs_insn, CsFree> insn =
-        disasm_.DoDisasm(entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
+    code.textIndex = (std::uint32_t)text_.size();
+    text_.insert(text_.end(), entry.GetValue(),
+                 entry.GetValue() + entry.GetSize());
+    code.textSize = (std::uint32_t)entry.GetSize();
+    std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
+        entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
     if (insn) {
-      code.disasm = insn->mnemonic;
-      code.disasm += " ";
-      code.disasm += insn->op_str;
+      std::string& disasm = disasm_.emplace_back(insn->mnemonic);
+      disasm += " ";
+      disasm += insn->op_str;
     } else {
-      code.disasm = "<unknown>";
+      disasm_.emplace_back("<unknown>");
     }
     return 0;
   }
@@ -1081,8 +1081,8 @@ class Ud {
       InsnInCode<W>& code = code_[trace.codeIndex];
       std::printf("[%zu]0x%" PRIx64 ": ", trace_.size() - 1,
                   (std::uint64_t)code.pc);
-      HexDump(stdout, code.raw.get(), code.rawSize);
-      std::printf(" %s reg_uses=[", code.disasm.c_str());
+      HexDump(stdout, &text_[code.textIndex], code.textSize);
+      std::printf(" %s reg_uses=[", disasm_[trace.codeIndex].c_str());
       regState_.DumpUses(trace.regUseStartIndex, trace.regUseEndIndex, trace_,
                          &InsnInTrace::regDefStartIndex);
       std::printf("] reg_defs=[");
@@ -1127,7 +1127,8 @@ class Ud {
       const InsnInCode<W>& code = code_[trace.codeIndex];
       std::fprintf(
           f, "    %" PRIu32 " [label=\"[%" PRIu32 "] 0x%" PRIx64 ": %s\"]\n",
-          traceIndex, traceIndex, (std::uint64_t)code.pc, code.disasm.c_str());
+          traceIndex, traceIndex, (std::uint64_t)code.pc,
+          disasm_[trace.codeIndex].c_str());
       regState_.DumpUsesDot(f, traceIndex, trace.regUseStartIndex,
                             trace.regUseEndIndex, trace_,
                             &InsnInTrace::regDefStartIndex, "r");
@@ -1173,11 +1174,11 @@ class Ud {
                    "</td>\n"
                    "        <td>",
                    traceIndex, traceIndex, (std::uint64_t)code.pc);
-      HexDump(f, code.raw.get(), code.rawSize);
+      HexDump(f, &text_[code.textIndex], code.textSize);
       std::fprintf(f,
                    "</td>\n"
                    "        <td>");
-      HtmlDump(f, code.disasm.c_str());
+      HtmlDump(f, disasm_[trace.codeIndex].c_str());
       std::fprintf(f,
                    "</td>\n"
                    "        <td>\n");
@@ -1208,10 +1209,11 @@ class Ud {
     std::FILE* f = std::fopen(path, "w");
     if (f == nullptr) return -errno;
     for (std::uint32_t codeIndex = 0; codeIndex < code_.size(); codeIndex++) {
+      const InsnInCode<W>& code = code_[codeIndex];
       std::fprintf(f, "%" PRIu32 ",%" PRIu64 ",", codeIndex,
                    (std::uint64_t)code_[codeIndex].pc);
-      HexDump(f, code_[codeIndex].raw.get(), code_[codeIndex].rawSize);
-      std::fprintf(f, ",\"%s\"\n", code_[codeIndex].disasm.c_str());
+      HexDump(f, &text_[code.textIndex], code.textSize);
+      std::fprintf(f, ",\"%s\"\n", disasm_[codeIndex].c_str());
     }
     std::fclose(f);
     return 0;
@@ -1269,8 +1271,11 @@ class Ud {
   const char* const csv_;
   const bool verbose_;
   const char* csvPlaceholder_;
-  Disasm<E, W> disasm_;
+  MachineType machineType_;
+  Disasm<E, W> disasmEngine_;
   std::vector<InsnInCode<W>> code_;
+  std::vector<std::uint8_t> text_;
+  std::vector<std::string> disasm_;
   std::unordered_map<W, std::uint32_t> pcs_;
   std::vector<InsnInTrace> trace_;
   UdState<W> regState_;
