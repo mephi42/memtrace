@@ -1,4 +1,9 @@
 // Copyright (C) 2019-2020, and GNU GPL'd, by mephi42.
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -19,6 +24,7 @@
 
 // clang-format off
 #include <boost/python.hpp>
+#include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 #include <capstone/capstone.h>  // NOLINT(build/include_order)
 // clang-format on
 
@@ -740,6 +746,8 @@ class PartialUses {
     return result.first == useIndex ? &result : nullptr;
   }
 
+  const std::vector<PartialUse<W>>& GetData() const { return entries_; }
+
  private:
   void Rehash() {
     size_t newSize = GetFirstPrimeGreaterThanOrEqualTo(entries_.size() * 2);
@@ -832,6 +840,7 @@ class UdState {
 
   size_t GetUseCount() const { return uses_.size(); }
   size_t GetDefCount() const { return defs_.size(); }
+  size_t GetPartialUseCount() const { return partialUses_.GetData().size(); }
 
   void DumpUses(std::uint32_t startIndex, std::uint32_t endIndex,
                 const std::vector<InsnInTrace>& trace,
@@ -911,6 +920,19 @@ class UdState {
     }
   }
 
+  void DumpUsesBinary(std::FILE* f) const {
+    fwrite(uses_.data(), sizeof(std::uint32_t), uses_.size(), f);
+  }
+
+  void DumpDefsBinary(std::FILE* f) const {
+    fwrite(defs_.data(), sizeof(Def<W>), defs_.size(), f);
+  }
+
+  void DumpPartialUsesBinary(std::FILE* f) const {
+    fwrite(partialUses_.GetData().data(), sizeof(PartialUse<W>),
+           partialUses_.GetData().size(), f);
+  }
+
  private:
   void AddDef(W startAddr, W endAddr) {
     std::uint32_t defIndex = (std::uint32_t)defs_.size();
@@ -959,14 +981,82 @@ class UdState {
   AddressSpace addressSpace_;
 };
 
+template <size_t N>
+struct Int;
+
+template <>
+struct Int<4> {
+  using U = std::uint32_t;
+};
+
+template <>
+struct Int<8> {
+  using U = std::uint64_t;
+};
+
+template <typename T>
+T GetAligned64(T pos) {
+  using U = typename Int<sizeof(T)>::U;
+  return (T)(((U)pos + (U)7) & ~(U)7);
+}
+
+int Align64(FILE* f) {
+  long pos = ftell(f);  // // NOLINT(runtime/int)
+  if (pos == -1) return -1;
+  if (fseek(f, GetAligned64(pos), SEEK_SET) == -1) return -1;
+  return 0;
+}
+
+template <typename W>
+class UdStateMm {
+ public:
+  const std::uint8_t* Parse(const std::uint8_t* begin, std::uint32_t useCount,
+                            std::uint32_t defCount,
+                            std::uint32_t partialUseCount) {
+    usesBegin_ = reinterpret_cast<const std::uint32_t*>(begin);
+    usesEnd_ = usesBegin_ + useCount;
+    defsBegin_ = reinterpret_cast<const Def<W>*>(GetAligned64(usesEnd_));
+    defsEnd_ = defsBegin_ + defCount;
+    partialUsesBegin_ =
+        reinterpret_cast<const PartialUse<W>*>(GetAligned64(defsEnd_));
+    partialUsesEnd_ = partialUsesBegin_ + partialUseCount;
+    return reinterpret_cast<const std::uint8_t*>(partialUsesEnd_);
+  }
+
+ private:
+  const std::uint32_t* usesBegin_;
+  const std::uint32_t* usesEnd_;
+  const Def<W>* defsBegin_;
+  const Def<W>* defsEnd_;
+  const PartialUse<W>* partialUsesBegin_;
+  const PartialUse<W>* partialUsesEnd_;
+};
+
+struct BinaryHeader {
+  std::uint8_t magic[2];
+  std::uint16_t machineType;
+  std::uint32_t textCount;
+  std::uint32_t codeCount;
+  std::uint32_t traceCount;
+  std::uint32_t regUseCount;
+  std::uint32_t regDefCount;
+  std::uint32_t regPartialUseCount;
+  std::uint32_t memUseCount;
+  std::uint32_t memDefCount;
+  std::uint32_t memPartialUseCount;
+};
+
+static_assert(sizeof(BinaryHeader) == 40);
+
 const char kCsvPlaceholder[] = "{}";
 constexpr size_t kCsvPlaceholderLength = sizeof(kCsvPlaceholder) - 1;
 
 template <Endianness E, typename W>
 class Ud {
  public:
-  Ud(const char* dot, const char* html, const char* csv, bool verbose)
-      : dot_(dot), html_(html), csv_(csv), verbose_(verbose) {}
+  Ud(const char* dot, const char* html, const char* csv, const char* binary,
+     bool verbose)
+      : dot_(dot), html_(html), csv_(csv), binary_(binary), verbose_(verbose) {}
 
   int Init(HeaderEntry<E, W> entry, size_t expectedInsnCount) {
     if (csv_ != nullptr) {
@@ -1066,6 +1156,7 @@ class Ud {
     if ((ret = DumpDot()) < 0) return ret;
     if ((ret = DumpHtml()) < 0) return ret;
     if ((ret = DumpCsv()) < 0) return ret;
+    if ((ret = DumpBinary()) < 0) return ret;
     return 0;
   }
 
@@ -1266,9 +1357,50 @@ class Ud {
     return 0;
   }
 
+  int DumpBinary() const {
+    if (binary_ == nullptr) return 0;
+    std::FILE* f = std::fopen(binary_, "wb");
+    if (f == nullptr) return -errno;
+    BinaryHeader header;
+    *reinterpret_cast<std::uint16_t*>(header.magic) =
+        ('M' << 8) | ('0' + sizeof(W));
+    header.machineType = (std::uint16_t)machineType_;
+    header.textCount = (std::uint32_t)text_.size();
+    header.codeCount = (std::uint32_t)code_.size();
+    header.traceCount = (std::uint32_t)trace_.size();
+    header.regUseCount = (std::uint32_t)regState_.GetUseCount();
+    header.regDefCount = (std::uint32_t)regState_.GetDefCount();
+    header.regPartialUseCount = (std::uint32_t)regState_.GetPartialUseCount();
+    header.memUseCount = (std::uint32_t)memState_.GetUseCount();
+    header.memDefCount = (std::uint32_t)memState_.GetDefCount();
+    header.memPartialUseCount = (std::uint32_t)memState_.GetPartialUseCount();
+    fwrite(&header, sizeof(header), 1, f);
+    Align64(f);
+    fwrite(text_.data(), sizeof(std::uint8_t), text_.size(), f);
+    Align64(f);
+    fwrite(code_.data(), sizeof(InsnInCode<W>), code_.size(), f);
+    Align64(f);
+    fwrite(trace_.data(), sizeof(InsnInTrace), trace_.size(), f);
+    Align64(f);
+    regState_.DumpUsesBinary(f);
+    Align64(f);
+    regState_.DumpDefsBinary(f);
+    Align64(f);
+    regState_.DumpPartialUsesBinary(f);
+    Align64(f);
+    memState_.DumpUsesBinary(f);
+    Align64(f);
+    memState_.DumpDefsBinary(f);
+    Align64(f);
+    memState_.DumpPartialUsesBinary(f);
+    fclose(f);
+    return 0;
+  }
+
   const char* const dot_;
   const char* const html_;
   const char* const csv_;
+  const char* const binary_;
   const bool verbose_;
   const char* csvPlaceholder_;
   MachineType machineType_;
@@ -1282,14 +1414,136 @@ class Ud {
   UdState<W> memState_;
 };
 
+class UdMmBase {
+ public:
+  static UdMmBase* Load(const char* path);
+
+  virtual ~UdMmBase() = default;
+  virtual int Parse() = 0;
+  virtual std::uint32_t GetCodeIndexByPc(std::uint64_t pc) const = 0;
+  virtual std::vector<std::uint32_t> GetTraceIndicesByCodeIndex(
+      std::uint32_t codeIndex) const = 0;
+};
+
+template <typename W>
+class UdMm : public UdMmBase {
+ public:
+  UdMm(void* data, size_t length) : data_(data), length_(length) {}
+  virtual ~UdMm() {
+    if (data_ != MAP_FAILED) munmap(data_, length_);
+  }
+
+  int Parse() override {
+    header_ = static_cast<const BinaryHeader*>(data_);
+    textBegin_ = reinterpret_cast<const uint8_t*>(GetAligned64(header_ + 1));
+    textEnd_ = textBegin_ + header_->textCount;
+    codeBegin_ = reinterpret_cast<const InsnInCode<W>*>(GetAligned64(textEnd_));
+    codeEnd_ = codeBegin_ + header_->codeCount;
+    traceBegin_ = reinterpret_cast<const InsnInTrace*>(codeEnd_);
+    traceEnd_ = traceBegin_ + header_->traceCount;
+    const std::uint8_t* regStateEnd = regState_.Parse(
+        reinterpret_cast<const uint8_t*>(GetAligned64(traceEnd_)),
+        header_->regUseCount, header_->regDefCount,
+        header_->regPartialUseCount);
+    const std::uint8_t* memStateEnd =
+        memState_.Parse(GetAligned64(regStateEnd), header_->memUseCount,
+                        header_->memDefCount, header_->memPartialUseCount);
+    const std::uint8_t* end =
+        reinterpret_cast<const std::uint8_t*>(data_) + length_;
+    return memStateEnd == end ? 0 : -EINVAL;
+  }
+
+  std::uint32_t GetCodeIndexByPc(std::uint64_t pc) const override {
+    for (const InsnInCode<W>* code = codeBegin_; code != codeEnd_; code++)
+      if (code->pc == pc) return (std::uint32_t)(code - codeBegin_);
+    return 0;
+  }
+
+  std::vector<std::uint32_t> GetTraceIndicesByCodeIndex(
+      std::uint32_t codeIndex) const override {
+    std::vector<std::uint32_t> traceIndices;
+    for (const InsnInTrace* trace = traceBegin_; trace != traceEnd_; trace++)
+      if (trace->codeIndex == codeIndex)
+        traceIndices.push_back((std::uint32_t)(trace - traceBegin_));
+    return traceIndices;
+  }
+
+ private:
+  void* data_;
+  size_t length_;
+
+  const BinaryHeader* header_;
+  const std::uint8_t* textBegin_;
+  const std::uint8_t* textEnd_;
+  const InsnInCode<W>* codeBegin_;
+  const InsnInCode<W>* codeEnd_;
+  const InsnInTrace* traceBegin_;
+  const InsnInTrace* traceEnd_;
+  UdStateMm<W> regState_;
+  UdStateMm<W> memState_;
+};
+
 int UdFile(const char* path, size_t start, size_t end, const char* dot,
-           const char* html, const char* csv, bool verbose) {
-  return VisitFile<Ud>(path, start, end, dot, html, csv, verbose);
+           const char* html, const char* csv, const char* binary,
+           bool verbose) {
+  return VisitFile<Ud>(path, start, end, dot, html, csv, binary, verbose);
+}
+
+UdMmBase* UdMmBase::Load(const char* path) {
+  int fd = open(path, O_RDONLY);
+  if (fd < 0) return nullptr;
+  struct stat stat;
+  if (fstat(fd, &stat) < 0 || stat.st_size < 2) {
+    close(fd);
+    return nullptr;
+  }
+  std::uint8_t* data = static_cast<std::uint8_t*>(
+      mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
+  close(fd);
+  if (data == MAP_FAILED) return nullptr;
+  UdMmBase* ud = nullptr;
+  switch (data[0] << 8 | data[1]) {
+    case 'M' << 8 | '4':
+      if (kHostEndianness == Endianness::Big)
+        ud = new UdMm<std::uint32_t>(data, stat.st_size);
+      break;
+    case 'M' << 8 | '8':
+      if (kHostEndianness == Endianness::Big)
+        ud = new UdMm<std::uint64_t>(data, stat.st_size);
+      break;
+    case '4' << 8 | 'M':
+      if (kHostEndianness == Endianness::Little)
+        ud = new UdMm<std::uint32_t>(data, stat.st_size);
+      break;
+    case '8' << 8 | 'M':
+      if (kHostEndianness == Endianness::Little)
+        ud = new UdMm<std::uint64_t>(data, stat.st_size);
+      break;
+  }
+  if (ud == nullptr) {
+    munmap(data, stat.st_size);
+    return nullptr;
+  }
+  if (ud->Parse() < 0) {
+    delete ud;
+    return nullptr;
+  }
+  return ud;
 }
 
 }  // namespace
 
 BOOST_PYTHON_MODULE(memtrace_ext) {
-  boost::python::def("dump_file", DumpFile);
-  boost::python::def("ud_file", UdFile);
+  namespace bp = boost::python;
+  bp::def("dump_file", DumpFile);
+  bp::def("ud_file", UdFile);
+  bp::class_<std::vector<std::uint32_t>>("std::vector<std::uint32_t>")
+      .def(bp::vector_indexing_suite<std::vector<std::uint32_t>>());
+  bp::class_<UdMmBase, boost::noncopyable>("Ud", bp::no_init)
+      .def("load", &UdMmBase::Load,
+           bp::return_value_policy<bp::manage_new_object>())
+      .staticmethod("load")
+      .def("get_code_index_by_pc", &UdMmBase::GetCodeIndexByPc)
+      .def("get_trace_indices_by_code_index",
+           &UdMmBase::GetTraceIndicesByCodeIndex);
 }
