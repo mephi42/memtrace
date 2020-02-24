@@ -662,7 +662,11 @@ struct InsnInTrace {
 template <typename W>
 class UdState {
  public:
-  void Init() { AddDef(0, std::numeric_limits<W>::max()); }
+  void Init(size_t expectedUseCount, size_t expectedDefCount) {
+    uses_.reserve(expectedUseCount);
+    defs_.reserve(expectedDefCount);
+    AddDef(0, std::numeric_limits<W>::max());
+  }
 
   void AddUses(W startAddr, W size) {
     W endAddr = startAddr + size;
@@ -880,8 +884,10 @@ class Ud {
     code.disasm = "<unknown>";
 
     AddTrace(codeIndex);
-    regState_.Init();
-    memState_.Init();
+    // On average, 1.48 register uses and 1.61 register defs per insn.
+    regState_.Init(expectedInsnCount * 3 / 2, expectedInsnCount * 5 / 3);
+    // On average, 0.4 memory uses and 0.22 memory defs per insn.
+    memState_.Init(expectedInsnCount / 2, expectedInsnCount / 4);
 
     return disasm_.Init(entry.GetMachineType());
   }
