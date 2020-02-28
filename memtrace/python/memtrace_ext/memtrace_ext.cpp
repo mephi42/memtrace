@@ -400,7 +400,7 @@ void HtmlDump(std::FILE* f, const char* s) {
         break;
     }
   }
-  fprintf(f, "%s", escaped.c_str());
+  std::fprintf(f, "%s", escaped.c_str());
 }
 
 class CsFree {
@@ -733,7 +733,7 @@ class PartialUses {
     result1.first = useIndex;
     load_ += 1;
     if (load_ <= maxLoad_) return result1.second;
-    Rehash();
+    reserve(load_ * 2);
     PartialUse<W>& result2 = const_cast<PartialUse<W>&>(
         FindPartialUse(entries_.data(), entries_.size(), useIndex));
     assert(result2.first == useIndex);
@@ -748,9 +748,8 @@ class PartialUses {
 
   const std::vector<PartialUse<W>>& GetData() const { return entries_; }
 
- private:
-  void Rehash() {
-    size_t newSize = GetFirstPrimeGreaterThanOrEqualTo(entries_.size() * 2);
+  void reserve(size_t n) {
+    size_t newSize = GetFirstPrimeGreaterThanOrEqualTo(n * 2);
     std::vector<PartialUse<W>> newEntries(newSize);
     std::memset(newEntries.data(), -1, newSize * sizeof(PartialUse<W>));
     for (size_t oldEntryIndex = 0; oldEntryIndex < entries_.size();
@@ -766,6 +765,7 @@ class PartialUses {
     maxLoad_ = newSize / 2;
   }
 
+ private:
   std::vector<PartialUse<W>> entries_;
   size_t load_;
   size_t maxLoad_;
@@ -774,9 +774,11 @@ class PartialUses {
 template <typename W>
 class UdState {
  public:
-  void Init(size_t expectedUseCount, size_t expectedDefCount) {
+  void Init(size_t expectedUseCount, size_t expectedDefCount,
+            size_t expectedPartialUseCount) {
     uses_.reserve(expectedUseCount);
     defs_.reserve(expectedDefCount);
+    partialUses_.reserve(expectedPartialUseCount);
     AddDef(0, std::numeric_limits<W>::max());
   }
 
@@ -872,12 +874,12 @@ class UdState {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
       std::pair<const Def<W>*, std::uint32_t> use =
           ResolveUse(useIndex, trace, startIndexMember);
-      fprintf(f,
-              "    %" PRIu32 " -> %" PRIu32 " [label=\"%s0x%" PRIx64
-              "-0x%" PRIx64 "\"]\n",
-              traceIndex, use.second, prefix,
-              (std::uint64_t)use.first->startAddr,
-              (std::uint64_t)use.first->endAddr);
+      std::fprintf(f,
+                   "    %" PRIu32 " -> %" PRIu32 " [label=\"%s0x%" PRIx64
+                   "-0x%" PRIx64 "\"]\n",
+                   traceIndex, use.second, prefix,
+                   (std::uint64_t)use.first->startAddr,
+                   (std::uint64_t)use.first->endAddr);
     }
   }
 
@@ -889,11 +891,11 @@ class UdState {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
       std::pair<const Def<W>*, std::uint32_t> use =
           ResolveUse(useIndex, trace, startIndexMember);
-      fprintf(f,
-              "            <a href=\"#%" PRIu32 "\">%s0x%" PRIx64 "-0x%" PRIx64
-              "</a>\n",
-              use.second, prefix, (std::uint64_t)use.first->startAddr,
-              (std::uint64_t)use.first->endAddr);
+      std::fprintf(f,
+                   "            <a href=\"#%" PRIu32 "\">%s0x%" PRIx64
+                   "-0x%" PRIx64 "</a>\n",
+                   use.second, prefix, (std::uint64_t)use.first->startAddr,
+                   (std::uint64_t)use.first->endAddr);
     }
   }
 
@@ -913,10 +915,10 @@ class UdState {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
       std::pair<const Def<W>*, std::uint32_t> use =
           ResolveUse(useIndex, trace, startIndexMember);
-      fprintf(f, "%" PRIu32 ",%" PRIu32 ",%s,%" PRIu64 ",%" PRIu64 "\n",
-              traceIndex, use.second, prefix,
-              (std::uint64_t)use.first->startAddr,
-              (std::uint64_t)use.first->endAddr);
+      std::fprintf(f, "%" PRIu32 ",%" PRIu32 ",%s,%" PRIu64 ",%" PRIu64 "\n",
+                   traceIndex, use.second, prefix,
+                   (std::uint64_t)use.first->startAddr,
+                   (std::uint64_t)use.first->endAddr);
     }
   }
 
@@ -967,7 +969,7 @@ class UdState {
   }
 
   std::vector<std::uint32_t> uses_;  // defs_ indices.
-  // The assumption is that partial uses are rare.
+  // On average, 4% register and 12% memory uses are partial.
   PartialUses<W> partialUses_;
   std::vector<Def<W>> defs_;
   struct EntryValue {
@@ -1078,10 +1080,12 @@ class Ud {
     disasm_.emplace_back("<unknown>");
 
     AddTrace(codeIndex);
-    // On average, 1.48 register uses and 1.61 register defs per insn.
-    regState_.Init(expectedInsnCount * 3 / 2, expectedInsnCount * 5 / 3);
+    // On average, 1.69 register uses and 1.61 register defs per insn.
+    regState_.Init(expectedInsnCount * 7 / 4, expectedInsnCount * 5 / 3,
+                   expectedInsnCount / 10);
     // On average, 0.4 memory uses and 0.22 memory defs per insn.
-    memState_.Init(expectedInsnCount / 2, expectedInsnCount / 4);
+    memState_.Init(expectedInsnCount / 2, expectedInsnCount / 4,
+                   expectedInsnCount / 20);
 
     machineType_ = entry.GetMachineType();
     return disasmEngine_.Init(machineType_);
