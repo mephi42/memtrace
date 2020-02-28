@@ -1,7 +1,9 @@
 // Copyright (C) 2019-2020, and GNU GPL'd, by mephi42.
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cerrno>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -659,6 +661,111 @@ struct InsnInTrace {
   std::uint32_t memDefEndIndex;
 };
 
+size_t GetFirstPrimeGreaterThanOrEqualTo(size_t value) {
+  static std::vector<size_t> primes = {3};
+  value |= 1;
+  while (true) {
+    size_t valueSqrt = (size_t)std::sqrt(value);
+    while (primes.back() <= valueSqrt)
+      primes.push_back(GetFirstPrimeGreaterThanOrEqualTo(primes.back() + 1));
+    bool isPrime = true;
+    for (size_t primeIndex = 0;
+         primeIndex < primes.size() && primes[primeIndex] <= valueSqrt;
+         primeIndex++)
+      if (value % primes[primeIndex] == 0) {
+        isPrime = false;
+        break;
+      }
+    if (isPrime) return value;
+    value += 2;
+  }
+}
+
+template <typename W>
+struct PartialUse {
+  std::uint32_t first;  // uses_ index
+  Def<W> second;        // range
+};
+
+template <typename W>
+static const PartialUse<W>* ScanPartialUses(const PartialUse<W>* partialUses,
+                                            size_t partialUseCount,
+                                            std::uint32_t useIndex) {
+  for (size_t entryIndex = 0; entryIndex < partialUseCount; entryIndex++) {
+    const PartialUse<W>& partialUse = partialUses[entryIndex];
+    if (partialUse.first == useIndex || partialUse.first == (std::uint32_t)-1)
+      return &partialUse;
+  }
+  return nullptr;
+}
+
+template <typename W>
+static const PartialUse<W>& FindPartialUse(const PartialUse<W>* hashTable,
+                                           size_t hashTableSize,
+                                           std::uint32_t useIndex) {
+  size_t entryIndex = useIndex % hashTableSize;
+  const PartialUse<W>* use = ScanPartialUses(
+      hashTable + entryIndex, hashTableSize - entryIndex, useIndex);
+  if (use == nullptr) use = ScanPartialUses(hashTable, entryIndex, useIndex);
+  assert(use != nullptr);
+  return *use;
+}
+
+template <typename W>
+class PartialUses {
+ public:
+  explicit PartialUses(size_t n = 11)
+      : entries_(n), load_(0), maxLoad_(entries_.size() / 2) {
+    std::memset(entries_.data(), -1, entries_.size() * sizeof(PartialUse<W>));
+  }
+
+  using const_iterator = const PartialUse<W>*;
+
+  PartialUse<W>* end() const { return nullptr; }
+
+  Def<W>& operator[](std::uint32_t useIndex) {
+    PartialUse<W>& result1 = const_cast<PartialUse<W>&>(
+        FindPartialUse(entries_.data(), entries_.size(), useIndex));
+    if (result1.first == useIndex) return result1.second;
+    result1.first = useIndex;
+    load_ += 1;
+    if (load_ <= maxLoad_) return result1.second;
+    Rehash();
+    PartialUse<W>& result2 = const_cast<PartialUse<W>&>(
+        FindPartialUse(entries_.data(), entries_.size(), useIndex));
+    assert(result2.first == useIndex);
+    return result2.second;
+  }
+
+  const PartialUse<W>* find(std::uint32_t useIndex) const {
+    const PartialUse<W>& result =
+        FindPartialUse(entries_.data(), entries_.size(), useIndex);
+    return result.first == useIndex ? &result : nullptr;
+  }
+
+ private:
+  void Rehash() {
+    size_t newSize = GetFirstPrimeGreaterThanOrEqualTo(entries_.size() * 2);
+    std::vector<PartialUse<W>> newEntries(newSize);
+    std::memset(newEntries.data(), -1, newSize * sizeof(PartialUse<W>));
+    for (size_t oldEntryIndex = 0; oldEntryIndex < entries_.size();
+         oldEntryIndex++) {
+      PartialUse<W>& oldEntry = entries_[oldEntryIndex];
+      if (oldEntry.first == (std::uint32_t)-1) continue;
+      PartialUse<W>& newEntry = const_cast<PartialUse<W>&>(
+          FindPartialUse(newEntries.data(), newSize, oldEntry.first));
+      assert(newEntry.first == (std::uint32_t)-1);
+      newEntry = oldEntry;
+    }
+    entries_.swap(newEntries);
+    maxLoad_ = newSize / 2;
+  }
+
+  std::vector<PartialUse<W>> entries_;
+  size_t load_;
+  size_t maxLoad_;
+};
+
 template <typename W>
 class UdState {
  public:
@@ -821,8 +928,8 @@ class UdState {
       std::uint32_t InsnInTrace::*startIndexMember) const {
     std::uint32_t defIndex = uses_[useIndex];
     const Def<W>* def;
-    typename std::unordered_map<std::uint32_t, Def<W>>::const_iterator
-        partialUse = partialUses_.find(useIndex);
+    typename PartialUses<W>::const_iterator partialUse =
+        partialUses_.find(useIndex);
     if (partialUse == partialUses_.end())
       def = &defs_[defIndex];
     else
@@ -842,8 +949,7 @@ class UdState {
 
   std::vector<std::uint32_t> uses_;  // defs_ indices.
   // The assumption is that partial uses are rare.
-  // uses_ index -> range.
-  std::unordered_map<std::uint32_t, Def<W>> partialUses_;
+  PartialUses<W> partialUses_;
   std::vector<Def<W>> defs_;
   struct EntryValue {
     W startAddr;
