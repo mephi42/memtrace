@@ -771,6 +771,34 @@ class PartialUses {
   size_t maxLoad_;
 };
 
+template <typename W, typename UseIterator, typename DefIterator,
+          typename PartialUseIterator, typename InsnInTraceIterator>
+std::pair<const Def<W>*, std::uint32_t> ResolveUse(
+    std::uint32_t useIndex, UseIterator uses, DefIterator defs,
+    PartialUseIterator partialUses, size_t partialUseCount,
+    InsnInTraceIterator traceBegin, InsnInTraceIterator traceEnd,
+    std::uint32_t InsnInTrace::*startDefIndex) {
+  std::uint32_t defIndex = uses[useIndex];
+  const Def<W>* def;
+  const PartialUse<W>& partialUse =
+      FindPartialUse(partialUses, partialUseCount, useIndex);
+  if (partialUse.first == (std::uint32_t)-1)
+    def = &*(defs + defIndex);
+  else
+    def = &partialUse.second;
+
+  InsnInTraceIterator it =
+      std::upper_bound(traceBegin, traceEnd, defIndex,
+                       [startDefIndex](std::uint32_t defIndex,
+                                       const InsnInTrace& trace) -> bool {
+                         return defIndex < trace.*startDefIndex;
+                       });
+  --it;
+  std::uint32_t traceIndex = (std::uint32_t)(it - traceBegin);
+
+  return std::make_pair(def, traceIndex);
+}
+
 template <typename W>
 class UdState {
  public:
@@ -846,10 +874,10 @@ class UdState {
 
   void DumpUses(std::uint32_t startIndex, std::uint32_t endIndex,
                 const std::vector<InsnInTrace>& trace,
-                std::uint32_t InsnInTrace::*startIndexMember) const {
+                std::uint32_t InsnInTrace::*startDefIndex) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
       std::pair<const Def<W>*, std::uint32_t> use =
-          ResolveUse(useIndex, trace, startIndexMember);
+          ResolveUse(useIndex, trace, startDefIndex);
       std::printf(useIndex == startIndex
                       ? "0x%" PRIx64 "-0x%" PRIx64 "@[%" PRIu32 "]"
                       : ", 0x%" PRIx64 "-0x%" PRIx64 "@[%" PRIu32 "]",
@@ -869,11 +897,11 @@ class UdState {
   void DumpUsesDot(std::FILE* f, std::uint32_t traceIndex,
                    std::uint32_t startIndex, std::uint32_t endIndex,
                    const std::vector<InsnInTrace>& trace,
-                   std::uint32_t InsnInTrace::*startIndexMember,
+                   std::uint32_t InsnInTrace::*startDefIndex,
                    const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
       std::pair<const Def<W>*, std::uint32_t> use =
-          ResolveUse(useIndex, trace, startIndexMember);
+          ResolveUse(useIndex, trace, startDefIndex);
       std::fprintf(f,
                    "    %" PRIu32 " -> %" PRIu32 " [label=\"%s0x%" PRIx64
                    "-0x%" PRIx64 "\"]\n",
@@ -886,11 +914,11 @@ class UdState {
   void DumpUsesHtml(std::FILE* f, std::uint32_t startIndex,
                     std::uint32_t endIndex,
                     const std::vector<InsnInTrace>& trace,
-                    std::uint32_t InsnInTrace::*startIndexMember,
+                    std::uint32_t InsnInTrace::*startDefIndex,
                     const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
       std::pair<const Def<W>*, std::uint32_t> use =
-          ResolveUse(useIndex, trace, startIndexMember);
+          ResolveUse(useIndex, trace, startDefIndex);
       std::fprintf(f,
                    "            <a href=\"#%" PRIu32 "\">%s0x%" PRIx64
                    "-0x%" PRIx64 "</a>\n",
@@ -910,11 +938,11 @@ class UdState {
   void DumpUsesCsv(std::FILE* f, std::uint32_t traceIndex,
                    std::uint32_t startIndex, std::uint32_t endIndex,
                    const std::vector<InsnInTrace>& trace,
-                   std::uint32_t InsnInTrace::*startIndexMember,
+                   std::uint32_t InsnInTrace::*startDefIndex,
                    const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
       std::pair<const Def<W>*, std::uint32_t> use =
-          ResolveUse(useIndex, trace, startIndexMember);
+          ResolveUse(useIndex, trace, startDefIndex);
       std::fprintf(f, "%" PRIu32 ",%" PRIu32 ",%s,%" PRIu64 ",%" PRIu64 "\n",
                    traceIndex, use.second, prefix,
                    (std::uint64_t)use.first->startAddr,
@@ -946,26 +974,11 @@ class UdState {
 
   std::pair<const Def<W>*, std::uint32_t> ResolveUse(
       std::uint32_t useIndex, const std::vector<InsnInTrace>& trace,
-      std::uint32_t InsnInTrace::*startIndexMember) const {
-    std::uint32_t defIndex = uses_[useIndex];
-    const Def<W>* def;
-    typename PartialUses<W>::const_iterator partialUse =
-        partialUses_.find(useIndex);
-    if (partialUse == partialUses_.end())
-      def = &defs_[defIndex];
-    else
-      def = &partialUse->second;
-
-    std::vector<InsnInTrace>::const_iterator it =
-        std::upper_bound(trace.begin(), trace.end(), defIndex,
-                         [startIndexMember](std::uint32_t defIndex,
-                                            const InsnInTrace& trace) -> bool {
-                           return defIndex < trace.*startIndexMember;
-                         });
-    --it;
-    std::uint32_t traceIndex = (std::uint32_t)(it - trace.begin());
-
-    return std::make_pair(def, traceIndex);
+      std::uint32_t InsnInTrace::*startDefIndex) const {
+    return ::ResolveUse<W>(useIndex, uses_.begin(), defs_.begin(),
+                           partialUses_.GetData().data(),
+                           partialUses_.GetData().size(), trace.begin(),
+                           trace.end(), startDefIndex);
   }
 
   std::vector<std::uint32_t> uses_;  // defs_ indices.
@@ -1023,6 +1036,16 @@ class UdStateMm {
         reinterpret_cast<const PartialUse<W>*>(GetAligned64(defsEnd_));
     partialUsesEnd_ = partialUsesBegin_ + partialUseCount;
     return reinterpret_cast<const std::uint8_t*>(partialUsesEnd_);
+  }
+
+  template <typename InsnInTraceIterator>
+  std::pair<const Def<W>*, std::uint32_t> ResolveUse(
+      std::uint32_t useIndex, InsnInTraceIterator traceBegin,
+      InsnInTraceIterator traceEnd,
+      std::uint32_t InsnInTrace::*startDefIndex) const {
+    return ::ResolveUse<W>(useIndex, usesBegin_, defsBegin_, partialUsesBegin_,
+                           partialUsesEnd_ - partialUsesBegin_, traceBegin,
+                           traceEnd, startDefIndex);
   }
 
  private:
@@ -1424,9 +1447,15 @@ class UdMmBase {
 
   virtual ~UdMmBase() = default;
   virtual int Parse() = 0;
-  virtual std::uint32_t GetCodeIndexByPc(std::uint64_t pc) const = 0;
-  virtual std::vector<std::uint32_t> GetTraceIndicesByCodeIndex(
-      std::uint32_t codeIndex) const = 0;
+  virtual std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const = 0;
+  virtual std::vector<std::uint32_t> GetTracesForCode(
+      std::uint32_t code) const = 0;
+  virtual std::vector<std::uint32_t> GetRegUsesForTrace(
+      std::uint32_t trace) const = 0;
+  virtual std::vector<std::uint32_t> GetMemUsesForTrace(
+      std::uint32_t trace) const = 0;
+  virtual std::uint32_t GetTraceByRegUse(std::uint32_t regUse) const = 0;
+  virtual std::uint32_t GetTraceByMemUse(std::uint32_t memUse) const = 0;
 };
 
 template <typename W>
@@ -1457,19 +1486,52 @@ class UdMm : public UdMmBase {
     return memStateEnd == end ? 0 : -EINVAL;
   }
 
-  std::uint32_t GetCodeIndexByPc(std::uint64_t pc) const override {
+  std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const override {
+    std::vector<std::uint32_t> codes;
     for (const InsnInCode<W>* code = codeBegin_; code != codeEnd_; code++)
-      if (code->pc == pc) return (std::uint32_t)(code - codeBegin_);
-    return 0;
+      if (code->pc == pc) codes.push_back((std::uint32_t)(code - codeBegin_));
+    return codes;
   }
 
-  std::vector<std::uint32_t> GetTraceIndicesByCodeIndex(
-      std::uint32_t codeIndex) const override {
-    std::vector<std::uint32_t> traceIndices;
+  std::vector<std::uint32_t> GetTracesForCode(
+      std::uint32_t code) const override {
+    std::vector<std::uint32_t> traces;
     for (const InsnInTrace* trace = traceBegin_; trace != traceEnd_; trace++)
-      if (trace->codeIndex == codeIndex)
-        traceIndices.push_back((std::uint32_t)(trace - traceBegin_));
-    return traceIndices;
+      if (trace->codeIndex == code)
+        traces.push_back((std::uint32_t)(trace - traceBegin_));
+    return traces;
+  }
+
+  std::vector<std::uint32_t> GetRegUsesForTrace(
+      std::uint32_t trace) const override {
+    std::vector<std::uint32_t> regUses;
+    for (std::uint32_t regUse = traceBegin_[trace].regUseStartIndex;
+         regUse < traceBegin_[trace].regUseEndIndex; regUse++)
+      regUses.push_back(regUse);
+    return regUses;
+  }
+
+  std::vector<std::uint32_t> GetMemUsesForTrace(
+      std::uint32_t trace) const override {
+    std::vector<std::uint32_t> memUses;
+    for (std::uint32_t memUse = traceBegin_[trace].memUseStartIndex;
+         memUse < traceBegin_[trace].memUseEndIndex; memUse++)
+      memUses.push_back(memUse);
+    return memUses;
+  }
+
+  std::uint32_t GetTraceByRegUse(std::uint32_t regUse) const override {
+    return regState_
+        .ResolveUse(regUse, traceBegin_, traceEnd_,
+                    &InsnInTrace::regDefStartIndex)
+        .second;
+  }
+
+  std::uint32_t GetTraceByMemUse(std::uint32_t memUse) const override {
+    return memState_
+        .ResolveUse(memUse, traceBegin_, traceEnd_,
+                    &InsnInTrace::memDefStartIndex)
+        .second;
   }
 
  private:
@@ -1547,7 +1609,10 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("load", &UdMmBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
       .staticmethod("load")
-      .def("get_code_index_by_pc", &UdMmBase::GetCodeIndexByPc)
-      .def("get_trace_indices_by_code_index",
-           &UdMmBase::GetTraceIndicesByCodeIndex);
+      .def("get_codes_for_pc", &UdMmBase::GetCodesForPc)
+      .def("get_traces_for_code", &UdMmBase::GetTracesForCode)
+      .def("get_reg_uses_for_trace", &UdMmBase::GetRegUsesForTrace)
+      .def("get_mem_uses_for_trace", &UdMmBase::GetMemUsesForTrace)
+      .def("get_trace_by_reg_use", &UdMmBase::GetTraceByRegUse)
+      .def("get_trace_by_mem_use", &UdMmBase::GetTraceByMemUse);
 }
