@@ -413,7 +413,7 @@ class CsFree {
   const size_t count_;
 };
 
-template <Endianness E, typename W>
+template <typename W>
 class Disasm {
  public:
   Disasm() : capstone_(0) {}
@@ -421,18 +421,18 @@ class Disasm {
     if (capstone_ != 0) cs_close(&capstone_);
   }
 
-  int Init(MachineType type) {
+  int Init(MachineType type, Endianness endianness) {
     // See cstool.c for valid combinations.
     cs_arch arch;
     cs_mode mode;
     switch (type) {
       case MachineType::EM_386:
-        if (E != Endianness::Little || sizeof(W) != 4) return -EINVAL;
+        if (endianness != Endianness::Little || sizeof(W) != 4) return -EINVAL;
         arch = CS_ARCH_X86;
         mode = CS_MODE_32;
         break;
       case MachineType::EM_X86_64:
-        if (E != Endianness::Little || sizeof(W) != 8) return -EINVAL;
+        if (endianness != Endianness::Little || sizeof(W) != 8) return -EINVAL;
         arch = CS_ARCH_X86;
         mode = CS_MODE_64;
         break;
@@ -440,7 +440,7 @@ class Disasm {
       case MachineType::EM_PPC64:
         if (sizeof(W) != 8) return -EINVAL;
         arch = CS_ARCH_PPC;
-        if (E == Endianness::Little)
+        if (endianness == Endianness::Little)
           mode = (cs_mode)(CS_MODE_64 | CS_MODE_LITTLE_ENDIAN);
         else
           mode = (cs_mode)(CS_MODE_64 | CS_MODE_BIG_ENDIAN);
@@ -448,7 +448,7 @@ class Disasm {
       case MachineType::EM_ARM:
         if (sizeof(W) != 4) return -EINVAL;
         arch = CS_ARCH_ARM;
-        if (E == Endianness::Little)
+        if (endianness == Endianness::Little)
           mode = (cs_mode)(CS_MODE_ARM | CS_MODE_LITTLE_ENDIAN);
         else
           mode = (cs_mode)(CS_MODE_ARM | CS_MODE_BIG_ENDIAN);
@@ -456,25 +456,25 @@ class Disasm {
       case MachineType::EM_AARCH64:
         if (sizeof(W) != 8) return -EINVAL;
         arch = CS_ARCH_ARM64;
-        if (E == Endianness::Little)
+        if (endianness == Endianness::Little)
           mode = CS_MODE_LITTLE_ENDIAN;
         else
           mode = CS_MODE_BIG_ENDIAN;
         break;
       case MachineType::EM_S390:
-        if (E != Endianness::Big) return -EINVAL;
+        if (endianness != Endianness::Big) return -EINVAL;
         arch = CS_ARCH_SYSZ;
         mode = CS_MODE_BIG_ENDIAN;
         break;
       case MachineType::EM_MIPS:
         arch = CS_ARCH_MIPS;
         if (sizeof(W) == 4) {
-          if (E == Endianness::Little)
+          if (endianness == Endianness::Little)
             mode = (cs_mode)(CS_MODE_MIPS32 | CS_MODE_LITTLE_ENDIAN);
           else
             mode = (cs_mode)(CS_MODE_MIPS32 | CS_MODE_BIG_ENDIAN);
         } else {
-          if (E == Endianness::Little)
+          if (endianness == Endianness::Little)
             mode = (cs_mode)(CS_MODE_MIPS64 | CS_MODE_LITTLE_ENDIAN);
           else
             mode = (cs_mode)(CS_MODE_MIPS64 | CS_MODE_BIG_ENDIAN);
@@ -490,7 +490,7 @@ class Disasm {
 
   std::unique_ptr<cs_insn, CsFree> DoDisasm(const uint8_t* code,
                                             size_t codeSize, uint64_t address,
-                                            size_t count) {
+                                            size_t count) const {
     cs_insn* insn = nullptr;
     size_t actualCount =
         cs_disasm(capstone_, code, codeSize, address, count, &insn);
@@ -512,7 +512,7 @@ class Dumper {
     std::printf("Word size         : %zu\n", sizeof(W));
     std::printf("Machine           : %s\n",
                 GetMachineTypeStr(entry.GetMachineType()));
-    return disasmEngine_.Init(entry.GetMachineType());
+    return disasmEngine_.Init(entry.GetMachineType(), E);
   }
 
   int operator()(size_t i, LdStEntry<E, W> entry) {
@@ -571,7 +571,7 @@ class Dumper {
 
  private:
   size_t insnCount_;
-  Disasm<E, W> disasmEngine_;
+  Disasm<W> disasmEngine_;
 };
 
 template <Endianness E, typename W, template <Endianness, typename> typename V,
@@ -1111,7 +1111,7 @@ class Ud {
                    expectedInsnCount / 20);
 
     machineType_ = entry.GetMachineType();
-    return disasmEngine_.Init(machineType_);
+    return disasmEngine_.Init(machineType_, E);
   }
 
   int operator()(size_t /* i */, LdStEntry<E, W> entry) {
@@ -1431,7 +1431,7 @@ class Ud {
   const bool verbose_;
   const char* csvPlaceholder_;
   MachineType machineType_;
-  Disasm<E, W> disasmEngine_;
+  Disasm<W> disasmEngine_;
   std::vector<InsnInCode<W>> code_;
   std::vector<std::uint8_t> text_;
   std::vector<std::string> disasm_;
@@ -1448,14 +1448,15 @@ class UdMmBase {
   virtual ~UdMmBase() = default;
   virtual int Parse() = 0;
   virtual std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const = 0;
+  virtual std::string GetDisasmForCode(std::uint32_t code) const = 0;
   virtual std::vector<std::uint32_t> GetTracesForCode(
       std::uint32_t code) const = 0;
   virtual std::vector<std::uint32_t> GetRegUsesForTrace(
       std::uint32_t trace) const = 0;
   virtual std::vector<std::uint32_t> GetMemUsesForTrace(
       std::uint32_t trace) const = 0;
-  virtual std::uint32_t GetTraceByRegUse(std::uint32_t regUse) const = 0;
-  virtual std::uint32_t GetTraceByMemUse(std::uint32_t memUse) const = 0;
+  virtual std::uint32_t GetTraceForRegUse(std::uint32_t regUse) const = 0;
+  virtual std::uint32_t GetTraceForMemUse(std::uint32_t memUse) const = 0;
 };
 
 template <typename W>
@@ -1468,6 +1469,10 @@ class UdMm : public UdMmBase {
 
   int Parse() override {
     header_ = static_cast<const BinaryHeader*>(data_);
+    int ret;
+    if ((ret = disasmEngine_.Init((MachineType)header_->machineType,
+                                  kHostEndianness)) < 0)
+      return ret;
     textBegin_ = reinterpret_cast<const uint8_t*>(GetAligned64(header_ + 1));
     textEnd_ = textBegin_ + header_->textCount;
     codeBegin_ = reinterpret_cast<const InsnInCode<W>*>(GetAligned64(textEnd_));
@@ -1491,6 +1496,20 @@ class UdMm : public UdMmBase {
     for (const InsnInCode<W>* code = codeBegin_; code != codeEnd_; code++)
       if (code->pc == pc) codes.push_back((std::uint32_t)(code - codeBegin_));
     return codes;
+  }
+
+  std::string GetDisasmForCode(std::uint32_t code) const override {
+    const InsnInCode<W>& entry = codeBegin_[code];
+    std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
+        textBegin_ + entry.textIndex, entry.textSize, entry.pc, 0);
+    if (insn) {
+      std::string disasm = insn->mnemonic;
+      disasm += " ";
+      disasm += insn->op_str;
+      return disasm;
+    } else {
+      return "<unknown>";
+    }
   }
 
   std::vector<std::uint32_t> GetTracesForCode(
@@ -1520,14 +1539,14 @@ class UdMm : public UdMmBase {
     return memUses;
   }
 
-  std::uint32_t GetTraceByRegUse(std::uint32_t regUse) const override {
+  std::uint32_t GetTraceForRegUse(std::uint32_t regUse) const override {
     return regState_
         .ResolveUse(regUse, traceBegin_, traceEnd_,
                     &InsnInTrace::regDefStartIndex)
         .second;
   }
 
-  std::uint32_t GetTraceByMemUse(std::uint32_t memUse) const override {
+  std::uint32_t GetTraceForMemUse(std::uint32_t memUse) const override {
     return memState_
         .ResolveUse(memUse, traceBegin_, traceEnd_,
                     &InsnInTrace::memDefStartIndex)
@@ -1547,6 +1566,7 @@ class UdMm : public UdMmBase {
   const InsnInTrace* traceEnd_;
   UdStateMm<W> regState_;
   UdStateMm<W> memState_;
+  Disasm<W> disasmEngine_;
 };
 
 int UdFile(const char* path, size_t start, size_t end, const char* dot,
@@ -1610,9 +1630,10 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
            bp::return_value_policy<bp::manage_new_object>())
       .staticmethod("load")
       .def("get_codes_for_pc", &UdMmBase::GetCodesForPc)
+      .def("get_disasm_for_code", &UdMmBase::GetDisasmForCode)
       .def("get_traces_for_code", &UdMmBase::GetTracesForCode)
       .def("get_reg_uses_for_trace", &UdMmBase::GetRegUsesForTrace)
       .def("get_mem_uses_for_trace", &UdMmBase::GetMemUsesForTrace)
-      .def("get_trace_by_reg_use", &UdMmBase::GetTraceByRegUse)
-      .def("get_trace_by_mem_use", &UdMmBase::GetTraceByMemUse);
+      .def("get_trace_for_reg_use", &UdMmBase::GetTraceForRegUse)
+      .def("get_trace_for_mem_use", &UdMmBase::GetTraceForMemUse);
 }
