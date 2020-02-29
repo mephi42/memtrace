@@ -1448,9 +1448,11 @@ class UdMmBase {
   virtual ~UdMmBase() = default;
   virtual int Parse() = 0;
   virtual std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const = 0;
+  virtual std::uint64_t GetPcForCode(std::uint32_t code) const = 0;
   virtual std::string GetDisasmForCode(std::uint32_t code) const = 0;
   virtual std::vector<std::uint32_t> GetTracesForCode(
       std::uint32_t code) const = 0;
+  virtual std::uint32_t GetCodeForTrace(std::uint32_t trace) const = 0;
   virtual std::vector<std::uint32_t> GetRegUsesForTrace(
       std::uint32_t trace) const = 0;
   virtual std::vector<std::uint32_t> GetMemUsesForTrace(
@@ -1498,6 +1500,10 @@ class UdMm : public UdMmBase {
     return codes;
   }
 
+  std::uint64_t GetPcForCode(std::uint32_t code) const override {
+    return codeBegin_[code].pc;
+  }
+
   std::string GetDisasmForCode(std::uint32_t code) const override {
     const InsnInCode<W>& entry = codeBegin_[code];
     std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
@@ -1519,6 +1525,10 @@ class UdMm : public UdMmBase {
       if (trace->codeIndex == code)
         traces.push_back((std::uint32_t)(trace - traceBegin_));
     return traces;
+  }
+
+  std::uint32_t GetCodeForTrace(std::uint32_t trace) const override {
+    return traceBegin_[trace].codeIndex;
   }
 
   std::vector<std::uint32_t> GetRegUsesForTrace(
@@ -1630,8 +1640,10 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
            bp::return_value_policy<bp::manage_new_object>())
       .staticmethod("load")
       .def("get_codes_for_pc", &UdMmBase::GetCodesForPc)
+      .def("get_pc_for_code", &UdMmBase::GetPcForCode)
       .def("get_disasm_for_code", &UdMmBase::GetDisasmForCode)
       .def("get_traces_for_code", &UdMmBase::GetTracesForCode)
+      .def("get_code_for_trace", &UdMmBase::GetCodeForTrace)
       .def("get_reg_uses_for_trace", &UdMmBase::GetRegUsesForTrace)
       .def("get_mem_uses_for_trace", &UdMmBase::GetMemUsesForTrace)
       .def("get_trace_for_reg_use", &UdMmBase::GetTraceForRegUse)
