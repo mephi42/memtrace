@@ -176,7 +176,7 @@ struct IntConversions<kHostEndianness, T> {
   static T ConvertToHost(T value) { return value; }
 };
 
-template <typename T, Endianness E, typename W>
+template <Endianness E, typename T>
 class RawInt {
  public:
   explicit RawInt(const uint8_t* data) : data_(data) {}
@@ -195,12 +195,8 @@ class Tlv {
  public:
   explicit Tlv(const uint8_t* data) : data_(data) {}
 
-  Tag GetTag() const {
-    return (Tag)RawInt<std::uint16_t, E, W>(data_).GetValue();
-  }
-  W GetLength() const {
-    return RawInt<std::uint16_t, E, W>(data_ + 2).GetValue();
-  }
+  Tag GetTag() const { return (Tag)RawInt<E, std::uint16_t>(data_).GetValue(); }
+  W GetLength() const { return RawInt<E, std::uint16_t>(data_ + 2).GetValue(); }
   W GetAlignedLength() const {
     return (GetLength() + ((W)sizeof(W) - 1)) & ~((W)sizeof(W) - 1);
   }
@@ -216,8 +212,7 @@ class HeaderEntry {
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
   MachineType GetMachineType() const {
-    return (MachineType)RawInt<std::uint16_t, E, W>(data_ + sizeof(W))
-        .GetValue();
+    return (MachineType)RawInt<E, std::uint16_t>(data_ + sizeof(W)).GetValue();
   }
 
  private:
@@ -230,10 +225,8 @@ class LdStEntry {
   explicit LdStEntry(const uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetPc() const { return RawInt<W, E, W>(data_ + sizeof(W)).GetValue(); }
-  W GetAddr() const {
-    return RawInt<W, E, W>(data_ + sizeof(W) * 2).GetValue();
-  }
+  W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
+  W GetAddr() const { return RawInt<E, W>(data_ + sizeof(W) * 2).GetValue(); }
   const uint8_t* GetValue() const { return data_ + sizeof(W) * 3; }
   W GetSize() const { return GetTlv().GetLength() - (W)sizeof(W) * 3; }
 
@@ -247,7 +240,7 @@ class InsnEntry {
   explicit InsnEntry(const uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetPc() const { return RawInt<W, E, W>(data_ + sizeof(W)).GetValue(); }
+  W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
   const uint8_t* GetValue() const { return data_ + sizeof(W) * 2; }
   W GetSize() const { return GetTlv().GetLength() - (W)sizeof(W) * 2; }
 
@@ -261,7 +254,7 @@ class InsnExecEntry {
   explicit InsnExecEntry(const uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetPc() const { return RawInt<W, E, W>(data_ + sizeof(W)).GetValue(); }
+  W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
 
  private:
   const uint8_t* data_;
@@ -273,13 +266,9 @@ class LdStNxEntry {
   explicit LdStNxEntry(const uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetPc() const { return RawInt<W, E, W>(data_ + sizeof(W)).GetValue(); }
-  W GetAddr() const {
-    return RawInt<W, E, W>(data_ + sizeof(W) * 2).GetValue();
-  }
-  W GetSize() const {
-    return RawInt<W, E, W>(data_ + sizeof(W) * 3).GetValue();
-  }
+  W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
+  W GetAddr() const { return RawInt<E, W>(data_ + sizeof(W) * 2).GetValue(); }
+  W GetSize() const { return RawInt<E, W>(data_ + sizeof(W) * 3).GetValue(); }
 
  private:
   const uint8_t* data_;
@@ -291,11 +280,9 @@ class MmapEntry {
   explicit MmapEntry(const uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetStart() const { return RawInt<W, E, W>(data_ + sizeof(W)).GetValue(); }
-  W GetEnd() const { return RawInt<W, E, W>(data_ + sizeof(W) * 2).GetValue(); }
-  W GetFlags() const {
-    return RawInt<W, E, W>(data_ + sizeof(W) * 3).GetValue();
-  }
+  W GetStart() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
+  W GetEnd() const { return RawInt<E, W>(data_ + sizeof(W) * 2).GetValue(); }
+  W GetFlags() const { return RawInt<E, W>(data_ + sizeof(W) * 3).GetValue(); }
   const uint8_t* GetValue() const { return data_ + sizeof(W) * 4; }
   W GetSize() const { return GetTlv().GetLength() - (W)sizeof(W) * 4; }
 
@@ -355,20 +342,20 @@ void ReprDump(const uint8_t* buf, size_t n) {
   std::printf("'");
 }
 
-template <Endianness E, typename W>
+template <Endianness E>
 void ValueDump(const uint8_t* buf, size_t n) {
   switch (n) {
     case 1:
-      std::printf("0x%" PRIx8, RawInt<std::uint8_t, E, W>(buf).GetValue());
+      std::printf("0x%" PRIx8, RawInt<E, std::uint8_t>(buf).GetValue());
       break;
     case 2:
-      std::printf("0x%" PRIx16, RawInt<std::uint16_t, E, W>(buf).GetValue());
+      std::printf("0x%" PRIx16, RawInt<E, std::uint16_t>(buf).GetValue());
       break;
     case 4:
-      std::printf("0x%" PRIx32, RawInt<std::uint32_t, E, W>(buf).GetValue());
+      std::printf("0x%" PRIx32, RawInt<E, std::uint32_t>(buf).GetValue());
       break;
     case 8:
-      std::printf("0x%" PRIx64, RawInt<std::uint64_t, E, W>(buf).GetValue());
+      std::printf("0x%" PRIx64, RawInt<E, std::uint64_t>(buf).GetValue());
       break;
     default:
       ReprDump(buf, n);
@@ -520,7 +507,7 @@ class Dumper {
                 (std::uint64_t)entry.GetPc(),
                 GetTagStr(entry.GetTlv().GetTag()),
                 (size_t)(entry.GetSize() * 8), (std::uint64_t)entry.GetAddr());
-    ValueDump<E, W>(entry.GetValue(), entry.GetSize());
+    ValueDump<E>(entry.GetValue(), entry.GetSize());
     std::printf("\n");
     return 0;
   }
