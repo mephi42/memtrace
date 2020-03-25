@@ -1,0 +1,20 @@
+Endian            : <
+Word              : Q
+Word size         : 8
+Machine           : EM_X86_64
+[         0] 0x0000000000401000: MT_INSN 48c7c03c000000 mov rax, 0x3c
+[         1] 0x0000000000401000: MT_INSN_EXEC
+[         2] 0x0000000000401000: MT_PUT_REG uint64_t [0x10] 0x3c
+[         3] 0x0000000000401007: MT_INSN 4831ff xor rdi, rdi
+[         4] 0x0000000000401007: MT_INSN_EXEC
+[         5] 0x0000000000401007: MT_PUT_REG uint64_t [0x90] 0x14
+[         6] 0x0000000000401007: MT_PUT_REG uint64_t [0x98] 0x0
+[         7] 0x0000000000401007: MT_PUT_REG uint64_t [0xa0] 0x0
+[         8] 0x0000000000401007: MT_PUT_REG uint64_t [0x48] 0x0
+[         9] 0x000000000040100a: MT_INSN 0f05 syscall 
+[        10] 0x000000000040100a: MT_INSN_EXEC
+[        11] 0x000000000040100a: MT_PUT_REG uint64_t [0x18] 0x40100c
+[        12] MT_MMAP 0000000000400000-0000000000401000 r-- {workdir}/x86_64
+[        13] MT_MMAP 0000000000401000-0000000000402000 r-x {workdir}/x86_64
+[        14] MT_MMAP 0000000004000000-0000000004001000 rwx 
+Insns             : 3

@@ -1,0 +1,4 @@
+[0]0x0:  <unknown> reg_uses=[] reg_defs=[0x0-0xffffffffffffffff] mem_uses=[] mem_defs=[0x0-0xffffffffffffffff]
+[1]0x401000: 48c7c03c000000 mov rax, 0x3c reg_uses=[] reg_defs=[0x10-0x18] mem_uses=[] mem_defs=[]
+[2]0x401007: 4831ff xor rdi, rdi reg_uses=[] reg_defs=[0x90-0x98, 0x98-0xa0, 0xa0-0xa8, 0x48-0x50] mem_uses=[] mem_defs=[]
+[3]0x40100a: 0f05 syscall  reg_uses=[] reg_defs=[0x18-0x20] mem_uses=[] mem_defs=[]

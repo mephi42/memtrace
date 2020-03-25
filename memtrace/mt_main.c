@@ -1,4 +1,5 @@
 #include "pub_core_aspacemgr.h"
+#include "pub_core_clientstate.h"
 #include "pub_core_libcfile.h"
 #include "pub_core_machine.h"
 #include "pub_tool_aspacehl.h"
@@ -404,6 +405,8 @@ static void trace_segments(void)
 
       seg = VG_(am_find_nsegment)(segStarts[i]);
       name = VG_(am_get_filename)(seg);
+      if (name == NULL && seg->end == VG_(clstk_end))
+         name = "[stack]";
       nameLength = name == NULL ? 1 : VG_(strlen)(name) + 1;
       entryLength = sizeof(struct MmapEntry) + nameLength;
       alignedEntryLength = ALIGN_UP(entryLength, sizeof(UIntPtr));

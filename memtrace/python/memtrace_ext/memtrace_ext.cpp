@@ -131,33 +131,6 @@ constexpr Endianness kHostEndianness = Endianness::Big;
 #error Unsupported __BYTE_ORDER__
 #endif
 
-class Buffer {
- public:
-  Buffer() : low_(0), high_(0) {}
-
-  int Update(std::istream* is) {
-    size_t n = GetSize();
-    memmove(storage_, storage_ + low_, n);
-    is->read(reinterpret_cast<char*>(storage_ + n), sizeof(storage_) - n);
-    low_ = 0;
-    high_ = n + is->gcount();
-    if (is->bad())
-      return -EIO;
-    else
-      return 0;
-  }
-
-  void Advance(size_t n) { low_ += n; }
-
-  const uint8_t* GetData() const { return storage_ + low_; }
-  size_t GetSize() const { return high_ - low_; }
-
- private:
-  uint8_t storage_[8192];
-  size_t low_;
-  size_t high_;
-};
-
 std::uint8_t BSwap(std::uint8_t value) { return value; }
 
 std::uint16_t BSwap(std::uint16_t value) { return __builtin_bswap16(value); }
@@ -195,6 +168,8 @@ class Tlv {
  public:
   explicit Tlv(const uint8_t* data) : data_(data) {}
 
+  static size_t GetFixedLength() { return sizeof(std::uint16_t) * 2; }
+
   Tag GetTag() const { return (Tag)RawInt<E, std::uint16_t>(data_).GetValue(); }
   W GetLength() const { return RawInt<E, std::uint16_t>(data_ + 2).GetValue(); }
   W GetAlignedLength() const {
@@ -209,6 +184,8 @@ template <Endianness E, typename W>
 class HeaderEntry {
  public:
   explicit HeaderEntry(const uint8_t* data) : data_(data) {}
+
+  static size_t GetFixedLength() { return sizeof(W) + sizeof(std::uint16_t); }
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
   MachineType GetMachineType() const {
@@ -289,48 +266,6 @@ class MmapEntry {
  private:
   const uint8_t* data_;
 };
-
-template <Endianness E, typename W, typename V>
-int Parse(V* visitor, Buffer* buf, size_t* i, size_t start, size_t end) {
-  while (buf->GetSize() >= 4) {
-    Tlv<E, W> tlv(buf->GetData());
-    if (buf->GetSize() < tlv.GetAlignedLength()) break;
-    if (*i >= start && *i < end) {
-      Tag tag = tlv.GetTag();
-      int err;
-      switch (tag) {
-        case Tag::MT_LOAD:
-        case Tag::MT_STORE:
-        case Tag::MT_REG:
-        case Tag::MT_GET_REG:
-        case Tag::MT_PUT_REG:
-          err = (*visitor)(*i, LdStEntry<E, W>(buf->GetData()));
-          break;
-        case Tag::MT_INSN:
-          err = (*visitor)(*i, InsnEntry<E, W>(buf->GetData()));
-          break;
-        case Tag::MT_INSN_EXEC:
-          err = (*visitor)(*i, InsnExecEntry<E, W>(buf->GetData()));
-          break;
-        case Tag::MT_GET_REG_NX:
-        case Tag::MT_PUT_REG_NX:
-          err = (*visitor)(*i, LdStNxEntry<E, W>(buf->GetData()));
-          break;
-        case Tag::MT_MMAP:
-          err = (*visitor)(*i, MmapEntry<E, W>(buf->GetData()));
-          break;
-        default:
-          std::cerr << "Unsupported tag: 0x" << std::hex << (std::uint16_t)tag
-                    << std::endl;
-          return -EINVAL;
-      }
-      if (err < 0) return err;
-    }
-    buf->Advance(tlv.GetAlignedLength());
-    (*i)++;
-  }
-  return 0;
-}
 
 void HexDump(std::FILE* f, const uint8_t* buf, size_t n) {
   for (size_t i = 0; i < n; i++) std::fprintf(f, "%02x", buf[i]);
@@ -544,10 +479,11 @@ class Dumper {
 
   int operator()(size_t i, MmapEntry<E, W> entry) {
     std::printf(
-        "[%10zu] %016" PRIx64 "-%016" PRIx64 " %c%c%c %s\n", i,
-        (std::uint64_t)entry.GetStart(), (std::uint64_t)(entry.GetEnd() + 1),
-        entry.GetFlags() & 1 ? 'r' : '-', entry.GetFlags() & 2 ? 'w' : '-',
-        entry.GetFlags() & 4 ? 'x' : '-', entry.GetValue());
+        "[%10zu] %s %016" PRIx64 "-%016" PRIx64 " %c%c%c %s\n", i,
+        GetTagStr(entry.GetTlv().GetTag()), (std::uint64_t)entry.GetStart(),
+        (std::uint64_t)(entry.GetEnd() + 1), entry.GetFlags() & 1 ? 'r' : '-',
+        entry.GetFlags() & 2 ? 'w' : '-', entry.GetFlags() & 4 ? 'x' : '-',
+        entry.GetValue());
     return 0;
   }
 
@@ -561,67 +497,154 @@ class Dumper {
   Disasm<W> disasmEngine_;
 };
 
-template <Endianness E, typename W, template <Endianness, typename> typename V,
-          typename... Args>
-int Rest(std::istream* is, size_t expectedInsnCount, Buffer* buf, size_t start,
-         size_t end, Args&&... args) {
-  HeaderEntry<E, W> entry(buf->GetData());
-  buf->Advance(entry.GetTlv().GetAlignedLength());
-  V<E, W> visitor(std::forward<Args>(args)...);
-  if (visitor.Init(entry, expectedInsnCount) < 0) {
-    std::cerr << "visitor.Init() failed" << std::endl;
-    return EXIT_FAILURE;
-  }
-  size_t i = 0;
-  while (buf->GetSize() > 0) {
-    if (Parse<E, W>(&visitor, buf, &i, start, end) < 0) {
-      std::cerr << "Parse(buf) failed" << std::endl;
-      return EXIT_FAILURE;
+class TraceMmBase {
+ public:
+  template <typename V>
+  static int Visit(const char* path, const V& v);
+  static TraceMmBase* Load(const char* path);
+
+  virtual ~TraceMmBase() = default;
+};
+
+template <Endianness E, typename W>
+class TraceMm : public TraceMmBase {
+ public:
+  TraceMm(void* data, size_t length)
+      : data_(data),
+        length_(length),
+        cur_(static_cast<std::uint8_t*>(data_)),
+        end_(cur_ + length_) {}
+  virtual ~TraceMm() { munmap(data_, length_); }
+
+  template <template <Endianness, typename> typename V, typename... Args>
+  int Visit(size_t start, size_t end, Args&&... args) {
+    if (!Have(HeaderEntry<E, W>::GetFixedLength())) return -EINVAL;
+    HeaderEntry<E, W> entry(cur_);
+    if (!Advance(entry.GetTlv().GetAlignedLength())) return -EINVAL;
+    V<E, W> visitor(std::forward<Args>(args)...);
+    // On average, one executed instruction takes 132.7 bytes in the trace file.
+    int err;
+    if ((err = visitor.Init(entry, length_ / 128)) < 0) return err;
+    size_t i = 0;
+    while (cur_ != end_) {
+      if (!Have(Tlv<E, W>::GetFixedLength())) return -EINVAL;
+      Tlv<E, W> tlv(cur_);
+      if (!Have(tlv.GetAlignedLength())) return -EINVAL;
+      if (i >= start && i < end) {
+        Tag tag = tlv.GetTag();
+        err = -EINVAL;
+        switch (tag) {
+          case Tag::MT_LOAD:
+          case Tag::MT_STORE:
+          case Tag::MT_REG:
+          case Tag::MT_GET_REG:
+          case Tag::MT_PUT_REG:
+            err = visitor(i, LdStEntry<E, W>(cur_));
+            break;
+          case Tag::MT_INSN:
+            err = visitor(i, InsnEntry<E, W>(cur_));
+            break;
+          case Tag::MT_INSN_EXEC:
+            err = visitor(i, InsnExecEntry<E, W>(cur_));
+            break;
+          case Tag::MT_GET_REG_NX:
+          case Tag::MT_PUT_REG_NX:
+            err = visitor(i, LdStNxEntry<E, W>(cur_));
+            break;
+          case Tag::MT_MMAP:
+            err = visitor(i, MmapEntry<E, W>(cur_));
+            break;
+        }
+        if (err < 0) return err;
+      }
+      if (!Advance(tlv.GetAlignedLength())) return -EINVAL;
+      i++;
     }
-    if (buf->Update(is) < 0) {
-      std::cerr << "buf.Update() failed" << std::endl;
-      return EXIT_FAILURE;
-    }
+    if ((err = visitor.Complete()) < 0) return err;
+    return 0;
   }
-  if (visitor.Complete() < 0) {
-    std::cerr << "visitor.Complete() failed" << std::endl;
-    return EXIT_FAILURE;
+
+ private:
+  bool Have(size_t n) const { return cur_ + n <= end_; }
+
+  bool Advance(size_t n) {
+    std::uint8_t* next = cur_ + n;
+    if (next > end_) return false;
+    cur_ = next;
+    return true;
   }
-  return EXIT_SUCCESS;
+
+  void* data_;
+  size_t length_;
+  std::uint8_t* cur_;
+  std::uint8_t* end_;
+};
+
+int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
+             size_t* length) {
+  int fd = open(path, O_RDONLY);
+  if (fd < 0) return -errno;
+  struct stat stat;
+  if (fstat(fd, &stat) < 0) {
+    int err = errno;
+    close(fd);
+    return -err;
+  }
+  if (static_cast<size_t>(stat.st_size) < minSize) {
+    close(fd);
+    return -EINVAL;
+  }
+  void* data = mmap(nullptr, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  int err = errno;
+  close(fd);
+  if (data == MAP_FAILED) return -err;
+  *p = static_cast<std::uint8_t*>(data);
+  *length = static_cast<size_t>(stat.st_size);
+  return 0;
+}
+
+template <typename V>
+int TraceMmBase::Visit(const char* path, const V& v) {
+  int err;
+  std::uint8_t* data;
+  size_t length;
+  if ((err = MmapFile(path, 2, &data, &length)) < 0) return err;
+  if (data == MAP_FAILED) return -ENOMEM;
+  switch (data[0] << 8 | data[1]) {
+    case 'M' << 8 | '4':
+      return v(new TraceMm<Endianness::Big, std::uint32_t>(data, length));
+      break;
+    case 'M' << 8 | '8':
+      return v(new TraceMm<Endianness::Big, std::uint64_t>(data, length));
+      break;
+    case '4' << 8 | 'M':
+      return v(new TraceMm<Endianness::Little, std::uint32_t>(data, length));
+      break;
+    case '8' << 8 | 'M':
+      return v(new TraceMm<Endianness::Little, std::uint64_t>(data, length));
+      break;
+    default:
+      munmap(data, length);
+      return -EINVAL;
+  }
 }
 
 template <template <Endianness, typename> typename V, typename... Args>
 int VisitFile(const char* path, size_t start, size_t end, Args&&... args) {
-  std::ifstream is(path, std::ios::binary | std::ios::ate);
-  if (!is) {
-    std::cerr << "Could not open " << path << std::endl;
-    return EXIT_FAILURE;
-  }
-  size_t size = is.tellg();
-  // On average, one executed instruction takes 132.7 bytes in the trace file.
-  size_t expectedInsnCount = size / 128;
-  is.seekg(0, std::ios::beg);
-  Buffer buf;
-  if (buf.Update(&is) < 0 || buf.GetSize() < 2) {
-    std::cerr << "buf.Update() failed" << std::endl;
-    return EXIT_FAILURE;
-  }
-  if (buf.GetData()[0] == 'M' && buf.GetData()[1] == '4') {
-    return Rest<Endianness::Big, std::uint32_t, V>(
-        &is, expectedInsnCount, &buf, start, end, std::forward<Args>(args)...);
-  } else if (buf.GetData()[0] == 'M' && buf.GetData()[1] == '8') {
-    return Rest<Endianness::Big, std::uint64_t, V>(
-        &is, expectedInsnCount, &buf, start, end, std::forward<Args>(args)...);
-  } else if (buf.GetData()[0] == '4' && buf.GetData()[1] == 'M') {
-    return Rest<Endianness::Little, std::uint32_t, V>(
-        &is, expectedInsnCount, &buf, start, end, std::forward<Args>(args)...);
-  } else if (buf.GetData()[0] == '8' && buf.GetData()[1] == 'M') {
-    return Rest<Endianness::Little, std::uint64_t, V>(
-        &is, expectedInsnCount, &buf, start, end, std::forward<Args>(args)...);
-  } else {
-    std::cerr << "Unsupported magic" << std::endl;
-    return EXIT_FAILURE;
-  }
+  return TraceMmBase::Visit(path, [start, end, &args...](auto trace) {
+    int err = trace->template Visit<V>(start, end, std::forward<Args>(args)...);
+    delete trace;
+    return err;
+  });
+}
+
+TraceMmBase* TraceMmBase::Load(const char* path) {
+  TraceMmBase* result = nullptr;
+  Visit(path, [&result](TraceMmBase* trace) -> int {
+    result = trace;
+    return 0;
+  });
+  return result;
 }
 
 int DumpFile(const char* path, size_t start, size_t end) {
@@ -1452,9 +1475,7 @@ template <typename W>
 class UdMm : public UdMmBase {
  public:
   UdMm(void* data, size_t length) : data_(data), length_(length) {}
-  virtual ~UdMm() {
-    if (data_ != MAP_FAILED) munmap(data_, length_);
-  }
+  virtual ~UdMm() { munmap(data_, length_); }
 
   int Parse() override {
     header_ = static_cast<const BinaryHeader*>(data_);
@@ -1573,38 +1594,32 @@ int UdFile(const char* path, size_t start, size_t end, const char* dot,
 }
 
 UdMmBase* UdMmBase::Load(const char* path) {
-  int fd = open(path, O_RDONLY);
-  if (fd < 0) return nullptr;
-  struct stat stat;
-  if (fstat(fd, &stat) < 0 || stat.st_size < 2) {
-    close(fd);
-    return nullptr;
-  }
-  std::uint8_t* data = static_cast<std::uint8_t*>(
-      mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
-  close(fd);
+  int err;
+  std::uint8_t* data;
+  size_t length;
+  if ((err = MmapFile(path, 2, &data, &length)) < 0) return nullptr;
   if (data == MAP_FAILED) return nullptr;
   UdMmBase* ud = nullptr;
   switch (data[0] << 8 | data[1]) {
     case 'M' << 8 | '4':
       if (kHostEndianness == Endianness::Big)
-        ud = new UdMm<std::uint32_t>(data, stat.st_size);
+        ud = new UdMm<std::uint32_t>(data, length);
       break;
     case 'M' << 8 | '8':
       if (kHostEndianness == Endianness::Big)
-        ud = new UdMm<std::uint64_t>(data, stat.st_size);
+        ud = new UdMm<std::uint64_t>(data, length);
       break;
     case '4' << 8 | 'M':
       if (kHostEndianness == Endianness::Little)
-        ud = new UdMm<std::uint32_t>(data, stat.st_size);
+        ud = new UdMm<std::uint32_t>(data, length);
       break;
     case '8' << 8 | 'M':
       if (kHostEndianness == Endianness::Little)
-        ud = new UdMm<std::uint64_t>(data, stat.st_size);
+        ud = new UdMm<std::uint64_t>(data, length);
       break;
   }
   if (ud == nullptr) {
-    munmap(data, stat.st_size);
+    munmap(data, length);
     return nullptr;
   }
   if (ud->Parse() < 0) {
@@ -1619,6 +1634,10 @@ UdMmBase* UdMmBase::Load(const char* path) {
 BOOST_PYTHON_MODULE(memtrace_ext) {
   namespace bp = boost::python;
   bp::def("dump_file", DumpFile);
+  bp::class_<TraceMmBase, boost::noncopyable>("Trace", bp::no_init)
+      .def("load", &TraceMmBase::Load,
+           bp::return_value_policy<bp::manage_new_object>())
+      .staticmethod("load");
   bp::def("ud_file", UdFile);
   bp::class_<std::vector<std::uint32_t>>("std::vector<std::uint32_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint32_t>>());
