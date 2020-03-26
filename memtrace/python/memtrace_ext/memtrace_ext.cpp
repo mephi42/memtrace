@@ -24,6 +24,8 @@
 
 // clang-format off
 #include <boost/python.hpp>
+#include <boost/python/object/iterator_core.hpp>
+#include <boost/python/scope.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 #include <capstone/capstone.h>  // NOLINT(build/include_order)
 // clang-format on
@@ -152,7 +154,7 @@ struct IntConversions<kHostEndianness, T> {
 template <Endianness E, typename T>
 class RawInt {
  public:
-  explicit RawInt(const uint8_t* data) : data_(data) {}
+  explicit RawInt(const std::uint8_t* data) : data_(data) {}
 
   T GetValue() const {
     return IntConversions<E, T>::ConvertToHost(
@@ -160,87 +162,95 @@ class RawInt {
   }
 
  private:
-  const uint8_t* data_;
+  const std::uint8_t* data_;
 };
 
 template <Endianness E, typename W>
 class Tlv {
  public:
-  explicit Tlv(const uint8_t* data) : data_(data) {}
+  explicit Tlv(const std::uint8_t* data) : data_(data) {}
 
   static size_t GetFixedLength() { return sizeof(std::uint16_t) * 2; }
 
-  Tag GetTag() const { return (Tag)RawInt<E, std::uint16_t>(data_).GetValue(); }
+  Tag GetTag() const {
+    return static_cast<Tag>(RawInt<E, std::uint16_t>(data_).GetValue());
+  }
   W GetLength() const { return RawInt<E, std::uint16_t>(data_ + 2).GetValue(); }
   W GetAlignedLength() const {
-    return (GetLength() + ((W)sizeof(W) - 1)) & ~((W)sizeof(W) - 1);
+    return (GetLength() + (static_cast<W>(sizeof(W)) - 1)) &
+           ~(static_cast<W>(sizeof(W)) - 1);
   }
 
  private:
-  const uint8_t* data_;
+  const std::uint8_t* data_;
 };
 
 template <Endianness E, typename W>
 class HeaderEntry {
  public:
-  explicit HeaderEntry(const uint8_t* data) : data_(data) {}
+  explicit HeaderEntry(const std::uint8_t* data) : data_(data) {}
 
   static size_t GetFixedLength() { return sizeof(W) + sizeof(std::uint16_t); }
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
   MachineType GetMachineType() const {
-    return (MachineType)RawInt<E, std::uint16_t>(data_ + sizeof(W)).GetValue();
+    return static_cast<MachineType>(
+        RawInt<E, std::uint16_t>(data_ + sizeof(W)).GetValue());
   }
 
  private:
-  const uint8_t* data_;
+  const std::uint8_t* data_;
 };
 
 template <Endianness E, typename W>
 class LdStEntry {
  public:
-  explicit LdStEntry(const uint8_t* data) : data_(data) {}
+  explicit LdStEntry(const std::uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
   W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
   W GetAddr() const { return RawInt<E, W>(data_ + sizeof(W) * 2).GetValue(); }
-  const uint8_t* GetValue() const { return data_ + sizeof(W) * 3; }
-  W GetSize() const { return GetTlv().GetLength() - (W)sizeof(W) * 3; }
+  const std::uint8_t* GetValue() const { return data_ + sizeof(W) * 3; }
+  W GetSize() const {
+    return GetTlv().GetLength() - static_cast<W>(sizeof(W)) * 3;
+  }
 
  private:
-  const uint8_t* data_;
+  const std::uint8_t* data_;
 };
 
 template <Endianness E, typename W>
 class InsnEntry {
  public:
-  explicit InsnEntry(const uint8_t* data) : data_(data) {}
+  explicit InsnEntry(const std::uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
   W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
-  const uint8_t* GetValue() const { return data_ + sizeof(W) * 2; }
-  W GetSize() const { return GetTlv().GetLength() - (W)sizeof(W) * 2; }
+  const std::uint8_t* GetValue() const { return data_ + sizeof(W) * 2; }
+  W GetSize() const {
+    return GetTlv().GetLength() - static_cast<W>(sizeof(W)) * 2;
+  }
 
  private:
-  const uint8_t* data_;
+  const std::uint8_t* data_;
 };
 
 template <Endianness E, typename W>
 class InsnExecEntry {
  public:
-  explicit InsnExecEntry(const uint8_t* data) : data_(data) {}
+  explicit InsnExecEntry(const std::uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
   W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
 
  private:
-  const uint8_t* data_;
+  const std::uint8_t* data_;
 };
 
 template <Endianness E, typename W>
 class LdStNxEntry {
  public:
-  explicit LdStNxEntry(const uint8_t* data) : data_(data) {}
+  explicit LdStNxEntry(const std::uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
   W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
@@ -248,37 +258,39 @@ class LdStNxEntry {
   W GetSize() const { return RawInt<E, W>(data_ + sizeof(W) * 3).GetValue(); }
 
  private:
-  const uint8_t* data_;
+  const std::uint8_t* data_;
 };
 
 template <Endianness E, typename W>
 class MmapEntry {
  public:
-  explicit MmapEntry(const uint8_t* data) : data_(data) {}
+  explicit MmapEntry(const std::uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
   W GetStart() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
   W GetEnd() const { return RawInt<E, W>(data_ + sizeof(W) * 2).GetValue(); }
   W GetFlags() const { return RawInt<E, W>(data_ + sizeof(W) * 3).GetValue(); }
-  const uint8_t* GetValue() const { return data_ + sizeof(W) * 4; }
-  W GetSize() const { return GetTlv().GetLength() - (W)sizeof(W) * 4; }
+  const std::uint8_t* GetValue() const { return data_ + sizeof(W) * 4; }
+  W GetSize() const {
+    return GetTlv().GetLength() - static_cast<W>(sizeof(W)) * 4;
+  }
 
  private:
-  const uint8_t* data_;
+  const std::uint8_t* data_;
 };
 
-void HexDump(std::FILE* f, const uint8_t* buf, size_t n) {
+void HexDump(std::FILE* f, const std::uint8_t* buf, size_t n) {
   for (size_t i = 0; i < n; i++) std::fprintf(f, "%02x", buf[i]);
 }
 
-void ReprDump(const uint8_t* buf, size_t n) {
+void ReprDump(const std::uint8_t* buf, size_t n) {
   std::printf("b'");
   for (size_t i = 0; i < n; i++) std::printf("\\x%02x", buf[i]);
   std::printf("'");
 }
 
 template <Endianness E>
-void ValueDump(const uint8_t* buf, size_t n) {
+void ValueDump(const std::uint8_t* buf, size_t n) {
   switch (n) {
     case 1:
       std::printf("0x%" PRIx8, RawInt<E, std::uint8_t>(buf).GetValue());
@@ -335,7 +347,6 @@ class CsFree {
   const size_t count_;
 };
 
-template <typename W>
 class Disasm {
  public:
   Disasm() : capstone_(0) {}
@@ -343,40 +354,40 @@ class Disasm {
     if (capstone_ != 0) cs_close(&capstone_);
   }
 
-  int Init(MachineType type, Endianness endianness) {
+  int Init(MachineType type, Endianness endianness, size_t wordSize) {
     // See cstool.c for valid combinations.
     cs_arch arch;
     cs_mode mode;
     switch (type) {
       case MachineType::EM_386:
-        if (endianness != Endianness::Little || sizeof(W) != 4) return -EINVAL;
+        if (endianness != Endianness::Little || wordSize != 4) return -EINVAL;
         arch = CS_ARCH_X86;
         mode = CS_MODE_32;
         break;
       case MachineType::EM_X86_64:
-        if (endianness != Endianness::Little || sizeof(W) != 8) return -EINVAL;
+        if (endianness != Endianness::Little || wordSize != 8) return -EINVAL;
         arch = CS_ARCH_X86;
         mode = CS_MODE_64;
         break;
         // EM_PPC is not supported.
       case MachineType::EM_PPC64:
-        if (sizeof(W) != 8) return -EINVAL;
+        if (wordSize != 8) return -EINVAL;
         arch = CS_ARCH_PPC;
         if (endianness == Endianness::Little)
-          mode = (cs_mode)(CS_MODE_64 | CS_MODE_LITTLE_ENDIAN);
+          mode = static_cast<cs_mode>(CS_MODE_64 | CS_MODE_LITTLE_ENDIAN);
         else
-          mode = (cs_mode)(CS_MODE_64 | CS_MODE_BIG_ENDIAN);
+          mode = static_cast<cs_mode>(CS_MODE_64 | CS_MODE_BIG_ENDIAN);
         break;
       case MachineType::EM_ARM:
-        if (sizeof(W) != 4) return -EINVAL;
+        if (wordSize != 4) return -EINVAL;
         arch = CS_ARCH_ARM;
         if (endianness == Endianness::Little)
-          mode = (cs_mode)(CS_MODE_ARM | CS_MODE_LITTLE_ENDIAN);
+          mode = static_cast<cs_mode>(CS_MODE_ARM | CS_MODE_LITTLE_ENDIAN);
         else
-          mode = (cs_mode)(CS_MODE_ARM | CS_MODE_BIG_ENDIAN);
+          mode = static_cast<cs_mode>(CS_MODE_ARM | CS_MODE_BIG_ENDIAN);
         break;
       case MachineType::EM_AARCH64:
-        if (sizeof(W) != 8) return -EINVAL;
+        if (wordSize != 8) return -EINVAL;
         arch = CS_ARCH_ARM64;
         if (endianness == Endianness::Little)
           mode = CS_MODE_LITTLE_ENDIAN;
@@ -390,16 +401,16 @@ class Disasm {
         break;
       case MachineType::EM_MIPS:
         arch = CS_ARCH_MIPS;
-        if (sizeof(W) == 4) {
+        if (wordSize == 4) {
           if (endianness == Endianness::Little)
-            mode = (cs_mode)(CS_MODE_MIPS32 | CS_MODE_LITTLE_ENDIAN);
+            mode = static_cast<cs_mode>(CS_MODE_MIPS32 | CS_MODE_LITTLE_ENDIAN);
           else
-            mode = (cs_mode)(CS_MODE_MIPS32 | CS_MODE_BIG_ENDIAN);
+            mode = static_cast<cs_mode>(CS_MODE_MIPS32 | CS_MODE_BIG_ENDIAN);
         } else {
           if (endianness == Endianness::Little)
-            mode = (cs_mode)(CS_MODE_MIPS64 | CS_MODE_LITTLE_ENDIAN);
+            mode = static_cast<cs_mode>(CS_MODE_MIPS64 | CS_MODE_LITTLE_ENDIAN);
           else
-            mode = (cs_mode)(CS_MODE_MIPS64 | CS_MODE_BIG_ENDIAN);
+            mode = static_cast<cs_mode>(CS_MODE_MIPS64 | CS_MODE_BIG_ENDIAN);
         }
         break;
         // EM_NANOMIPS is not supported.
@@ -410,8 +421,9 @@ class Disasm {
     return 0;
   }
 
-  std::unique_ptr<cs_insn, CsFree> DoDisasm(const uint8_t* code,
-                                            size_t codeSize, uint64_t address,
+  std::unique_ptr<cs_insn, CsFree> DoDisasm(const std::uint8_t* code,
+                                            size_t codeSize,
+                                            std::uint64_t address,
                                             size_t count) const {
     cs_insn* insn = nullptr;
     size_t actualCount =
@@ -419,9 +431,28 @@ class Disasm {
     return std::unique_ptr<cs_insn, CsFree>(insn, CsFree(actualCount));
   }
 
+  std::string DisasmStr(const std::vector<std::uint8_t>& code,
+                        std::uint64_t address) {
+    std::unique_ptr<cs_insn, CsFree> insn =
+        DoDisasm(code.data(), code.size(), address, 0);
+    if (insn)
+      return std::string(insn->mnemonic) + " " + insn->op_str;
+    else
+      return ("<unknown>");
+  }
+
  private:
   csh capstone_;
 };
+
+Disasm* CreateDisasm(MachineType type, Endianness endianness, size_t wordSize) {
+  Disasm* disasm = new Disasm();
+  if (disasm->Init(type, endianness, wordSize) < 0) {
+    delete disasm;
+    throw std::runtime_error("Failed to initialize disassembler");
+  }
+  return disasm;
+}
 
 template <Endianness E, typename W>
 class Dumper {
@@ -434,14 +465,15 @@ class Dumper {
     std::printf("Word size         : %zu\n", sizeof(W));
     std::printf("Machine           : %s\n",
                 GetMachineTypeStr(entry.GetMachineType()));
-    return disasmEngine_.Init(entry.GetMachineType(), E);
+    return disasmEngine_.Init(entry.GetMachineType(), E, sizeof(W));
   }
 
   int operator()(size_t i, LdStEntry<E, W> entry) {
     std::printf("[%10zu] 0x%016" PRIx64 ": %s uint%zu_t [0x%" PRIx64 "] ", i,
-                (std::uint64_t)entry.GetPc(),
+                static_cast<std::uint64_t>(entry.GetPc()),
                 GetTagStr(entry.GetTlv().GetTag()),
-                (size_t)(entry.GetSize() * 8), (std::uint64_t)entry.GetAddr());
+                static_cast<size_t>(entry.GetSize() * 8),
+                static_cast<std::uint64_t>(entry.GetAddr()));
     ValueDump<E>(entry.GetValue(), entry.GetSize());
     std::printf("\n");
     return 0;
@@ -449,7 +481,7 @@ class Dumper {
 
   int operator()(size_t i, InsnEntry<E, W> entry) {
     std::printf("[%10zu] 0x%016" PRIx64 ": %s ", i,
-                (std::uint64_t)entry.GetPc(),
+                static_cast<std::uint64_t>(entry.GetPc()),
                 GetTagStr(entry.GetTlv().GetTag()));
     HexDump(stdout, entry.GetValue(), entry.GetSize());
     std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
@@ -463,7 +495,7 @@ class Dumper {
 
   int operator()(size_t i, InsnExecEntry<E, W> entry) {
     std::printf("[%10zu] 0x%016" PRIx64 ": %s\n", i,
-                (std::uint64_t)entry.GetPc(),
+                static_cast<std::uint64_t>(entry.GetPc()),
                 GetTagStr(entry.GetTlv().GetTag()));
     insnCount_++;
     return 0;
@@ -471,19 +503,21 @@ class Dumper {
 
   int operator()(size_t i, LdStNxEntry<E, W> entry) {
     std::printf("[%10zu] 0x%016" PRIx64 ": %s uint%zu_t [0x%" PRIx64 "]\n", i,
-                (std::uint64_t)entry.GetPc(),
+                static_cast<std::uint64_t>(entry.GetPc()),
                 GetTagStr(entry.GetTlv().GetTag()),
-                (size_t)(entry.GetSize() * 8), (std::uint64_t)entry.GetAddr());
+                static_cast<size_t>(entry.GetSize() * 8),
+                static_cast<std::uint64_t>(entry.GetAddr()));
     return 0;
   }
 
   int operator()(size_t i, MmapEntry<E, W> entry) {
-    std::printf(
-        "[%10zu] %s %016" PRIx64 "-%016" PRIx64 " %c%c%c %s\n", i,
-        GetTagStr(entry.GetTlv().GetTag()), (std::uint64_t)entry.GetStart(),
-        (std::uint64_t)(entry.GetEnd() + 1), entry.GetFlags() & 1 ? 'r' : '-',
-        entry.GetFlags() & 2 ? 'w' : '-', entry.GetFlags() & 4 ? 'x' : '-',
-        entry.GetValue());
+    std::printf("[%10zu] %s %016" PRIx64 "-%016" PRIx64 " %c%c%c %s\n", i,
+                GetTagStr(entry.GetTlv().GetTag()),
+                static_cast<std::uint64_t>(entry.GetStart()),
+                static_cast<std::uint64_t>(entry.GetEnd() + 1),
+                entry.GetFlags() & 1 ? 'r' : '-',
+                entry.GetFlags() & 2 ? 'w' : '-',
+                entry.GetFlags() & 4 ? 'x' : '-', entry.GetValue());
     return 0;
   }
 
@@ -494,7 +528,7 @@ class Dumper {
 
  private:
   size_t insnCount_;
-  Disasm<W> disasmEngine_;
+  Disasm disasmEngine_;
 };
 
 class TraceMmBase {
@@ -504,6 +538,113 @@ class TraceMmBase {
   static TraceMmBase* Load(const char* path);
 
   virtual ~TraceMmBase() = default;
+  virtual Endianness GetEndianness() = 0;
+  virtual size_t GetWordSize() = 0;
+  virtual MachineType GetMachineType() = 0;
+  virtual boost::python::object Next() = 0;
+};
+
+struct EntryPy {
+  template <Endianness E, typename W>
+  EntryPy(size_t index, Tlv<E, W> tlv) : index(index), tag(tlv.GetTag()) {}
+  virtual ~EntryPy() = default;
+
+  std::uint64_t index;
+  Tag tag;
+};
+
+struct LdStEntryPy : public EntryPy {
+  template <Endianness E, typename W>
+  LdStEntryPy(size_t index, LdStEntry<E, W> entry)
+      : EntryPy(index, entry.GetTlv()),
+        pc(entry.GetPc()),
+        addr(entry.GetAddr()),
+        value(entry.GetValue(), entry.GetValue() + entry.GetSize()) {}
+
+  std::uint64_t pc;
+  std::uint64_t addr;
+  std::vector<std::uint8_t> value;
+};
+
+struct InsnEntryPy : public EntryPy {
+  template <Endianness E, typename W>
+  InsnEntryPy(size_t index, const InsnEntry<E, W>& entry)
+      : EntryPy(index, entry.GetTlv()),
+        pc(entry.GetPc()),
+        value(entry.GetValue(), entry.GetValue() + entry.GetSize()) {}
+
+  std::uint64_t pc;
+  std::vector<std::uint8_t> value;
+};
+
+struct InsnExecEntryPy : public EntryPy {
+  template <Endianness E, typename W>
+  InsnExecEntryPy(size_t index, const InsnExecEntry<E, W>& entry)
+      : EntryPy(index, entry.GetTlv()), pc(entry.GetPc()) {}
+
+  std::uint64_t pc;
+};
+
+struct LdStNxEntryPy : public EntryPy {
+  template <Endianness E, typename W>
+  LdStNxEntryPy(size_t index, const LdStNxEntry<E, W>& entry)
+      : EntryPy(index, entry.GetTlv()),
+        pc(entry.GetPc()),
+        addr(entry.GetAddr()),
+        size(entry.GetSize()) {}
+
+  std::uint64_t pc;
+  std::uint64_t addr;
+  std::uint64_t size;
+};
+
+struct MmapEntryPy : public EntryPy {
+  template <Endianness E, typename W>
+  MmapEntryPy(size_t index, const MmapEntry<E, W>& entry)
+      : EntryPy(index, entry.GetTlv()),
+        start(entry.GetStart()),
+        end(entry.GetEnd()),
+        flags(entry.GetFlags()),
+        name(reinterpret_cast<const char*>(entry.GetValue())) {}
+
+  std::uint64_t start;
+  std::uint64_t end;
+  std::uint64_t flags;
+  std::string name;
+};
+
+struct TraceEntry2Py {
+  template <Endianness E, typename W>
+  int operator()(size_t index, LdStEntry<E, W> entry) {
+    py = boost::python::object(new LdStEntryPy(index, entry));
+    return 0;
+  }
+
+  template <Endianness E, typename W>
+  int operator()(size_t index, InsnEntry<E, W> entry) {
+    py = boost::python::object(new InsnEntryPy(index, entry));
+    return 0;
+  }
+
+  template <Endianness E, typename W>
+  int operator()(size_t index, InsnExecEntry<E, W> entry) {
+    py = boost::python::object(new InsnExecEntryPy(index, entry));
+    return 0;
+  }
+
+  template <Endianness E, typename W>
+  int operator()(size_t index, LdStNxEntry<E, W> entry) {
+    py = boost::python::object(new LdStNxEntryPy(index, entry));
+    return 0;
+  }
+
+  template <Endianness E, typename W>
+  int operator()(size_t index, MmapEntry<E, W> entry) {
+    py = boost::python::object(new MmapEntryPy(index, entry));
+    return 0;
+  }
+
+  boost::python::object py;
 };
 
 template <Endianness E, typename W>
@@ -513,55 +654,90 @@ class TraceMm : public TraceMmBase {
       : data_(data),
         length_(length),
         cur_(static_cast<std::uint8_t*>(data_)),
-        end_(cur_ + length_) {}
+        end_(cur_ + length_),
+        entryIndex_(0),
+        header_(cur_) {}
   virtual ~TraceMm() { munmap(data_, length_); }
+
+  template <typename V>
+  static int CreateAndVisit(std::uint8_t* data, size_t length, const V& v) {
+    int err;
+    TraceMm<E, W>* trace = new TraceMm<E, W>(data, length);
+    if ((err = trace->Init()) < 0) {
+      delete trace;
+      return err;
+    }
+    return v(trace);
+  }
+
+  int Init() {
+    if (!Have(HeaderEntry<E, W>::GetFixedLength())) return -EINVAL;
+    if (!Advance(header_.GetTlv().GetAlignedLength())) return -EINVAL;
+    return 0;
+  }
 
   template <template <Endianness, typename> typename V, typename... Args>
   int Visit(size_t start, size_t end, Args&&... args) {
-    if (!Have(HeaderEntry<E, W>::GetFixedLength())) return -EINVAL;
-    HeaderEntry<E, W> entry(cur_);
-    if (!Advance(entry.GetTlv().GetAlignedLength())) return -EINVAL;
     V<E, W> visitor(std::forward<Args>(args)...);
     // On average, one executed instruction takes 132.7 bytes in the trace file.
     int err;
-    if ((err = visitor.Init(entry, length_ / 128)) < 0) return err;
-    size_t i = 0;
-    while (cur_ != end_) {
-      if (!Have(Tlv<E, W>::GetFixedLength())) return -EINVAL;
-      Tlv<E, W> tlv(cur_);
-      if (!Have(tlv.GetAlignedLength())) return -EINVAL;
-      if (i >= start && i < end) {
-        Tag tag = tlv.GetTag();
-        err = -EINVAL;
-        switch (tag) {
-          case Tag::MT_LOAD:
-          case Tag::MT_STORE:
-          case Tag::MT_REG:
-          case Tag::MT_GET_REG:
-          case Tag::MT_PUT_REG:
-            err = visitor(i, LdStEntry<E, W>(cur_));
-            break;
-          case Tag::MT_INSN:
-            err = visitor(i, InsnEntry<E, W>(cur_));
-            break;
-          case Tag::MT_INSN_EXEC:
-            err = visitor(i, InsnExecEntry<E, W>(cur_));
-            break;
-          case Tag::MT_GET_REG_NX:
-          case Tag::MT_PUT_REG_NX:
-            err = visitor(i, LdStNxEntry<E, W>(cur_));
-            break;
-          case Tag::MT_MMAP:
-            err = visitor(i, MmapEntry<E, W>(cur_));
-            break;
-        }
-        if (err < 0) return err;
-      }
-      if (!Advance(tlv.GetAlignedLength())) return -EINVAL;
-      i++;
-    }
+    if ((err = visitor.Init(header_, length_ / 128)) < 0) return err;
+    while (cur_ != end_)
+      if ((err = VisitOne(start, end, &visitor)) < 0) return err;
     if ((err = visitor.Complete()) < 0) return err;
     return 0;
+  }
+
+  template <typename V>
+  int VisitOne(size_t start, size_t end, V* visitor) {
+    if (!Have(Tlv<E, W>::GetFixedLength())) return -EINVAL;
+    Tlv<E, W> tlv(cur_);
+    if (!Have(tlv.GetAlignedLength())) return -EINVAL;
+    if (entryIndex_ >= start && entryIndex_ < end) {
+      Tag tag = tlv.GetTag();
+      int err = -EINVAL;
+      switch (tag) {
+        case Tag::MT_LOAD:
+        case Tag::MT_STORE:
+        case Tag::MT_REG:
+        case Tag::MT_GET_REG:
+        case Tag::MT_PUT_REG:
+          err = (*visitor)(entryIndex_, LdStEntry<E, W>(cur_));
+          break;
+        case Tag::MT_INSN:
+          err = (*visitor)(entryIndex_, InsnEntry<E, W>(cur_));
+          break;
+        case Tag::MT_INSN_EXEC:
+          err = (*visitor)(entryIndex_, InsnExecEntry<E, W>(cur_));
+          break;
+        case Tag::MT_GET_REG_NX:
+        case Tag::MT_PUT_REG_NX:
+          err = (*visitor)(entryIndex_, LdStNxEntry<E, W>(cur_));
+          break;
+        case Tag::MT_MMAP:
+          err = (*visitor)(entryIndex_, MmapEntry<E, W>(cur_));
+          break;
+      }
+      if (err < 0) return err;
+    }
+    if (!Advance(tlv.GetAlignedLength())) return -EINVAL;
+    entryIndex_++;
+    return 0;
+  }
+
+  Endianness GetEndianness() override { return E; }
+
+  size_t GetWordSize() override { return sizeof(W); }
+
+  MachineType GetMachineType() override { return header_.GetMachineType(); }
+
+  boost::python::object Next() override {
+    if (cur_ == end_) boost::python::objects::stop_iteration_error();
+    TraceEntry2Py visitor;
+    int err = VisitOne(std::numeric_limits<size_t>::min(),
+                       std::numeric_limits<size_t>::max(), &visitor);
+    if (err < 0) throw std::runtime_error("Failed to parse the next entry");
+    return visitor.py;
   }
 
  private:
@@ -578,6 +754,8 @@ class TraceMm : public TraceMmBase {
   size_t length_;
   std::uint8_t* cur_;
   std::uint8_t* end_;
+  size_t entryIndex_;
+  HeaderEntry<E, W> header_;
 };
 
 int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
@@ -612,17 +790,17 @@ int TraceMmBase::Visit(const char* path, const V& v) {
   if (data == MAP_FAILED) return -ENOMEM;
   switch (data[0] << 8 | data[1]) {
     case 'M' << 8 | '4':
-      return v(new TraceMm<Endianness::Big, std::uint32_t>(data, length));
-      break;
+      return TraceMm<Endianness::Big, std::uint32_t>::CreateAndVisit(data,
+                                                                     length, v);
     case 'M' << 8 | '8':
-      return v(new TraceMm<Endianness::Big, std::uint64_t>(data, length));
-      break;
+      return TraceMm<Endianness::Big, std::uint64_t>::CreateAndVisit(data,
+                                                                     length, v);
     case '4' << 8 | 'M':
-      return v(new TraceMm<Endianness::Little, std::uint32_t>(data, length));
-      break;
+      return TraceMm<Endianness::Little, std::uint32_t>::CreateAndVisit(
+          data, length, v);
     case '8' << 8 | 'M':
-      return v(new TraceMm<Endianness::Little, std::uint64_t>(data, length));
-      break;
+      return TraceMm<Endianness::Little, std::uint64_t>::CreateAndVisit(
+          data, length, v);
     default:
       munmap(data, length);
       return -EINVAL;
@@ -680,7 +858,7 @@ size_t GetFirstPrimeGreaterThanOrEqualTo(size_t value) {
   static std::vector<size_t> primes = {3};
   value |= 1;
   while (true) {
-    size_t valueSqrt = (size_t)std::sqrt(value);
+    size_t valueSqrt = static_cast<size_t>(std::sqrt(value));
     while (primes.back() <= valueSqrt)
       primes.push_back(GetFirstPrimeGreaterThanOrEqualTo(primes.back() + 1));
     bool isPrime = true;
@@ -706,7 +884,8 @@ static const PartialUse<W>* ScanPartialUses(const PartialUse<W>* partialUses,
                                             std::uint32_t useIndex) {
   for (size_t entryIndex = 0; entryIndex < partialUseCount; entryIndex++) {
     const PartialUse<W>& partialUse = partialUses[entryIndex];
-    if (partialUse.first == useIndex || partialUse.first == (std::uint32_t)-1)
+    if (partialUse.first == useIndex ||
+        partialUse.first == static_cast<std::uint32_t>(-1))
       return &partialUse;
   }
   return nullptr;
@@ -765,7 +944,7 @@ class PartialUses {
     for (size_t oldEntryIndex = 0; oldEntryIndex < entries_.size();
          oldEntryIndex++) {
       PartialUse<W>& oldEntry = entries_[oldEntryIndex];
-      if (oldEntry.first == (std::uint32_t)-1) continue;
+      if (oldEntry.first == static_cast<std::uint32_t>(-1)) continue;
       PartialUse<W>& newEntry = const_cast<PartialUse<W>&>(
           FindPartialUse(newEntries.data(), newSize, oldEntry.first));
       assert(newEntry.first == (std::uint32_t)-1);
@@ -792,7 +971,7 @@ std::pair<const Def<W>*, std::uint32_t> ResolveUse(
   const Def<W>* def;
   const PartialUse<W>& partialUse =
       FindPartialUse(partialUses, partialUseCount, useIndex);
-  if (partialUse.first == (std::uint32_t)-1)
+  if (partialUse.first == static_cast<std::uint32_t>(-1))
     def = &*(defs + defIndex);
   else
     def = &partialUse.second;
@@ -804,7 +983,7 @@ std::pair<const Def<W>*, std::uint32_t> ResolveUse(
                          return defIndex < trace.*startDefIndex;
                        });
   --it;
-  std::uint32_t traceIndex = (std::uint32_t)(it - traceBegin);
+  std::uint32_t traceIndex = static_cast<std::uint32_t>(it - traceBegin);
 
   return std::make_pair(def, traceIndex);
 }
@@ -824,7 +1003,7 @@ class UdState {
     W endAddr = startAddr + size;
     for (It it = addressSpace_.lower_bound(startAddr + 1);
          it != addressSpace_.end() && it->second.startAddr < endAddr; ++it) {
-      std::uint32_t useIndex = (std::uint32_t)uses_.size();
+      std::uint32_t useIndex = static_cast<std::uint32_t>(uses_.size());
       uses_.push_back(it->second.defIndex);
       const Def<W>& def = defs_[it->second.defIndex];
       W maxStartAddr = std::max(startAddr, it->second.startAddr);
@@ -891,8 +1070,8 @@ class UdState {
       std::printf(useIndex == startIndex
                       ? "0x%" PRIx64 "-0x%" PRIx64 "@[%" PRIu32 "]"
                       : ", 0x%" PRIx64 "-0x%" PRIx64 "@[%" PRIu32 "]",
-                  (std::uint64_t)use.first->startAddr,
-                  (std::uint64_t)use.first->endAddr, use.second);
+                  static_cast<std::uint64_t>(use.first->startAddr),
+                  static_cast<std::uint64_t>(use.first->endAddr), use.second);
     }
   }
 
@@ -900,8 +1079,8 @@ class UdState {
     for (std::uint32_t defIndex = startIndex; defIndex < endIndex; defIndex++)
       std::printf(defIndex == startIndex ? "0x%" PRIx64 "-0x%" PRIx64
                                          : ", 0x%" PRIx64 "-0x%" PRIx64,
-                  (std::uint64_t)defs_[defIndex].startAddr,
-                  (std::uint64_t)defs_[defIndex].endAddr);
+                  static_cast<std::uint64_t>(defs_[defIndex].startAddr),
+                  static_cast<std::uint64_t>(defs_[defIndex].endAddr));
   }
 
   void DumpUsesDot(std::FILE* f, std::uint32_t traceIndex,
@@ -916,8 +1095,8 @@ class UdState {
                    "    %" PRIu32 " -> %" PRIu32 " [label=\"%s0x%" PRIx64
                    "-0x%" PRIx64 "\"]\n",
                    traceIndex, use.second, prefix,
-                   (std::uint64_t)use.first->startAddr,
-                   (std::uint64_t)use.first->endAddr);
+                   static_cast<std::uint64_t>(use.first->startAddr),
+                   static_cast<std::uint64_t>(use.first->endAddr));
     }
   }
 
@@ -932,8 +1111,9 @@ class UdState {
       std::fprintf(f,
                    "            <a href=\"#%" PRIu32 "\">%s0x%" PRIx64
                    "-0x%" PRIx64 "</a>\n",
-                   use.second, prefix, (std::uint64_t)use.first->startAddr,
-                   (std::uint64_t)use.first->endAddr);
+                   use.second, prefix,
+                   static_cast<std::uint64_t>(use.first->startAddr),
+                   static_cast<std::uint64_t>(use.first->endAddr));
     }
   }
 
@@ -941,8 +1121,8 @@ class UdState {
                     std::uint32_t endIndex, const char* prefix) const {
     for (std::uint32_t i = startIndex; i < endIndex; i++)
       std::fprintf(f, "            %s0x%" PRIx64 "-0x%" PRIx64 "\n", prefix,
-                   (std::uint64_t)defs_[i].startAddr,
-                   (std::uint64_t)defs_[i].endAddr);
+                   static_cast<std::uint64_t>(defs_[i].startAddr),
+                   static_cast<std::uint64_t>(defs_[i].endAddr));
   }
 
   void DumpUsesCsv(std::FILE* f, std::uint32_t traceIndex,
@@ -955,8 +1135,8 @@ class UdState {
           ResolveUse(useIndex, trace, startDefIndex);
       std::fprintf(f, "%" PRIu32 ",%" PRIu32 ",%s,%" PRIu64 ",%" PRIu64 "\n",
                    traceIndex, use.second, prefix,
-                   (std::uint64_t)use.first->startAddr,
-                   (std::uint64_t)use.first->endAddr);
+                   static_cast<std::uint64_t>(use.first->startAddr),
+                   static_cast<std::uint64_t>(use.first->endAddr));
     }
   }
 
@@ -975,7 +1155,7 @@ class UdState {
 
  private:
   void AddDef(W startAddr, W endAddr) {
-    std::uint32_t defIndex = (std::uint32_t)defs_.size();
+    std::uint32_t defIndex = static_cast<std::uint32_t>(defs_.size());
     Def<W>& def = defs_.emplace_back();
     def.startAddr = startAddr;
     def.endAddr = endAddr;
@@ -1022,7 +1202,9 @@ struct Int<8> {
 template <typename T>
 T GetAligned64(T pos) {
   using U = typename Int<sizeof(T)>::U;
-  return (T)(((U)pos + (U)7) & ~(U)7);
+  U uPos = (U)pos;
+  U aligned = (uPos + static_cast<U>(7)) & ~static_cast<U>(7);
+  return (T)aligned;
 }
 
 int Align64(FILE* f) {
@@ -1105,7 +1287,7 @@ class Ud {
 
     trace_.reserve(expectedInsnCount);
 
-    std::uint32_t codeIndex = (std::uint32_t)code_.size();
+    std::uint32_t codeIndex = static_cast<std::uint32_t>(code_.size());
     InsnInCode<W>& code = code_.emplace_back();
     code.pc = 0;
     code.textIndex = 0;
@@ -1121,7 +1303,7 @@ class Ud {
                    expectedInsnCount / 20);
 
     machineType_ = entry.GetMachineType();
-    return disasmEngine_.Init(machineType_, E);
+    return disasmEngine_.Init(machineType_, E, sizeof(W));
   }
 
   int operator()(size_t /* i */, LdStEntry<E, W> entry) {
@@ -1146,13 +1328,13 @@ class Ud {
   }
 
   int operator()(size_t /* i */, InsnEntry<E, W> entry) {
-    pcs_[entry.GetPc()] = (std::uint32_t)code_.size();
+    pcs_[entry.GetPc()] = static_cast<std::uint32_t>(code_.size());
     InsnInCode<W>& code = code_.emplace_back();
     code.pc = entry.GetPc();
-    code.textIndex = (std::uint32_t)text_.size();
+    code.textIndex = static_cast<std::uint32_t>(text_.size());
     text_.insert(text_.end(), entry.GetValue(),
                  entry.GetValue() + entry.GetSize());
-    code.textSize = (std::uint32_t)entry.GetSize();
+    code.textSize = static_cast<std::uint32_t>(entry.GetSize());
     std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
         entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
     if (insn) {
@@ -1200,15 +1382,15 @@ class Ud {
  private:
   int Flush() {
     InsnInTrace& trace = trace_.back();
-    trace.regUseEndIndex = (std::uint32_t)regState_.GetUseCount();
-    trace.memUseEndIndex = (std::uint32_t)memState_.GetUseCount();
-    trace.regDefEndIndex = (std::uint32_t)regState_.GetDefCount();
-    trace.memDefEndIndex = (std::uint32_t)memState_.GetDefCount();
+    trace.regUseEndIndex = static_cast<std::uint32_t>(regState_.GetUseCount());
+    trace.memUseEndIndex = static_cast<std::uint32_t>(memState_.GetUseCount());
+    trace.regDefEndIndex = static_cast<std::uint32_t>(regState_.GetDefCount());
+    trace.memDefEndIndex = static_cast<std::uint32_t>(memState_.GetDefCount());
 
     if (verbose_) {
       InsnInCode<W>& code = code_[trace.codeIndex];
       std::printf("[%zu]0x%" PRIx64 ": ", trace_.size() - 1,
-                  (std::uint64_t)code.pc);
+                  static_cast<std::uint64_t>(code.pc));
       HexDump(stdout, &text_[code.textIndex], code.textSize);
       std::printf(" %s reg_uses=[", disasm_[trace.codeIndex].c_str());
       regState_.DumpUses(trace.regUseStartIndex, trace.regUseEndIndex, trace_,
@@ -1229,10 +1411,14 @@ class Ud {
   int AddTrace(std::uint32_t codeIndex) {
     InsnInTrace& trace = trace_.emplace_back();
     trace.codeIndex = codeIndex;
-    trace.regUseStartIndex = (std::uint32_t)regState_.GetUseCount();
-    trace.memUseStartIndex = (std::uint32_t)memState_.GetUseCount();
-    trace.regDefStartIndex = (std::uint32_t)regState_.GetDefCount();
-    trace.memDefStartIndex = (std::uint32_t)memState_.GetDefCount();
+    trace.regUseStartIndex =
+        static_cast<std::uint32_t>(regState_.GetUseCount());
+    trace.memUseStartIndex =
+        static_cast<std::uint32_t>(memState_.GetUseCount());
+    trace.regDefStartIndex =
+        static_cast<std::uint32_t>(regState_.GetDefCount());
+    trace.memDefStartIndex =
+        static_cast<std::uint32_t>(memState_.GetDefCount());
     return 0;
   }
 
@@ -1255,7 +1441,7 @@ class Ud {
       const InsnInCode<W>& code = code_[trace.codeIndex];
       std::fprintf(
           f, "    %" PRIu32 " [label=\"[%" PRIu32 "] 0x%" PRIx64 ": %s\"]\n",
-          traceIndex, traceIndex, (std::uint64_t)code.pc,
+          traceIndex, traceIndex, static_cast<std::uint64_t>(code.pc),
           disasm_[trace.codeIndex].c_str());
       regState_.DumpUsesDot(f, traceIndex, trace.regUseStartIndex,
                             trace.regUseEndIndex, trace_,
@@ -1301,7 +1487,7 @@ class Ud {
                    "        <td>0x%" PRIx64
                    "</td>\n"
                    "        <td>",
-                   traceIndex, traceIndex, (std::uint64_t)code.pc);
+                   traceIndex, traceIndex, static_cast<std::uint64_t>(code.pc));
       HexDump(f, &text_[code.textIndex], code.textSize);
       std::fprintf(f,
                    "</td>\n"
@@ -1339,7 +1525,7 @@ class Ud {
     for (std::uint32_t codeIndex = 0; codeIndex < code_.size(); codeIndex++) {
       const InsnInCode<W>& code = code_[codeIndex];
       std::fprintf(f, "%" PRIu32 ",%" PRIu64 ",", codeIndex,
-                   (std::uint64_t)code_[codeIndex].pc);
+                   static_cast<std::uint64_t>(code_[codeIndex].pc));
       HexDump(f, &text_[code.textIndex], code.textSize);
       std::fprintf(f, ",\"%s\"\n", disasm_[codeIndex].c_str());
     }
@@ -1401,16 +1587,18 @@ class Ud {
     BinaryHeader header;
     *reinterpret_cast<std::uint16_t*>(header.magic) =
         ('M' << 8) | ('0' + sizeof(W));
-    header.machineType = (std::uint16_t)machineType_;
-    header.textCount = (std::uint32_t)text_.size();
-    header.codeCount = (std::uint32_t)code_.size();
-    header.traceCount = (std::uint32_t)trace_.size();
-    header.regUseCount = (std::uint32_t)regState_.GetUseCount();
-    header.regDefCount = (std::uint32_t)regState_.GetDefCount();
-    header.regPartialUseCount = (std::uint32_t)regState_.GetPartialUseCount();
-    header.memUseCount = (std::uint32_t)memState_.GetUseCount();
-    header.memDefCount = (std::uint32_t)memState_.GetDefCount();
-    header.memPartialUseCount = (std::uint32_t)memState_.GetPartialUseCount();
+    header.machineType = static_cast<std::uint16_t>(machineType_);
+    header.textCount = static_cast<std::uint32_t>(text_.size());
+    header.codeCount = static_cast<std::uint32_t>(code_.size());
+    header.traceCount = static_cast<std::uint32_t>(trace_.size());
+    header.regUseCount = static_cast<std::uint32_t>(regState_.GetUseCount());
+    header.regDefCount = static_cast<std::uint32_t>(regState_.GetDefCount());
+    header.regPartialUseCount =
+        static_cast<std::uint32_t>(regState_.GetPartialUseCount());
+    header.memUseCount = static_cast<std::uint32_t>(memState_.GetUseCount());
+    header.memDefCount = static_cast<std::uint32_t>(memState_.GetDefCount());
+    header.memPartialUseCount =
+        static_cast<std::uint32_t>(memState_.GetPartialUseCount());
     fwrite(&header, sizeof(header), 1, f);
     Align64(f);
     fwrite(text_.data(), sizeof(std::uint8_t), text_.size(), f);
@@ -1441,7 +1629,7 @@ class Ud {
   const bool verbose_;
   const char* csvPlaceholder_;
   MachineType machineType_;
-  Disasm<W> disasmEngine_;
+  Disasm disasmEngine_;
   std::vector<InsnInCode<W>> code_;
   std::vector<std::uint8_t> text_;
   std::vector<std::string> disasm_;
@@ -1480,17 +1668,19 @@ class UdMm : public UdMmBase {
   int Parse() override {
     header_ = static_cast<const BinaryHeader*>(data_);
     int ret;
-    if ((ret = disasmEngine_.Init((MachineType)header_->machineType,
-                                  kHostEndianness)) < 0)
+    if ((ret =
+             disasmEngine_.Init(static_cast<MachineType>(header_->machineType),
+                                kHostEndianness, sizeof(W))) < 0)
       return ret;
-    textBegin_ = reinterpret_cast<const uint8_t*>(GetAligned64(header_ + 1));
+    textBegin_ =
+        reinterpret_cast<const std::uint8_t*>(GetAligned64(header_ + 1));
     textEnd_ = textBegin_ + header_->textCount;
     codeBegin_ = reinterpret_cast<const InsnInCode<W>*>(GetAligned64(textEnd_));
     codeEnd_ = codeBegin_ + header_->codeCount;
     traceBegin_ = reinterpret_cast<const InsnInTrace*>(codeEnd_);
     traceEnd_ = traceBegin_ + header_->traceCount;
     const std::uint8_t* regStateEnd = regState_.Parse(
-        reinterpret_cast<const uint8_t*>(GetAligned64(traceEnd_)),
+        reinterpret_cast<const std::uint8_t*>(GetAligned64(traceEnd_)),
         header_->regUseCount, header_->regDefCount,
         header_->regPartialUseCount);
     const std::uint8_t* memStateEnd =
@@ -1504,7 +1694,8 @@ class UdMm : public UdMmBase {
   std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const override {
     std::vector<std::uint32_t> codes;
     for (const InsnInCode<W>* code = codeBegin_; code != codeEnd_; code++)
-      if (code->pc == pc) codes.push_back((std::uint32_t)(code - codeBegin_));
+      if (code->pc == pc)
+        codes.push_back(static_cast<std::uint32_t>(code - codeBegin_));
     return codes;
   }
 
@@ -1531,7 +1722,7 @@ class UdMm : public UdMmBase {
     std::vector<std::uint32_t> traces;
     for (const InsnInTrace* trace = traceBegin_; trace != traceEnd_; trace++)
       if (trace->codeIndex == code)
-        traces.push_back((std::uint32_t)(trace - traceBegin_));
+        traces.push_back(static_cast<std::uint32_t>(trace - traceBegin_));
     return traces;
   }
 
@@ -1584,7 +1775,7 @@ class UdMm : public UdMmBase {
   const InsnInTrace* traceEnd_;
   UdStateMm<W> regState_;
   UdStateMm<W> memState_;
-  Disasm<W> disasmEngine_;
+  Disasm disasmEngine_;
 };
 
 int UdFile(const char* path, size_t start, size_t end, const char* dot,
@@ -1633,12 +1824,67 @@ UdMmBase* UdMmBase::Load(const char* path) {
 
 BOOST_PYTHON_MODULE(memtrace_ext) {
   namespace bp = boost::python;
+  bp::enum_<Endianness>("Endianness")
+      .value("BIG_ENDIAN", Endianness::Big)
+      .value("LITTLE_ENDIAN", Endianness::Little);
+  bp::def("get_endianness_str", GetEndiannessStr);
+  bp::enum_<Tag>("Tag")
+      .value("MT_LOAD", Tag::MT_LOAD)
+      .value("MT_STORE", Tag::MT_STORE)
+      .value("MT_REG", Tag::MT_REG)
+      .value("MT_INSN", Tag::MT_INSN)
+      .value("MT_GET_REG", Tag::MT_GET_REG)
+      .value("MT_PUT_REG", Tag::MT_PUT_REG)
+      .value("MT_INSN_EXEC", Tag::MT_INSN_EXEC)
+      .value("MT_GET_REG_NX", Tag::MT_GET_REG_NX)
+      .value("MT_PUT_REG_NX", Tag::MT_PUT_REG_NX)
+      .value("MT_MMAP", Tag::MT_MMAP);
+  bp::def("get_tag_str", GetTagStr);
+  bp::enum_<MachineType>("MachineType")
+      .value("EM_386", MachineType::EM_386)
+      .value("EM_X86_64", MachineType::EM_X86_64)
+      .value("EM_PPC", MachineType::EM_PPC)
+      .value("EM_PPC64", MachineType::EM_PPC64)
+      .value("EM_ARM", MachineType::EM_ARM)
+      .value("EM_AARCH64", MachineType::EM_AARCH64)
+      .value("EM_S390", MachineType::EM_S390)
+      .value("EM_MIPS", MachineType::EM_MIPS)
+      .value("EM_NANOMIPS", MachineType::EM_NANOMIPS);
+  bp::def("get_machine_type_str", GetMachineTypeStr);
+  bp::class_<EntryPy>("Entry", bp::no_init)
+      .def_readonly("index", &EntryPy::index)
+      .def_readonly("tag", &EntryPy::tag);
+  bp::class_<LdStEntryPy, bp::bases<EntryPy>>("LdStEntry", bp::no_init)
+      .def_readonly("pc", &LdStEntryPy::pc)
+      .def_readonly("addr", &LdStEntryPy::addr)
+      .def_readonly("value", &LdStEntryPy::value);
+  bp::class_<InsnEntryPy, bp::bases<EntryPy>>("InsnEntry", bp::no_init)
+      .def_readonly("pc", &InsnEntryPy::pc)
+      .def_readonly("value", &InsnEntryPy::value);
+  bp::class_<InsnExecEntryPy, bp::bases<EntryPy>>("InsnExecEntry", bp::no_init)
+      .def_readonly("pc", &InsnExecEntryPy::pc);
+  bp::class_<LdStNxEntryPy, bp::bases<EntryPy>>("LdStNxEntry", bp::no_init)
+      .def_readonly("pc", &LdStNxEntryPy::pc)
+      .def_readonly("addr", &LdStNxEntryPy::addr)
+      .def_readonly("size", &LdStNxEntryPy::size);
+  bp::class_<MmapEntryPy, bp::bases<EntryPy>>("MmapEntry", bp::no_init)
+      .def_readonly("start", &MmapEntryPy::start)
+      .def_readonly("end", &MmapEntryPy::end)
+      .def_readonly("flags", &MmapEntryPy::flags)
+      .def_readonly("name", &MmapEntryPy::name);
   bp::def("dump_file", DumpFile);
   bp::class_<TraceMmBase, boost::noncopyable>("Trace", bp::no_init)
       .def("load", &TraceMmBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
-      .staticmethod("load");
+      .staticmethod("load")
+      .def("get_endianness", &TraceMmBase::GetEndianness)
+      .def("get_word_size", &TraceMmBase::GetWordSize)
+      .def("get_machine_type", &TraceMmBase::GetMachineType)
+      .def("__iter__", bp::objects::identity_function())
+      .def("__next__", &TraceMmBase::Next);
   bp::def("ud_file", UdFile);
+  bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
+      .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
   bp::class_<std::vector<std::uint32_t>>("std::vector<std::uint32_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint32_t>>());
   bp::class_<UdMmBase, boost::noncopyable>("Ud", bp::no_init)
@@ -1654,4 +1900,7 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("get_mem_uses_for_trace", &UdMmBase::GetMemUsesForTrace)
       .def("get_trace_for_reg_use", &UdMmBase::GetTraceForRegUse)
       .def("get_trace_for_mem_use", &UdMmBase::GetTraceForMemUse);
+  bp::class_<Disasm, boost::noncopyable>("Disasm", bp::no_init)
+      .def("__init__", bp::make_constructor(CreateDisasm))
+      .def("disasm_str", &Disasm::DisasmStr);
 }
