@@ -542,6 +542,7 @@ class TraceMmBase {
   virtual size_t GetWordSize() = 0;
   virtual MachineType GetMachineType() = 0;
   virtual boost::python::object Next() = 0;
+  virtual void SeekInsn(std::uint32_t index) = 0;
 };
 
 struct EntryPy {
@@ -613,38 +614,68 @@ struct MmapEntryPy : public EntryPy {
   std::string name;
 };
 
+template <Endianness E, typename W>
 struct TraceEntry2Py {
-  template <Endianness E, typename W>
   int operator()(size_t index, LdStEntry<E, W> entry) {
     py = boost::python::object(new LdStEntryPy(index, entry));
     return 0;
   }
 
-  template <Endianness E, typename W>
   int operator()(size_t index, InsnEntry<E, W> entry) {
     py = boost::python::object(new InsnEntryPy(index, entry));
     return 0;
   }
 
-  template <Endianness E, typename W>
   int operator()(size_t index, InsnExecEntry<E, W> entry) {
     py = boost::python::object(new InsnExecEntryPy(index, entry));
     return 0;
   }
 
-  template <Endianness E, typename W>
   int operator()(size_t index, LdStNxEntry<E, W> entry) {
     py = boost::python::object(new LdStNxEntryPy(index, entry));
     return 0;
   }
 
-  template <Endianness E, typename W>
   int operator()(size_t index, MmapEntry<E, W> entry) {
     py = boost::python::object(new MmapEntryPy(index, entry));
     return 0;
   }
 
   boost::python::object py;
+};
+
+template <Endianness E, typename W>
+struct Seek {
+  Seek()
+      : insnIndex(std::numeric_limits<size_t>::max()),
+        prevPc(std::numeric_limits<W>::max()) {}
+
+  int operator()(size_t /* index */, LdStEntry<E, W> entry) {
+    return HandlePc(entry.GetPc());
+  }
+
+  int operator()(size_t /* index */, InsnEntry<E, W> /* entry */) { return 0; }
+
+  int operator()(size_t /* index */, InsnExecEntry<E, W> entry) {
+    return HandlePc(entry.GetPc());
+  }
+
+  int operator()(size_t /* index */, LdStNxEntry<E, W> entry) {
+    return HandlePc(entry.GetPc());
+  }
+
+  int operator()(size_t /* index */, MmapEntry<E, W> /* entry */) { return 0; }
+
+  int HandlePc(W pc) {
+    if (pc != prevPc) {
+      insnIndex++;
+      prevPc = pc;
+    }
+    return 0;
+  }
+
+  size_t insnIndex;
+  W prevPc;
 };
 
 template <Endianness E, typename W>
@@ -733,11 +764,30 @@ class TraceMm : public TraceMmBase {
 
   boost::python::object Next() override {
     if (cur_ == end_) boost::python::objects::stop_iteration_error();
-    TraceEntry2Py visitor;
+    TraceEntry2Py<E, W> visitor;
     int err = VisitOne(std::numeric_limits<size_t>::min(),
                        std::numeric_limits<size_t>::max(), &visitor);
     if (err < 0) throw std::runtime_error("Failed to parse the next entry");
     return visitor.py;
+  }
+
+  void SeekInsn(std::uint32_t index) override {
+    cur_ =
+        static_cast<std::uint8_t*>(data_) + header_.GetTlv().GetAlignedLength();
+    entryIndex_ = 0;
+    Seek<E, W> visitor;
+    while (true) {
+      if (cur_ == end_) throw std::invalid_argument("No such insn");
+      std::uint8_t* prev = cur_;
+      int err = VisitOne(std::numeric_limits<size_t>::min(),
+                         std::numeric_limits<size_t>::max(), &visitor);
+      if (err < 0) throw std::runtime_error("Failed to parse the next entry");
+      if (visitor.insnIndex == index) {
+        cur_ = prev;
+        entryIndex_--;
+        break;
+      }
+    }
   }
 
  private:
@@ -1881,7 +1931,8 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("get_word_size", &TraceMmBase::GetWordSize)
       .def("get_machine_type", &TraceMmBase::GetMachineType)
       .def("__iter__", bp::objects::identity_function())
-      .def("__next__", &TraceMmBase::Next);
+      .def("__next__", &TraceMmBase::Next)
+      .def("seek_insn", &TraceMmBase::SeekInsn);
   bp::def("ud_file", UdFile);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());

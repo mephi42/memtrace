@@ -7,21 +7,20 @@ import sys
 import tempfile
 import unittest
 
-from memtrace_ext import Disasm, get_endianness_str, get_tag_str, \
+from memtrace_ext import Disasm, Entry, get_endianness_str, get_tag_str, \
     get_machine_type_str, InsnEntry, InsnExecEntry, LdStEntry, \
     LdStNxEntry, MmapEntry, Trace
 
 
-class Test(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class TestCommon(unittest.TestCase):
+    def setUp(self) -> None:
         self.basedir = os.path.dirname(os.path.realpath(__file__))
         pythondir = os.path.dirname(self.basedir)
         memtracedir = os.path.dirname(pythondir)
         self.rootdir = os.path.dirname(memtracedir)
         self.vg_in_place = os.path.join(self.rootdir, 'vg-in-place')
 
-    def _compile(self, workdir, target):
+    def _compile(self, workdir: str, target: str) -> None:
         args = [
             'cc',
             '-o', os.path.join(workdir, target),
@@ -31,7 +30,7 @@ class Test(unittest.TestCase):
         sys.stderr.write('{}\n'.format(' '.join(args)))
         subprocess.check_call(args, cwd=self.basedir)
 
-    def _memtrace(self, workdir, target):
+    def _memtrace(self, workdir: str, target: str) -> None:
         args = [
             self.vg_in_place,
             '--tool=memtrace',
@@ -41,15 +40,16 @@ class Test(unittest.TestCase):
         sys.stderr.write('{}\n'.format(' '.join(args)))
         subprocess.check_call(args, cwd=workdir)
 
-    def _filter_line(self, fp, line, rootdir_bytes, workdir_bytes):
-        if rootdir_bytes in line:
+    def _filter_line(
+            self, fp, line: bytes, rootdir: bytes, workdir: bytes) -> None:
+        if rootdir in line:
             return
         if b'[stack]' in line:
             return
-        line = line.replace(workdir_bytes, b'{workdir}')
+        line = line.replace(workdir, b'{workdir}')
         fp.write(line)
 
-    def _dump(self, workdir, target):
+    def _dump(self, workdir: str, target: str) -> None:
         dump_txt = f'{target}-dump.txt'
         actual_dump_txt = os.path.join(workdir, dump_txt)
         expected_dump_txt = os.path.join(self.basedir, dump_txt)
@@ -73,7 +73,7 @@ class Test(unittest.TestCase):
             actual_dump_txt,
         ])
 
-    def _ud(self, workdir, target):
+    def _ud(self, workdir: str, target: str) -> None:
         ud_txt = f'{target}-ud.txt'
         actual_ud_txt = os.path.join(workdir, ud_txt)
         expected_ud_txt = os.path.join(self.basedir, ud_txt)
@@ -88,7 +88,7 @@ class Test(unittest.TestCase):
             actual_ud_txt,
         ])
 
-    def _format_value(self, value, endianness):
+    def _format_value(self, value: bytes, endianness: str) -> str:
         if len(value) == 1:
             return hex(struct.unpack(endianness + 'B', value)[0])
         elif len(value) == 2:
@@ -100,7 +100,8 @@ class Test(unittest.TestCase):
         else:
             return value.hex()
 
-    def _format_entry(self, entry, endianness, disasm):
+    def _format_entry(
+            self, entry: Entry, endianness: str, disasm: Disasm) -> str:
         # This is a private reimplementation of the dumping logic, which tests
         # that all the properties are accessible in python.
         s = '[{:10}] '.format(entry.index)
@@ -142,7 +143,7 @@ class Test(unittest.TestCase):
             self.fail()
         return s
 
-    def _trace(self, workdir, target):
+    def _trace(self, workdir: str, target: str) -> None:
         dump_txt = f'{target}-dump.txt'
         actual_dump_txt = os.path.join(workdir, dump_txt)
         expected_dump_txt = os.path.join(self.basedir, dump_txt)
@@ -180,17 +181,61 @@ class Test(unittest.TestCase):
             actual_dump_txt,
         ])
 
-    def _test_memtrace(self, target):
-        with tempfile.TemporaryDirectory() as workdir:
-            self._compile(workdir, target)
-            self._memtrace(workdir, target)
-            self._dump(workdir, target)
-            self._ud(workdir, target)
-            self._trace(workdir, target)
+    def _seek(self, workdir: str, target: str) -> None:
+        seek_txt = f'{target}-seek.txt'
+        actual_seek_txt = os.path.join(workdir, seek_txt)
+        expected_seek_txt = os.path.join(self.basedir, seek_txt)
+        trace = Trace.load(os.path.join(workdir, 'memtrace.out'))
+        endianness = trace.get_endianness()
+        endianness_str = get_endianness_str(endianness)
+        disasm = Disasm(
+            trace.get_machine_type(),
+            endianness,
+            trace.get_word_size(),
+        )
+        i = 0
+        with open(actual_seek_txt, 'w') as fp:
+            while True:
+                try:
+                    trace.seek_insn(i)
+                except ValueError:
+                    break
+                entry = next(trace)
+                entry_str = self._format_entry(entry, endianness_str, disasm)
+                fp.write(entry_str + '\n')
+                i += 1
+        subprocess.check_call([
+            'diff',
+            '-au',
+            expected_seek_txt,
+            actual_seek_txt,
+        ])
 
-    @unittest.skipIf(platform.machine() != 'x86_64', 'x86_64 only')
-    def test_memtrace_x86_64(self):
-        self._test_memtrace('x86_64')
+
+class TestX86_64(TestCommon):
+    def setUp(self) -> None:
+        if platform.machine() != 'x86_64':
+            raise unittest.SkipTest('x86_64 only')
+        super().setUp()
+        self.target = 'x86_64'
+        self.workdir = tempfile.TemporaryDirectory()
+        self._compile(self.workdir.name, self.target)
+        self._memtrace(self.workdir.name, self.target)
+
+    def tearDown(self) -> None:
+        self.workdir.cleanup()
+
+    def test_dump(self) -> None:
+        self._dump(self.workdir.name, self.target)
+
+    def test_ud(self) -> None:
+        self._ud(self.workdir.name, self.target)
+
+    def test_trace(self) -> None:
+        self._trace(self.workdir.name, self.target)
+
+    def test_seek_insn(self) -> None:
+        self._seek(self.workdir.name, self.target)
 
 
 if __name__ == '__main__':
