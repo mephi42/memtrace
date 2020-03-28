@@ -1,44 +1,52 @@
 #!/usr/bin/env python3
 import os
 import platform
-import struct
 import subprocess
 import sys
 import tempfile
 import unittest
 
-from memtrace_ext import Disasm, Entry, get_endianness_str, get_tag_str, \
-    get_machine_type_str, InsnEntry, InsnExecEntry, LdStEntry, \
-    LdStNxEntry, MmapEntry, Trace
+from memtrace.format import format_entry
+import memtrace.taint as taint
+from memtrace_ext import Disasm, get_endianness_str, get_machine_type_str, \
+    InsnExecEntry, Trace
 
 
 class TestCommon(unittest.TestCase):
-    def setUp(self) -> None:
-        self.basedir = os.path.dirname(os.path.realpath(__file__))
-        pythondir = os.path.dirname(self.basedir)
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.basedir = os.path.dirname(os.path.realpath(__file__))
+        pythondir = os.path.dirname(cls.basedir)
         memtracedir = os.path.dirname(pythondir)
-        self.rootdir = os.path.dirname(memtracedir)
-        self.vg_in_place = os.path.join(self.rootdir, 'vg-in-place')
+        cls.rootdir = os.path.dirname(memtracedir)
+        cls.vg_in_place = os.path.join(cls.rootdir, 'vg-in-place')
 
-    def _compile(self, workdir: str, target: str) -> None:
+    @classmethod
+    def _compile(cls, workdir: str, target: str) -> None:
         args = [
             'cc',
             '-o', os.path.join(workdir, target),
             '-nostdlib',
+            '-static',
             f'{target}.S',
         ]
         sys.stderr.write('{}\n'.format(' '.join(args)))
-        subprocess.check_call(args, cwd=self.basedir)
+        subprocess.check_call(args, cwd=cls.basedir)
 
-    def _memtrace(self, workdir: str, target: str) -> None:
+    @classmethod
+    def _memtrace(cls, workdir: str, target: str) -> None:
         args = [
-            self.vg_in_place,
+            cls.vg_in_place,
             '--tool=memtrace',
             '--pc-range=0-0xffffffffffffffff:imr',
             f'./{target}',
         ]
         sys.stderr.write('{}\n'.format(' '.join(args)))
-        subprocess.check_call(args, cwd=workdir)
+        with tempfile.NamedTemporaryFile() as fp:
+            fp.write(b'*')
+            fp.flush()
+            fp.seek(0)
+            subprocess.check_call(args, stdin=fp, cwd=workdir)
 
     def _filter_line(
             self, fp, line: bytes, rootdir: bytes, workdir: bytes) -> None:
@@ -63,6 +71,7 @@ class TestCommon(unittest.TestCase):
                 for line in p.stdout:
                     self._filter_line(fp, line, rootdir_bytes, workdir_bytes)
         finally:
+            p.stdout.close()
             returncode = p.wait()
             if returncode != 0:
                 raise subprocess.CalledProcessError(returncode, args)
@@ -87,61 +96,6 @@ class TestCommon(unittest.TestCase):
             expected_ud_txt,
             actual_ud_txt,
         ])
-
-    def _format_value(self, value: bytes, endianness: str) -> str:
-        if len(value) == 1:
-            return hex(struct.unpack(endianness + 'B', value)[0])
-        elif len(value) == 2:
-            return hex(struct.unpack(endianness + 'H', value)[0])
-        elif len(value) == 4:
-            return hex(struct.unpack(endianness + 'I', value)[0])
-        elif len(value) == 8:
-            return hex(struct.unpack(endianness + 'Q', value)[0])
-        else:
-            return value.hex()
-
-    def _format_entry(
-            self, entry: Entry, endianness: str, disasm: Disasm) -> str:
-        # This is a private reimplementation of the dumping logic, which tests
-        # that all the properties are accessible in python.
-        s = '[{:10}] '.format(entry.index)
-        if isinstance(entry, LdStEntry):
-            s += '0x{:016x}: {} uint{}_t [0x{:x}] {}'.format(
-                entry.pc,
-                get_tag_str(entry.tag),
-                len(entry.value) * 8,
-                entry.addr,
-                self._format_value(bytes(entry.value), endianness),
-            )
-        elif isinstance(entry, InsnEntry):
-            s += '0x{:016x}: {} {} {}'.format(
-                entry.pc,
-                get_tag_str(entry.tag),
-                bytes(entry.value).hex(),
-                disasm.disasm_str(entry.value, entry.pc),
-            )
-        elif isinstance(entry, InsnExecEntry):
-            s += '0x{:016x}: {}'.format(entry.pc, get_tag_str(entry.tag))
-        elif isinstance(entry, LdStNxEntry):
-            s += '0x{:016x}: {} uint{}_t [0x{:x}]'.format(
-                entry.pc,
-                get_tag_str(entry.tag),
-                len(entry.value) * 8,
-                entry.addr,
-            )
-        elif isinstance(entry, MmapEntry):
-            s += '{} {:016x}-{:016x} {}{}{} {}'.format(
-                get_tag_str(entry.tag),
-                entry.start,
-                entry.end + 1,
-                'r' if entry.flags & 1 else '-',
-                'w' if entry.flags & 2 else '-',
-                'x' if entry.flags & 4 else '-',
-                entry.name,
-            )
-        else:
-            self.fail()
-        return s
 
     def _trace(self, workdir: str, target: str) -> None:
         dump_txt = f'{target}-dump.txt'
@@ -170,7 +124,7 @@ class TestCommon(unittest.TestCase):
             for entry in trace:
                 if isinstance(entry, InsnExecEntry):
                     insn_count += 1
-                line_str = self._format_entry(entry, endianness_str, disasm)
+                line_str = format_entry(entry, endianness_str, disasm)
                 line = (line_str + '\n').encode()
                 self._filter_line(fp, line, rootdir_bytes, workdir_bytes)
             fp.write('Insns             : {}\n'.format(insn_count).encode())
@@ -201,7 +155,7 @@ class TestCommon(unittest.TestCase):
                 except ValueError:
                     break
                 entry = next(trace)
-                entry_str = self._format_entry(entry, endianness_str, disasm)
+                entry_str = format_entry(entry, endianness_str, disasm)
                 fp.write(entry_str + '\n')
                 i += 1
         subprocess.check_call([
@@ -211,19 +165,40 @@ class TestCommon(unittest.TestCase):
             actual_seek_txt,
         ])
 
+    def _taint(self, workdir, target):
+        taint_pc_txt = os.path.join(self.basedir, f'{target}-taint-pc.txt')
+        taint_txt = f'{target}-taint.txt'
+        actual_taint_txt = os.path.join(workdir, taint_txt)
+        expected_taint_txt = os.path.join(self.basedir, taint_txt)
+        backward = taint.Backward.from_trace_file(
+            os.path.join(workdir, 'memtrace.out'))
+        with open(taint_pc_txt) as fp:
+            pc = int(fp.read(), 0)
+        dag = backward.analyze(pc)
+        with open(actual_taint_txt, 'w') as fp:
+            dag.pp(backward, fp)
+        subprocess.check_call([
+            'diff',
+            '-au',
+            expected_taint_txt,
+            actual_taint_txt,
+        ])
+
 
 class TestX86_64(TestCommon):
-    def setUp(self) -> None:
+    @classmethod
+    def setUpClass(cls) -> None:
         if platform.machine() != 'x86_64':
             raise unittest.SkipTest('x86_64 only')
-        super().setUp()
-        self.target = 'x86_64'
-        self.workdir = tempfile.TemporaryDirectory()
-        self._compile(self.workdir.name, self.target)
-        self._memtrace(self.workdir.name, self.target)
+        super().setUpClass()
+        cls.target = 'x86_64'
+        cls.workdir = tempfile.TemporaryDirectory()
+        cls._compile(cls.workdir.name, cls.target)
+        cls._memtrace(cls.workdir.name, cls.target)
 
-    def tearDown(self) -> None:
-        self.workdir.cleanup()
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.workdir.cleanup()
 
     def test_dump(self) -> None:
         self._dump(self.workdir.name, self.target)
@@ -236,6 +211,9 @@ class TestX86_64(TestCommon):
 
     def test_seek_insn(self) -> None:
         self._seek(self.workdir.name, self.target)
+
+    def test_taint(self) -> None:
+        self._taint(self.workdir.name, self.target)
 
 
 if __name__ == '__main__':
