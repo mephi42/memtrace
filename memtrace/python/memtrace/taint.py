@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from collections import deque
 from dataclasses import dataclass, field
+import os
 from typing import Deque, Dict, List, Tuple
 import sys
 import tempfile
@@ -69,18 +70,21 @@ class Backward:
     @staticmethod
     def from_trace_file(path) -> 'Backward':
         trace = Trace.load(path)
-        with tempfile.NamedTemporaryFile() as fp:
-            ud_file(
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ud_path = os.path.join(tmpdir, '{}.bin')
+            err = ud_file(
                 path,
                 0,  # start
                 999999999,  # end
                 None,  # dot
                 None,  # html
                 None,  # csv
-                fp.name,  # binary
+                ud_path,  # binary
                 None,  # verbose
             )
-            ud = Ud.load(fp.name)
+            if err < 0:
+                raise Exception(f'use-def analysis failed: {err}')
+            ud = Ud.load(ud_path)
         return Backward(trace, ud)
 
     def __init__(self, trace: Trace, ud: Ud):

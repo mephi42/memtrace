@@ -19,6 +19,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -454,11 +455,12 @@ Disasm* CreateDisasm(MachineType type, Endianness endianness, size_t wordSize) {
   return disasm;
 }
 
-template <Endianness E, typename W>
+template <typename W>
 class Dumper {
  public:
   Dumper() : insnCount_(0) {}
 
+  template <Endianness E>
   int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
     std::printf("Endian            : %s\n", GetEndiannessStr(E));
     std::printf("Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
@@ -468,6 +470,7 @@ class Dumper {
     return disasmEngine_.Init(entry.GetMachineType(), E, sizeof(W));
   }
 
+  template <Endianness E>
   int operator()(size_t i, LdStEntry<E, W> entry) {
     std::printf("[%10zu] 0x%016" PRIx64 ": %s uint%zu_t [0x%" PRIx64 "] ", i,
                 static_cast<std::uint64_t>(entry.GetPc()),
@@ -479,6 +482,7 @@ class Dumper {
     return 0;
   }
 
+  template <Endianness E>
   int operator()(size_t i, InsnEntry<E, W> entry) {
     std::printf("[%10zu] 0x%016" PRIx64 ": %s ", i,
                 static_cast<std::uint64_t>(entry.GetPc()),
@@ -493,6 +497,7 @@ class Dumper {
     return 0;
   }
 
+  template <Endianness E>
   int operator()(size_t i, InsnExecEntry<E, W> entry) {
     std::printf("[%10zu] 0x%016" PRIx64 ": %s\n", i,
                 static_cast<std::uint64_t>(entry.GetPc()),
@@ -501,6 +506,7 @@ class Dumper {
     return 0;
   }
 
+  template <Endianness E>
   int operator()(size_t i, LdStNxEntry<E, W> entry) {
     std::printf("[%10zu] 0x%016" PRIx64 ": %s uint%zu_t [0x%" PRIx64 "]\n", i,
                 static_cast<std::uint64_t>(entry.GetPc()),
@@ -510,6 +516,7 @@ class Dumper {
     return 0;
   }
 
+  template <Endianness E>
   int operator()(size_t i, MmapEntry<E, W> entry) {
     std::printf("[%10zu] %s %016" PRIx64 "-%016" PRIx64 " %c%c%c %s\n", i,
                 GetTagStr(entry.GetTlv().GetTag()),
@@ -707,9 +714,9 @@ class TraceMm : public TraceMmBase {
     return 0;
   }
 
-  template <template <Endianness, typename> typename V, typename... Args>
+  template <template <typename> typename V, typename... Args>
   int Visit(size_t start, size_t end, Args&&... args) {
-    V<E, W> visitor(std::forward<Args>(args)...);
+    V<W> visitor(std::forward<Args>(args)...);
     // On average, one executed instruction takes 132.7 bytes in the trace file.
     int err;
     if ((err = visitor.Init(header_, length_ / 128)) < 0) return err;
@@ -857,7 +864,7 @@ int TraceMmBase::Visit(const char* path, const V& v) {
   }
 }
 
-template <template <Endianness, typename> typename V, typename... Args>
+template <template <typename> typename V, typename... Args>
 int VisitFile(const char* path, size_t start, size_t end, Args&&... args) {
   return TraceMmBase::Visit(path, [start, end, &args...](auto trace) {
     int err = trace->template Visit<V>(start, end, std::forward<Args>(args)...);
@@ -902,6 +909,193 @@ struct InsnInTrace {
   std::uint32_t regDefEndIndex;
   std::uint32_t memDefStartIndex;
   std::uint32_t memDefEndIndex;
+};
+
+template <size_t N>
+struct Int;
+
+template <>
+struct Int<4> {
+  using U = std::uint32_t;
+};
+
+template <>
+struct Int<8> {
+  using U = std::uint64_t;
+};
+
+template <typename T>
+T GetAligned(T pos, size_t n) {
+  using U = typename Int<sizeof(T)>::U;
+  U uPos = (U)pos;
+  U aligned = (uPos + static_cast<U>(n - 1)) & ~static_cast<U>(n - 1);
+  return (T)aligned;
+}
+
+ssize_t ReadN(int fd, void* buf, size_t count) {
+  size_t totalSize = 0;
+  while (count != 0) {
+    ssize_t chunkSize = read(fd, buf, count);
+    if (chunkSize < 0) return chunkSize;
+    if (chunkSize == 0) {
+      errno = EINVAL;
+      break;
+    }
+    buf = static_cast<char*>(buf) + chunkSize;
+    count -= chunkSize;
+    totalSize += chunkSize;
+  }
+  return totalSize;
+}
+
+enum class InitMode {
+  CreateTemporary,
+  CreatePersistent,
+  OpenExisting,
+};
+
+template <typename T>
+class MmVector {
+ public:
+  using iterator = T*;
+  using const_iterator = const T*;
+  using reference = T&;
+  using const_reference = const T&;
+
+  MmVector() : fd_(-1), storage_(nullptr), capacity_(0) {}
+  template <typename U>
+  MmVector(const MmVector<U>&) = delete;
+  ~MmVector() {
+    if (storage_ != nullptr) {
+      if (ftruncate(fd_, kOverhead + storage_->size * sizeof(T)) == 0)
+        capacity_ = storage_->size;
+      munmap(storage_, kOverhead + capacity_ * sizeof(T));
+    }
+    close(fd_);
+  }
+
+  [[nodiscard]] int Init(const char* path, InitMode mode) {
+    switch (mode) {
+      case InitMode::CreateTemporary: {
+        size_t len = strlen(path);
+        std::unique_ptr<char[]> tempPath(new char[len + 7]);
+        memcpy(&tempPath[0], path, len);
+        memset(&tempPath[len], 'X', 6);
+        tempPath[len + 6] = '\0';
+        fd_ = mkstemp(tempPath.get());
+        if (fd_ == -1) return -errno;
+        unlink(tempPath.get());
+        return InitCreated();
+      }
+      case InitMode::CreatePersistent:
+        fd_ = open(path, O_RDWR | O_CREAT | O_TRUNC, 0644);
+        if (fd_ == -1) return -errno;
+        return InitCreated();
+      case InitMode::OpenExisting:
+        fd_ = open(path, O_RDWR);
+        if (fd_ == -1) return -errno;
+        return InitOpened();
+      default:
+        return -EINVAL;
+    }
+  }
+
+  [[nodiscard]] int InitCreated() {
+    if (ftruncate(fd_, kOverhead) == -1) return -errno;
+    void* newStorage =
+        mmap(nullptr, kOverhead, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
+    if (newStorage == MAP_FAILED) return -errno;
+    storage_ = static_cast<Storage*>(newStorage);
+    storage_->size = 0;
+    return 0;
+  }
+
+  [[nodiscard]] int InitOpened() {
+    Storage header;
+    if (ReadN(fd_, &header, kOverhead) != kOverhead) return -errno;
+    void* newStorage = mmap(nullptr, kOverhead + header.size * sizeof(T),
+                            PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
+    if (newStorage == MAP_FAILED) return -errno;
+    storage_ = static_cast<Storage*>(newStorage);
+    capacity_ = storage_->size;
+    return 0;
+  }
+
+  T* data() { return storage_->entries; }
+  const T* data() const { return storage_->entries; }
+  size_t size() const { return storage_->size; }
+  size_t capacity() const { return capacity_; }
+  iterator begin() { return storage_->entries; }
+  const_iterator begin() const { return storage_->entries; }
+  iterator end() { return &storage_->entries[storage_->size]; }
+  const_iterator end() const { return &storage_->entries[storage_->size]; }
+  reference front() { return storage_->entries[0]; }
+  const_reference front() const { return storage_->entries[0]; }
+  reference back() { return storage_->entries[storage_->size - 1]; }
+  const_reference back() const { return storage_->entries[storage_->size - 1]; }
+  reference operator[](size_t n) { return storage_->entries[n]; }
+  const_reference operator[](size_t n) const { return storage_->entries[n]; }
+
+  void reserve(size_t n) {
+    if (n <= capacity_) return;
+    if (ftruncate(fd_, kOverhead + n * sizeof(T)) == -1) throw std::bad_alloc();
+    void* newStorage = mremap(storage_, kOverhead + capacity_ * sizeof(T),
+                              kOverhead + n * sizeof(T), MREMAP_MAYMOVE);
+    if (newStorage == MAP_FAILED) throw std::bad_alloc();
+    storage_ = static_cast<Storage*>(newStorage);
+    capacity_ = n;
+  }
+
+  void push_back(const T& val) {
+    if (storage_->size + 1 > capacity_) Grow();
+    storage_->entries[storage_->size++] = val;
+  }
+
+  template <typename... Args>
+  reference emplace_back(Args&&... args) {
+    if (storage_->size + 1 > capacity_) Grow();
+    new (&storage_->entries[storage_->size]) T(std::forward(args)...);
+    return storage_->entries[storage_->size++];
+  }
+
+  template <typename InputIterator>
+  void insert(iterator position, InputIterator first, InputIterator last) {
+    size_t i = position - &storage_->entries[0];
+    size_t n = last - first;
+    if (i + n > capacity_) {
+      Grow(GetAligned((i + n - capacity_) * sizeof(T), kGrowAmount));
+      position = &storage_->entries[i];
+    }
+    InputIterator input = first;
+    iterator end = &storage_->entries[storage_->size];
+    while (position != end && input != last) *(position++) = *(input++);
+    while (input != last) new (position++) T(*(input++));
+    storage_->size = std::max(storage_->size, n + i);
+  }
+
+  void resize(size_t n, T val = T()) {
+    if (n > capacity_)
+      Grow(GetAligned((n - capacity_) * sizeof(T), kGrowAmount));
+    for (size_t i = storage_->size; i < n; i++)
+      new (&storage_->entries[i]) T(val);
+    storage_->size = n;
+  }
+
+ private:
+  static constexpr size_t kGrowAmount = 1024 * 1024 * 1024;
+
+  void Grow(size_t bytes = kGrowAmount) {
+    reserve(capacity_ + bytes / sizeof(T));
+  }
+
+  int fd_;
+  struct Storage {
+    size_t size;
+    T entries[1];  // C++ has no FAM!
+  };
+  static constexpr size_t kOverhead = sizeof(Storage) - sizeof(T);
+  Storage* storage_;
+  size_t capacity_;
 };
 
 size_t GetFirstPrimeGreaterThanOrEqualTo(size_t value) {
@@ -956,12 +1150,21 @@ static const PartialUse<W>& FindPartialUse(const PartialUse<W>* hashTable,
 template <typename W>
 class PartialUses {
  public:
-  explicit PartialUses(size_t n = 11)
-      : entries_(n), load_(0), maxLoad_(entries_.size() / 2) {
-    std::memset(entries_.data(), -1, entries_.size() * sizeof(PartialUse<W>));
-  }
-
   using const_iterator = const PartialUse<W>*;
+
+  PartialUses() : load_(0), maxLoad_(0) {}
+
+  [[nodiscard]] int Init(const char* path, InitMode mode) {
+    path_ = path;
+    int err;
+    if ((err = entries_.Init(path, mode)) < 0) return err;
+    if (mode != InitMode::OpenExisting) {
+      entries_.resize(11);
+      for (size_t i = 0; i < entries_.size(); i++) entries_[i].first = -1;
+    }
+    maxLoad_ = entries_.size() / 2;
+    return 0;
+  }
 
   PartialUse<W>* end() const { return nullptr; }
 
@@ -985,29 +1188,34 @@ class PartialUses {
     return result.first == useIndex ? &result : nullptr;
   }
 
-  const std::vector<PartialUse<W>>& GetData() const { return entries_; }
+  const MmVector<PartialUse<W>>& GetData() const { return entries_; }
 
   void reserve(size_t n) {
     size_t newSize = GetFirstPrimeGreaterThanOrEqualTo(n * 2);
-    std::vector<PartialUse<W>> newEntries(newSize);
-    std::memset(newEntries.data(), -1, newSize * sizeof(PartialUse<W>));
-    for (size_t oldEntryIndex = 0; oldEntryIndex < entries_.size();
-         oldEntryIndex++) {
-      PartialUse<W>& oldEntry = entries_[oldEntryIndex];
+    MmVector<PartialUse<W>> oldEntries;
+    if (oldEntries.Init(path_.c_str(), InitMode::CreateTemporary) < 0)
+      throw std::bad_alloc();
+    oldEntries.insert(oldEntries.end(), entries_.begin(), entries_.end());
+    size_t oldSize = entries_.size();
+    entries_.resize(newSize);
+    for (size_t i = 0; i < newSize; i++)
+      entries_[i].first = static_cast<std::uint32_t>(-1);
+    for (size_t oldEntryIndex = 0; oldEntryIndex < oldSize; oldEntryIndex++) {
+      const PartialUse<W>& oldEntry = oldEntries[oldEntryIndex];
       if (oldEntry.first == static_cast<std::uint32_t>(-1)) continue;
       PartialUse<W>& newEntry = const_cast<PartialUse<W>&>(
-          FindPartialUse(newEntries.data(), newSize, oldEntry.first));
-      assert(newEntry.first == (std::uint32_t)-1);
+          FindPartialUse(entries_.data(), newSize, oldEntry.first));
+      assert(newEntry.first == static_cast<std::uint32_t>(-1));
       newEntry = oldEntry;
     }
-    entries_.swap(newEntries);
     maxLoad_ = newSize / 2;
   }
 
  private:
-  std::vector<PartialUse<W>> entries_;
+  MmVector<PartialUse<W>> entries_;
   size_t load_;
   size_t maxLoad_;
+  std::string path_;
 };
 
 template <typename W, typename UseIterator, typename DefIterator,
@@ -1038,15 +1246,55 @@ std::pair<const Def<W>*, std::uint32_t> ResolveUse(
   return std::make_pair(def, traceIndex);
 }
 
+const char kPlaceholder[] = "{}";
+constexpr size_t kPlaceholderLength = sizeof(kPlaceholder) - 1;
+
+struct PathWithPlaceholder {
+  std::string_view before[2];
+  std::string_view after;
+
+  int Init(const char* path, const char* description) {
+    const char* placeholder = std::strstr(path, kPlaceholder);
+    if (placeholder == nullptr) {
+      std::cerr << description << " path must contain a " << kPlaceholder
+                << " placeholder" << std::endl;
+      return -EINVAL;
+    }
+    before[0] = std::string_view(path, placeholder - path);
+    after = placeholder + kPlaceholderLength;
+    return 0;
+  }
+
+  std::string Get(const char* value) const {
+    std::string path;
+    size_t len = strlen(value);
+    path.reserve(before[0].length() + before[1].length() + len +
+                 after.length());
+    path.append(before[0]);
+    path.append(before[1]);
+    path.append(std::string_view(value, len));
+    path.append(after);
+    return path;
+  }
+};
+
 template <typename W>
 class UdState {
  public:
-  void Init(size_t expectedUseCount, size_t expectedDefCount,
-            size_t expectedPartialUseCount) {
-    uses_.reserve(expectedUseCount);
-    defs_.reserve(expectedDefCount);
-    partialUses_.reserve(expectedPartialUseCount);
-    AddDef(0, std::numeric_limits<W>::max());
+  [[nodiscard]] int Init(const PathWithPlaceholder& path, InitMode mode,
+                         size_t expectedUseCount, size_t expectedDefCount,
+                         size_t expectedPartialUseCount) {
+    int err;
+    if ((err = uses_.Init(path.Get("uses").c_str(), mode)) < 0) return err;
+    if ((err = defs_.Init(path.Get("defs").c_str(), mode)) < 0) return err;
+    if ((err = partialUses_.Init(path.Get("partial-uses").c_str(), mode)) < 0)
+      return err;
+    if (mode != InitMode::OpenExisting) {
+      uses_.reserve(expectedUseCount);
+      defs_.reserve(expectedDefCount);
+      partialUses_.reserve(expectedPartialUseCount);
+    }
+    return 0;
   }
 
   void AddUses(W startAddr, W size) {
@@ -1112,7 +1360,7 @@ class UdState {
   size_t GetPartialUseCount() const { return partialUses_.GetData().size(); }
 
   void DumpUses(std::uint32_t startIndex, std::uint32_t endIndex,
-                const std::vector<InsnInTrace>& trace,
+                const MmVector<InsnInTrace>& trace,
                 std::uint32_t InsnInTrace::*startDefIndex) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
       std::pair<const Def<W>*, std::uint32_t> use =
@@ -1135,7 +1383,7 @@ class UdState {
 
   void DumpUsesDot(std::FILE* f, std::uint32_t traceIndex,
                    std::uint32_t startIndex, std::uint32_t endIndex,
-                   const std::vector<InsnInTrace>& trace,
+                   const MmVector<InsnInTrace>& trace,
                    std::uint32_t InsnInTrace::*startDefIndex,
                    const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
@@ -1151,8 +1399,7 @@ class UdState {
   }
 
   void DumpUsesHtml(std::FILE* f, std::uint32_t startIndex,
-                    std::uint32_t endIndex,
-                    const std::vector<InsnInTrace>& trace,
+                    std::uint32_t endIndex, const MmVector<InsnInTrace>& trace,
                     std::uint32_t InsnInTrace::*startDefIndex,
                     const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
@@ -1177,7 +1424,7 @@ class UdState {
 
   void DumpUsesCsv(std::FILE* f, std::uint32_t traceIndex,
                    std::uint32_t startIndex, std::uint32_t endIndex,
-                   const std::vector<InsnInTrace>& trace,
+                   const MmVector<InsnInTrace>& trace,
                    std::uint32_t InsnInTrace::*startDefIndex,
                    const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
@@ -1190,20 +1437,6 @@ class UdState {
     }
   }
 
-  void DumpUsesBinary(std::FILE* f) const {
-    fwrite(uses_.data(), sizeof(std::uint32_t), uses_.size(), f);
-  }
-
-  void DumpDefsBinary(std::FILE* f) const {
-    fwrite(defs_.data(), sizeof(Def<W>), defs_.size(), f);
-  }
-
-  void DumpPartialUsesBinary(std::FILE* f) const {
-    fwrite(partialUses_.GetData().data(), sizeof(PartialUse<W>),
-           partialUses_.GetData().size(), f);
-  }
-
- private:
   void AddDef(W startAddr, W endAddr) {
     std::uint32_t defIndex = static_cast<std::uint32_t>(defs_.size());
     Def<W>& def = defs_.emplace_back();
@@ -1213,7 +1446,7 @@ class UdState {
   }
 
   std::pair<const Def<W>*, std::uint32_t> ResolveUse(
-      std::uint32_t useIndex, const std::vector<InsnInTrace>& trace,
+      std::uint32_t useIndex, const MmVector<InsnInTrace>& trace,
       std::uint32_t InsnInTrace::*startDefIndex) const {
     return ::ResolveUse<W>(useIndex, uses_.begin(), defs_.begin(),
                            partialUses_.GetData().data(),
@@ -1221,10 +1454,11 @@ class UdState {
                            trace.end(), startDefIndex);
   }
 
-  std::vector<std::uint32_t> uses_;  // defs_ indices.
+ private:
+  MmVector<std::uint32_t> uses_;  // defs_ indices.
   // On average, 4% register and 12% memory uses are partial.
   PartialUses<W> partialUses_;
-  std::vector<Def<W>> defs_;
+  MmVector<Def<W>> defs_;
   struct EntryValue {
     W startAddr;
     std::uint32_t defIndex;
@@ -1236,126 +1470,105 @@ class UdState {
   AddressSpace addressSpace_;
 };
 
-template <size_t N>
-struct Int;
-
-template <>
-struct Int<4> {
-  using U = std::uint32_t;
+struct BinaryHeader {
+  std::uint8_t magic[2];    // Analyzer endianness and traced program word size.
+  MachineType machineType;  // Traced program machine type.
+  Endianness endianness;    // Traced program endianness.
 };
 
-template <>
-struct Int<8> {
-  using U = std::uint64_t;
+class UdBase {
+ public:
+  static UdBase* Load(const char* path);
+
+  virtual ~UdBase() = default;
+  [[nodiscard]] virtual int Init(const BinaryHeader& header) = 0;
+  virtual std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const = 0;
+  virtual std::uint64_t GetPcForCode(std::uint32_t code) const = 0;
+  virtual std::string GetDisasmForCode(std::uint32_t code) const = 0;
+  virtual std::vector<std::uint32_t> GetTracesForCode(
+      std::uint32_t code) const = 0;
+  virtual std::uint32_t GetCodeForTrace(std::uint32_t trace) const = 0;
+  virtual std::vector<std::uint32_t> GetRegUsesForTrace(
+      std::uint32_t trace) const = 0;
+  virtual std::vector<std::uint32_t> GetMemUsesForTrace(
+      std::uint32_t trace) const = 0;
+  virtual std::uint32_t GetTraceForRegUse(std::uint32_t regUse) const = 0;
+  virtual std::uint32_t GetTraceForMemUse(std::uint32_t memUse) const = 0;
 };
-
-template <typename T>
-T GetAligned64(T pos) {
-  using U = typename Int<sizeof(T)>::U;
-  U uPos = (U)pos;
-  U aligned = (uPos + static_cast<U>(7)) & ~static_cast<U>(7);
-  return (T)aligned;
-}
-
-int Align64(FILE* f) {
-  long pos = ftell(f);  // // NOLINT(runtime/int)
-  if (pos == -1) return -1;
-  if (fseek(f, GetAligned64(pos), SEEK_SET) == -1) return -1;
-  return 0;
-}
 
 template <typename W>
-class UdStateMm {
- public:
-  const std::uint8_t* Parse(const std::uint8_t* begin, std::uint32_t useCount,
-                            std::uint32_t defCount,
-                            std::uint32_t partialUseCount) {
-    usesBegin_ = reinterpret_cast<const std::uint32_t*>(begin);
-    usesEnd_ = usesBegin_ + useCount;
-    defsBegin_ = reinterpret_cast<const Def<W>*>(GetAligned64(usesEnd_));
-    defsEnd_ = defsBegin_ + defCount;
-    partialUsesBegin_ =
-        reinterpret_cast<const PartialUse<W>*>(GetAligned64(defsEnd_));
-    partialUsesEnd_ = partialUsesBegin_ + partialUseCount;
-    return reinterpret_cast<const std::uint8_t*>(partialUsesEnd_);
-  }
-
-  template <typename InsnInTraceIterator>
-  std::pair<const Def<W>*, std::uint32_t> ResolveUse(
-      std::uint32_t useIndex, InsnInTraceIterator traceBegin,
-      InsnInTraceIterator traceEnd,
-      std::uint32_t InsnInTrace::*startDefIndex) const {
-    return ::ResolveUse<W>(useIndex, usesBegin_, defsBegin_, partialUsesBegin_,
-                           partialUsesEnd_ - partialUsesBegin_, traceBegin,
-                           traceEnd, startDefIndex);
-  }
-
- private:
-  const std::uint32_t* usesBegin_;
-  const std::uint32_t* usesEnd_;
-  const Def<W>* defsBegin_;
-  const Def<W>* defsEnd_;
-  const PartialUse<W>* partialUsesBegin_;
-  const PartialUse<W>* partialUsesEnd_;
-};
-
-struct BinaryHeader {
-  std::uint8_t magic[2];
-  std::uint16_t machineType;
-  std::uint32_t textCount;
-  std::uint32_t codeCount;
-  std::uint32_t traceCount;
-  std::uint32_t regUseCount;
-  std::uint32_t regDefCount;
-  std::uint32_t regPartialUseCount;
-  std::uint32_t memUseCount;
-  std::uint32_t memDefCount;
-  std::uint32_t memPartialUseCount;
-};
-
-static_assert(sizeof(BinaryHeader) == 40);
-
-const char kCsvPlaceholder[] = "{}";
-constexpr size_t kCsvPlaceholderLength = sizeof(kCsvPlaceholder) - 1;
-
-template <Endianness E, typename W>
-class Ud {
+class Ud : public UdBase {
  public:
   Ud(const char* dot, const char* html, const char* csv, const char* binary,
      bool verbose)
       : dot_(dot), html_(html), csv_(csv), binary_(binary), verbose_(verbose) {}
 
-  int Init(HeaderEntry<E, W> entry, size_t expectedInsnCount) {
-    if (csv_ != nullptr) {
-      csvPlaceholder_ = std::strstr(csv_, kCsvPlaceholder);
-      if (csvPlaceholder_ == nullptr) {
-        std::cerr << "csv path must contain a " << kCsvPlaceholder
-                  << " placeholder" << std::endl;
-        return -EINVAL;
-      }
+  [[nodiscard]] int Init(InitMode mode, MachineType machineType,
+                         Endianness endianness, size_t expectedInsnCount) {
+    machineType_ = machineType;
+    endianness_ = endianness;
+
+    int err;
+    if (csv_ != nullptr && (err = csvPath_.Init(csv_, "csv")) < 0) return err;
+
+    if (mode == InitMode::CreateTemporary)
+      binaryPath_.before[0] = "./";
+    else if ((err = binaryPath_.Init(binary_, "binary")) < 0)
+      return err;
+
+    if ((err = trace_.Init(binaryPath_.Get("trace").c_str(), mode)) < 0)
+      return err;
+    if ((err = code_.Init(binaryPath_.Get("code").c_str(), mode)) < 0)
+      return err;
+    if ((err = text_.Init(binaryPath_.Get("text").c_str(), mode)) < 0)
+      return err;
+    binaryPath_.before[1] = "reg-";
+    // On average, 1.69 register uses and 1.61 register defs per insn.
+    if ((err = regState_.Init(binaryPath_, mode, expectedInsnCount * 7 / 4,
+                              expectedInsnCount * 5 / 3,
+                              expectedInsnCount / 10)) < 0)
+      return err;
+    // On average, 0.4 memory uses and 0.22 memory defs per insn.
+    binaryPath_.before[1] = "mem-";
+    if ((err = memState_.Init(binaryPath_, mode, expectedInsnCount / 2,
+                              expectedInsnCount / 4, expectedInsnCount / 20)) <
+        0)
+      return err;
+    binaryPath_.before[1] = std::string_view();
+
+    // Add an initial catch-all entry.
+    if (mode != InitMode::OpenExisting) {
+      std::uint32_t codeIndex = static_cast<std::uint32_t>(code_.size());
+      InsnInCode<W>& code = code_.emplace_back();
+      code.pc = 0;
+      code.textIndex = 0;
+      code.textSize = 0;
+      disasm_.emplace_back("<unknown>");
+      trace_.reserve(expectedInsnCount);
+      AddTrace(codeIndex);
+      regState_.AddDef(0, std::numeric_limits<W>::max());
+      memState_.AddDef(0, std::numeric_limits<W>::max());
     }
 
-    trace_.reserve(expectedInsnCount);
+    if ((err = disasmEngine_.Init(machineType, endianness, sizeof(W))) < 0)
+      return err;
 
-    std::uint32_t codeIndex = static_cast<std::uint32_t>(code_.size());
-    InsnInCode<W>& code = code_.emplace_back();
-    code.pc = 0;
-    code.textIndex = 0;
-    code.textSize = 0;
-    disasm_.emplace_back("<unknown>");
-
-    AddTrace(codeIndex);
-    // On average, 1.69 register uses and 1.61 register defs per insn.
-    regState_.Init(expectedInsnCount * 7 / 4, expectedInsnCount * 5 / 3,
-                   expectedInsnCount / 10);
-    // On average, 0.4 memory uses and 0.22 memory defs per insn.
-    memState_.Init(expectedInsnCount / 2, expectedInsnCount / 4,
-                   expectedInsnCount / 20);
-
-    machineType_ = entry.GetMachineType();
-    return disasmEngine_.Init(machineType_, E, sizeof(W));
+    return 0;
   }
 
+  [[nodiscard]] int Init(const BinaryHeader& header) override {
+    return Init(InitMode::OpenExisting, header.machineType, header.endianness,
+                0);
+  }
+
+  template <Endianness E>
+  [[nodiscard]] int Init(HeaderEntry<E, W> entry, size_t expectedInsnCount) {
+    return Init(binary_ == nullptr ? InitMode::CreateTemporary
+                                   : InitMode::CreatePersistent,
+                entry.GetMachineType(), E, expectedInsnCount);
+  }
+
+  template <Endianness E>
   int operator()(size_t /* i */, LdStEntry<E, W> entry) {
     int ret;
     if ((ret = HandlePc(entry.GetPc())) < 0) return ret;
@@ -1377,6 +1590,7 @@ class Ud {
     }
   }
 
+  template <Endianness E>
   int operator()(size_t /* i */, InsnEntry<E, W> entry) {
     pcs_[entry.GetPc()] = static_cast<std::uint32_t>(code_.size());
     InsnInCode<W>& code = code_.emplace_back();
@@ -1397,12 +1611,14 @@ class Ud {
     return 0;
   }
 
+  template <Endianness E>
   int operator()(size_t /* i */, InsnExecEntry<E, W> entry) {
     int ret;
     if ((ret = HandlePc(entry.GetPc())) < 0) return ret;
     return 0;
   }
 
+  template <Endianness E>
   int operator()(size_t /* i */, LdStNxEntry<E, W> entry) {
     int ret;
     if ((ret = HandlePc(entry.GetPc())) < 0) return ret;
@@ -1417,7 +1633,10 @@ class Ud {
     }
   }
 
-  int operator()(size_t /* i */, MmapEntry<E, W> /* entry */) { return 0; }
+  template <Endianness E>
+  int operator()(size_t /* i */, MmapEntry<E, W> /* entry */) {
+    return 0;
+  }
 
   int Complete() {
     int ret;
@@ -1427,6 +1646,75 @@ class Ud {
     if ((ret = DumpCsv()) < 0) return ret;
     if ((ret = DumpBinary()) < 0) return ret;
     return 0;
+  }
+
+  std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const override {
+    std::vector<std::uint32_t> codes;
+    for (std::uint32_t code = 0,
+                       size = static_cast<std::uint32_t>(code_.size());
+         code < size; code++)
+      if (code_[code].pc == pc) codes.push_back(code);
+    return codes;
+  }
+
+  std::uint64_t GetPcForCode(std::uint32_t code) const override {
+    return code_[code].pc;
+  }
+
+  std::string GetDisasmForCode(std::uint32_t code) const override {
+    const InsnInCode<W>& entry = code_[code];
+    std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
+        &text_[entry.textIndex], entry.textSize, entry.pc, 0);
+    if (insn) {
+      std::string disasm = insn->mnemonic;
+      disasm += " ";
+      disasm += insn->op_str;
+      return disasm;
+    } else {
+      return "<unknown>";
+    }
+  }
+
+  std::vector<std::uint32_t> GetTracesForCode(
+      std::uint32_t code) const override {
+    std::vector<std::uint32_t> traces;
+    for (std::uint32_t trace = 0,
+                       size = static_cast<std::uint32_t>(trace_.size());
+         trace < size; trace++)
+      if (trace_[trace].codeIndex == code) traces.push_back(trace);
+    return traces;
+  }
+
+  std::uint32_t GetCodeForTrace(std::uint32_t trace) const override {
+    return trace_[trace].codeIndex;
+  }
+
+  std::vector<std::uint32_t> GetRegUsesForTrace(
+      std::uint32_t trace) const override {
+    std::vector<std::uint32_t> regUses;
+    for (std::uint32_t regUse = trace_[trace].regUseStartIndex;
+         regUse < trace_[trace].regUseEndIndex; regUse++)
+      regUses.push_back(regUse);
+    return regUses;
+  }
+
+  std::vector<std::uint32_t> GetMemUsesForTrace(
+      std::uint32_t trace) const override {
+    std::vector<std::uint32_t> memUses;
+    for (std::uint32_t memUse = trace_[trace].memUseStartIndex;
+         memUse < trace_[trace].memUseEndIndex; memUse++)
+      memUses.push_back(memUse);
+    return memUses;
+  }
+
+  std::uint32_t GetTraceForRegUse(std::uint32_t regUse) const override {
+    return regState_.ResolveUse(regUse, trace_, &InsnInTrace::regDefStartIndex)
+        .second;
+  }
+
+  std::uint32_t GetTraceForMemUse(std::uint32_t memUse) const override {
+    return memState_.ResolveUse(memUse, trace_, &InsnInTrace::memDefStartIndex)
+        .second;
   }
 
  private:
@@ -1612,62 +1900,23 @@ class Ud {
 
   int DumpCsv() const {
     if (csv_ == nullptr) return 0;
-    size_t prefixLength = csvPlaceholder_ - csv_;
-    const char* suffix = csvPlaceholder_ + kCsvPlaceholderLength;
-    std::string codeCsvPath(csv_, prefixLength);
-    codeCsvPath += "code";
-    codeCsvPath += suffix;
-    std::string traceCsvPath(csv_, prefixLength);
-    traceCsvPath += "trace";
-    traceCsvPath += suffix;
-    std::string usesCsvPath(csv_, prefixLength);
-    usesCsvPath += "uses";
-    usesCsvPath += suffix;
     int ret;
-    if ((ret = DumpCodeCsv(codeCsvPath.c_str())) < 0) return ret;
-    if ((ret = DumpTraceCsv(traceCsvPath.c_str())) < 0) return ret;
-    if ((ret = DumpUsesCsv(usesCsvPath.c_str())) < 0) return ret;
+    if ((ret = DumpCodeCsv(csvPath_.Get("code").c_str())) < 0) return ret;
+    if ((ret = DumpTraceCsv(csvPath_.Get("trace").c_str())) < 0) return ret;
+    if ((ret = DumpUsesCsv(csvPath_.Get("uses").c_str())) < 0) return ret;
     return 0;
   }
 
   int DumpBinary() const {
     if (binary_ == nullptr) return 0;
-    std::FILE* f = std::fopen(binary_, "wb");
+    std::FILE* f = std::fopen(binaryPath_.Get("header").c_str(), "wb");
     if (f == nullptr) return -errno;
     BinaryHeader header;
     *reinterpret_cast<std::uint16_t*>(header.magic) =
         ('M' << 8) | ('0' + sizeof(W));
-    header.machineType = static_cast<std::uint16_t>(machineType_);
-    header.textCount = static_cast<std::uint32_t>(text_.size());
-    header.codeCount = static_cast<std::uint32_t>(code_.size());
-    header.traceCount = static_cast<std::uint32_t>(trace_.size());
-    header.regUseCount = static_cast<std::uint32_t>(regState_.GetUseCount());
-    header.regDefCount = static_cast<std::uint32_t>(regState_.GetDefCount());
-    header.regPartialUseCount =
-        static_cast<std::uint32_t>(regState_.GetPartialUseCount());
-    header.memUseCount = static_cast<std::uint32_t>(memState_.GetUseCount());
-    header.memDefCount = static_cast<std::uint32_t>(memState_.GetDefCount());
-    header.memPartialUseCount =
-        static_cast<std::uint32_t>(memState_.GetPartialUseCount());
+    header.machineType = machineType_;
+    header.endianness = endianness_;
     fwrite(&header, sizeof(header), 1, f);
-    Align64(f);
-    fwrite(text_.data(), sizeof(std::uint8_t), text_.size(), f);
-    Align64(f);
-    fwrite(code_.data(), sizeof(InsnInCode<W>), code_.size(), f);
-    Align64(f);
-    fwrite(trace_.data(), sizeof(InsnInTrace), trace_.size(), f);
-    Align64(f);
-    regState_.DumpUsesBinary(f);
-    Align64(f);
-    regState_.DumpDefsBinary(f);
-    Align64(f);
-    regState_.DumpPartialUsesBinary(f);
-    Align64(f);
-    memState_.DumpUsesBinary(f);
-    Align64(f);
-    memState_.DumpDefsBinary(f);
-    Align64(f);
-    memState_.DumpPartialUsesBinary(f);
     fclose(f);
     return 0;
   }
@@ -1677,155 +1926,18 @@ class Ud {
   const char* const csv_;
   const char* const binary_;
   const bool verbose_;
-  const char* csvPlaceholder_;
   MachineType machineType_;
+  Endianness endianness_;
   Disasm disasmEngine_;
-  std::vector<InsnInCode<W>> code_;
-  std::vector<std::uint8_t> text_;
+  MmVector<InsnInCode<W>> code_;
+  MmVector<std::uint8_t> text_;
   std::vector<std::string> disasm_;
   std::unordered_map<W, std::uint32_t> pcs_;
-  std::vector<InsnInTrace> trace_;
+  MmVector<InsnInTrace> trace_;
   UdState<W> regState_;
   UdState<W> memState_;
-};
-
-class UdMmBase {
- public:
-  static UdMmBase* Load(const char* path);
-
-  virtual ~UdMmBase() = default;
-  virtual int Parse() = 0;
-  virtual std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const = 0;
-  virtual std::uint64_t GetPcForCode(std::uint32_t code) const = 0;
-  virtual std::string GetDisasmForCode(std::uint32_t code) const = 0;
-  virtual std::vector<std::uint32_t> GetTracesForCode(
-      std::uint32_t code) const = 0;
-  virtual std::uint32_t GetCodeForTrace(std::uint32_t trace) const = 0;
-  virtual std::vector<std::uint32_t> GetRegUsesForTrace(
-      std::uint32_t trace) const = 0;
-  virtual std::vector<std::uint32_t> GetMemUsesForTrace(
-      std::uint32_t trace) const = 0;
-  virtual std::uint32_t GetTraceForRegUse(std::uint32_t regUse) const = 0;
-  virtual std::uint32_t GetTraceForMemUse(std::uint32_t memUse) const = 0;
-};
-
-template <typename W>
-class UdMm : public UdMmBase {
- public:
-  UdMm(void* data, size_t length) : data_(data), length_(length) {}
-  virtual ~UdMm() { munmap(data_, length_); }
-
-  int Parse() override {
-    header_ = static_cast<const BinaryHeader*>(data_);
-    int ret;
-    if ((ret =
-             disasmEngine_.Init(static_cast<MachineType>(header_->machineType),
-                                kHostEndianness, sizeof(W))) < 0)
-      return ret;
-    textBegin_ =
-        reinterpret_cast<const std::uint8_t*>(GetAligned64(header_ + 1));
-    textEnd_ = textBegin_ + header_->textCount;
-    codeBegin_ = reinterpret_cast<const InsnInCode<W>*>(GetAligned64(textEnd_));
-    codeEnd_ = codeBegin_ + header_->codeCount;
-    traceBegin_ = reinterpret_cast<const InsnInTrace*>(codeEnd_);
-    traceEnd_ = traceBegin_ + header_->traceCount;
-    const std::uint8_t* regStateEnd = regState_.Parse(
-        reinterpret_cast<const std::uint8_t*>(GetAligned64(traceEnd_)),
-        header_->regUseCount, header_->regDefCount,
-        header_->regPartialUseCount);
-    const std::uint8_t* memStateEnd =
-        memState_.Parse(GetAligned64(regStateEnd), header_->memUseCount,
-                        header_->memDefCount, header_->memPartialUseCount);
-    const std::uint8_t* end =
-        reinterpret_cast<const std::uint8_t*>(data_) + length_;
-    return memStateEnd == end ? 0 : -EINVAL;
-  }
-
-  std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const override {
-    std::vector<std::uint32_t> codes;
-    for (const InsnInCode<W>* code = codeBegin_; code != codeEnd_; code++)
-      if (code->pc == pc)
-        codes.push_back(static_cast<std::uint32_t>(code - codeBegin_));
-    return codes;
-  }
-
-  std::uint64_t GetPcForCode(std::uint32_t code) const override {
-    return codeBegin_[code].pc;
-  }
-
-  std::string GetDisasmForCode(std::uint32_t code) const override {
-    const InsnInCode<W>& entry = codeBegin_[code];
-    std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
-        textBegin_ + entry.textIndex, entry.textSize, entry.pc, 0);
-    if (insn) {
-      std::string disasm = insn->mnemonic;
-      disasm += " ";
-      disasm += insn->op_str;
-      return disasm;
-    } else {
-      return "<unknown>";
-    }
-  }
-
-  std::vector<std::uint32_t> GetTracesForCode(
-      std::uint32_t code) const override {
-    std::vector<std::uint32_t> traces;
-    for (const InsnInTrace* trace = traceBegin_; trace != traceEnd_; trace++)
-      if (trace->codeIndex == code)
-        traces.push_back(static_cast<std::uint32_t>(trace - traceBegin_));
-    return traces;
-  }
-
-  std::uint32_t GetCodeForTrace(std::uint32_t trace) const override {
-    return traceBegin_[trace].codeIndex;
-  }
-
-  std::vector<std::uint32_t> GetRegUsesForTrace(
-      std::uint32_t trace) const override {
-    std::vector<std::uint32_t> regUses;
-    for (std::uint32_t regUse = traceBegin_[trace].regUseStartIndex;
-         regUse < traceBegin_[trace].regUseEndIndex; regUse++)
-      regUses.push_back(regUse);
-    return regUses;
-  }
-
-  std::vector<std::uint32_t> GetMemUsesForTrace(
-      std::uint32_t trace) const override {
-    std::vector<std::uint32_t> memUses;
-    for (std::uint32_t memUse = traceBegin_[trace].memUseStartIndex;
-         memUse < traceBegin_[trace].memUseEndIndex; memUse++)
-      memUses.push_back(memUse);
-    return memUses;
-  }
-
-  std::uint32_t GetTraceForRegUse(std::uint32_t regUse) const override {
-    return regState_
-        .ResolveUse(regUse, traceBegin_, traceEnd_,
-                    &InsnInTrace::regDefStartIndex)
-        .second;
-  }
-
-  std::uint32_t GetTraceForMemUse(std::uint32_t memUse) const override {
-    return memState_
-        .ResolveUse(memUse, traceBegin_, traceEnd_,
-                    &InsnInTrace::memDefStartIndex)
-        .second;
-  }
-
- private:
-  void* data_;
-  size_t length_;
-
-  const BinaryHeader* header_;
-  const std::uint8_t* textBegin_;
-  const std::uint8_t* textEnd_;
-  const InsnInCode<W>* codeBegin_;
-  const InsnInCode<W>* codeEnd_;
-  const InsnInTrace* traceBegin_;
-  const InsnInTrace* traceEnd_;
-  UdStateMm<W> regState_;
-  UdStateMm<W> memState_;
-  Disasm disasmEngine_;
+  PathWithPlaceholder csvPath_;
+  PathWithPlaceholder binaryPath_;
 };
 
 int UdFile(const char* path, size_t start, size_t end, const char* dot,
@@ -1834,36 +1946,37 @@ int UdFile(const char* path, size_t start, size_t end, const char* dot,
   return VisitFile<Ud>(path, start, end, dot, html, csv, binary, verbose);
 }
 
-UdMmBase* UdMmBase::Load(const char* path) {
+UdBase* UdBase::Load(const char* rawPath) {
   int err;
-  std::uint8_t* data;
-  size_t length;
-  if ((err = MmapFile(path, 2, &data, &length)) < 0) return nullptr;
-  if (data == MAP_FAILED) return nullptr;
-  UdMmBase* ud = nullptr;
-  switch (data[0] << 8 | data[1]) {
+  PathWithPlaceholder path;
+  if ((err = path.Init(rawPath, "binary")) < 0) return nullptr;
+  BinaryHeader header;
+  FILE* h = fopen(path.Get("header").c_str(), "r");
+  if (h == nullptr) return nullptr;
+  size_t n_read = fread(&header, sizeof(header), 1, h);
+  fclose(h);
+  if (n_read != 1) return nullptr;
+  UdBase* ud = nullptr;
+  switch (header.magic[0] << 8 | header.magic[1]) {
     case 'M' << 8 | '4':
       if (kHostEndianness == Endianness::Big)
-        ud = new UdMm<std::uint32_t>(data, length);
+        ud = new Ud<std::uint32_t>(nullptr, nullptr, nullptr, rawPath, false);
       break;
     case 'M' << 8 | '8':
       if (kHostEndianness == Endianness::Big)
-        ud = new UdMm<std::uint64_t>(data, length);
+        ud = new Ud<std::uint64_t>(nullptr, nullptr, nullptr, rawPath, false);
       break;
     case '4' << 8 | 'M':
       if (kHostEndianness == Endianness::Little)
-        ud = new UdMm<std::uint32_t>(data, length);
+        ud = new Ud<std::uint32_t>(nullptr, nullptr, nullptr, rawPath, false);
       break;
     case '8' << 8 | 'M':
       if (kHostEndianness == Endianness::Little)
-        ud = new UdMm<std::uint64_t>(data, length);
+        ud = new Ud<std::uint64_t>(nullptr, nullptr, nullptr, rawPath, false);
       break;
   }
-  if (ud == nullptr) {
-    munmap(data, length);
-    return nullptr;
-  }
-  if (ud->Parse() < 0) {
+  if (ud == nullptr) return nullptr;
+  if (ud->Init(header) < 0) {
     delete ud;
     return nullptr;
   }
@@ -1938,19 +2051,19 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
   bp::class_<std::vector<std::uint32_t>>("std::vector<std::uint32_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint32_t>>());
-  bp::class_<UdMmBase, boost::noncopyable>("Ud", bp::no_init)
-      .def("load", &UdMmBase::Load,
+  bp::class_<UdBase, boost::noncopyable>("Ud", bp::no_init)
+      .def("load", &UdBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
       .staticmethod("load")
-      .def("get_codes_for_pc", &UdMmBase::GetCodesForPc)
-      .def("get_pc_for_code", &UdMmBase::GetPcForCode)
-      .def("get_disasm_for_code", &UdMmBase::GetDisasmForCode)
-      .def("get_traces_for_code", &UdMmBase::GetTracesForCode)
-      .def("get_code_for_trace", &UdMmBase::GetCodeForTrace)
-      .def("get_reg_uses_for_trace", &UdMmBase::GetRegUsesForTrace)
-      .def("get_mem_uses_for_trace", &UdMmBase::GetMemUsesForTrace)
-      .def("get_trace_for_reg_use", &UdMmBase::GetTraceForRegUse)
-      .def("get_trace_for_mem_use", &UdMmBase::GetTraceForMemUse);
+      .def("get_codes_for_pc", &UdBase::GetCodesForPc)
+      .def("get_pc_for_code", &UdBase::GetPcForCode)
+      .def("get_disasm_for_code", &UdBase::GetDisasmForCode)
+      .def("get_traces_for_code", &UdBase::GetTracesForCode)
+      .def("get_code_for_trace", &UdBase::GetCodeForTrace)
+      .def("get_reg_uses_for_trace", &UdBase::GetRegUsesForTrace)
+      .def("get_mem_uses_for_trace", &UdBase::GetMemUsesForTrace)
+      .def("get_trace_for_reg_use", &UdBase::GetTraceForRegUse)
+      .def("get_trace_for_mem_use", &UdBase::GetTraceForMemUse);
   bp::class_<Disasm, boost::noncopyable>("Disasm", bp::no_init)
       .def("__init__", bp::make_constructor(CreateDisasm))
       .def("disasm_str", &Disasm::DisasmStr);
