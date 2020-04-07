@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List, Tuple
+from typing import Deque, Dict, List, Set, Tuple
 import sys
 
 from memtrace.analysis import Analysis
@@ -28,35 +28,60 @@ class BackwardNode:
             self,
             analysis: Analysis,
             fp=sys.stdout,
-            indent='',
-            seen=None,
     ) -> None:
-        if seen is None:
-            seen = set()
-        code_index = analysis.ud.get_code_for_trace(self.trace_index)
-        pc = analysis.ud.get_pc_for_code(code_index)
-        disasm_str = analysis.ud.get_disasm_for_code(code_index)
-        if self.trace_index in seen:
-            fp.write(
-                f'{indent}(InsnInTrace:{self.trace_index}) '
-                f'0x{pc:016x} {disasm_str}\n'
-            )
-            return
-        seen.add(self.trace_index)
-        fp.write(
-            f'{indent}[InsnInTrace:{self.trace_index}] '
-            f'0x{pc:016x} {disasm_str}\n'
-        )
-        for edge in self.edges.values():
-            for entry in edge.reg:
-                entry_str = format_entry(
-                    entry, analysis.endianness_str, analysis.disasm)
-                fp.write(f'{indent}    {entry_str}\n')
-            for entry in edge.mem:
-                entry_str = format_entry(
-                    entry, analysis.endianness_str, analysis.disasm)
-                fp.write(f'{indent}    {entry_str}\n')
-            edge.dst.pp(analysis, fp, indent + '    ', seen)
+        class StackEntry:
+            def __init__(self, edge: BackwardEdge):
+                self.edge = edge
+                self.is_fresh = True
+                self.edges = iter(edge.dst.edges.values())
+
+        stack: List[StackEntry] = [StackEntry(BackwardEdge(self))]
+        seen: Set[int] = set()
+        while len(stack) > 0:
+            indent = ' ' * ((len(stack) - 1) * 2)
+            entry = stack[-1]
+            if entry.is_fresh:
+                edge = entry.edge
+                node = edge.dst
+                code_index = analysis.ud.get_code_for_trace(node.trace_index)
+                pc = analysis.ud.get_pc_for_code(code_index)
+                disasm_str = analysis.ud.get_disasm_for_code(code_index)
+                is_seen = node.trace_index in seen
+                if is_seen:
+                    fp.write(
+                        f'{indent}* (InsnInTrace:{node.trace_index}) '
+                        f'0x{pc:016x} {disasm_str}\n'
+                    )
+                else:
+                    fp.write(
+                        f'{indent}* [InsnInTrace:{node.trace_index}] '
+                        f'0x{pc:016x} {disasm_str}\n'
+                    )
+                for trace_entry in edge.reg:
+                    entry_str = format_entry(
+                        entry=trace_entry,
+                        endianness=analysis.endianness_str,
+                        disasm=analysis.disasm,
+                    )
+                    fp.write(f'{indent}  * Reason: {entry_str}\n')
+                for trace_entry in edge.mem:
+                    entry_str = format_entry(
+                        entry=trace_entry,
+                        endianness=analysis.endianness_str,
+                        disasm=analysis.disasm,
+                    )
+                    fp.write(f'{indent}  * Reason: {entry_str}\n')
+                if is_seen:
+                    stack.pop()
+                    continue
+                seen.add(node.trace_index)
+                entry.is_fresh = False
+            try:
+                edge = next(entry.edges)
+            except StopIteration:
+                stack.pop()
+                continue
+            stack.append(StackEntry(edge))
 
 
 @dataclass

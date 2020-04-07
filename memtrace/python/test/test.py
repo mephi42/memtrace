@@ -186,9 +186,9 @@ class TestCommon(unittest.TestCase):
 
     def _taint(self, workdir, target):
         taint_pc_txt = os.path.join(self.basedir, f'{target}-taint-pc.txt')
-        taint_txt = f'{target}-taint.txt'
-        actual_taint_txt = os.path.join(workdir, taint_txt)
-        expected_taint_txt = os.path.join(self.basedir, taint_txt)
+        taint_org = f'{target}-taint.org'
+        actual_taint_org = os.path.join(workdir, taint_org)
+        expected_taint_org = os.path.join(self.basedir, taint_org)
         analysis = Analysis(
             trace_path=os.path.join(workdir, 'memtrace.out'),
         )
@@ -200,13 +200,13 @@ class TestCommon(unittest.TestCase):
             depth=9,
         )
         dag = backward.analyze()
-        with open(actual_taint_txt, 'w') as fp:
+        with open(actual_taint_org, 'w') as fp:
             dag.pp(analysis, fp)
         subprocess.check_call([
             'diff',
             '-au',
-            expected_taint_txt,
-            actual_taint_txt,
+            expected_taint_org,
+            actual_taint_org,
         ])
 
     def _stats(self, workdir, target):

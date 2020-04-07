@@ -1,0 +1,9 @@
+* [InsnInTrace:9] 0x000000000040102f setne dil
+  * [InsnInTrace:8] 0x0000000000401028 cmp byte ptr [rip + 0xfd1], 0x2a
+    * Reason: [        32] 0x00000009: MT_GET_REG uint64_t [0x90] 0x5
+    * Reason: [        33] 0x00000009: MT_GET_REG uint64_t [0x98] 0x2a
+    * Reason: [        34] 0x00000009: MT_GET_REG uint64_t [0xa0] 0x2a
+    * [InsnInTrace:0] 0x0000000000000000 <unknown>
+      * Reason: [        26] 0x00000008: MT_LOAD uint8_t [0x402000] 0x2a
+  * (InsnInTrace:0) 0x0000000000000000 <unknown>
+    * Reason: [        35] 0x00000009: MT_GET_REG uint64_t [0xa8] 0x0
