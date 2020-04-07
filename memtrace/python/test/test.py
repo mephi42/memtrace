@@ -147,11 +147,13 @@ class TestCommon(unittest.TestCase):
             actual_dump_txt,
         ])
 
-    def _seek(self, workdir: str, target: str) -> None:
+    def _seek(self, workdir: str, target: str, with_index: bool) -> None:
         seek_txt = f'{target}-seek.txt'
         actual_seek_txt = os.path.join(workdir, seek_txt)
         expected_seek_txt = os.path.join(self.basedir, seek_txt)
         trace = Trace.load(os.path.join(workdir, 'memtrace.out'))
+        if with_index:
+            trace.build_insn_index(os.path.join(workdir, 'memtrace.idx'), 2)
         endianness = trace.get_endianness()
         endianness_str = get_endianness_str(endianness)
         disasm = Disasm(
@@ -226,7 +228,10 @@ class TestX86_64(TestCommon):
         self._trace(self.workdir.name, self.target)
 
     def test_seek_insn(self) -> None:
-        self._seek(self.workdir.name, self.target)
+        self._seek(self.workdir.name, self.target, with_index=False)
+
+    def test_seek_insn_with_index(self) -> None:
+        self._seek(self.workdir.name, self.target, with_index=True)
 
     def test_taint(self) -> None:
         self._taint(self.workdir.name, self.target)
@@ -249,7 +254,10 @@ class TestI386(TestCommon):
         self._trace(self.workdir.name, self.target)
 
     def test_seek_insn(self) -> None:
-        self._seek(self.workdir.name, self.target)
+        self._seek(self.workdir.name, self.target, with_index=False)
+
+    def test_seek_insn_with_index(self) -> None:
+        self._seek(self.workdir.name, self.target, with_index=True)
 
     def test_taint(self) -> None:
         self._taint(self.workdir.name, self.target)

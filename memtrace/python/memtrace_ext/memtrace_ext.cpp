@@ -364,6 +364,195 @@ void HtmlDump(std::FILE* f, const char* s) {
   std::fprintf(f, "%s", escaped.c_str());
 }
 
+template <size_t N>
+struct Int;
+
+template <>
+struct Int<4> {
+  using U = std::uint32_t;
+};
+
+template <>
+struct Int<8> {
+  using U = std::uint64_t;
+};
+
+template <typename T>
+T GetAligned(T pos, size_t n) {
+  using U = typename Int<sizeof(T)>::U;
+  U uPos = (U)pos;
+  U aligned = (uPos + static_cast<U>(n - 1)) & ~static_cast<U>(n - 1);
+  return (T)aligned;
+}
+
+ssize_t ReadN(int fd, void* buf, size_t count) {
+  size_t totalSize = 0;
+  while (count != 0) {
+    ssize_t chunkSize = read(fd, buf, count);
+    if (chunkSize < 0) return chunkSize;
+    if (chunkSize == 0) {
+      errno = EINVAL;
+      break;
+    }
+    buf = static_cast<char*>(buf) + chunkSize;
+    count -= chunkSize;
+    totalSize += chunkSize;
+  }
+  return totalSize;
+}
+
+enum class InitMode {
+  CreateTemporary,
+  CreatePersistent,
+  OpenExisting,
+};
+
+template <typename T>
+class MmVector {
+ public:
+  using iterator = T*;
+  using const_iterator = const T*;
+  using reference = T&;
+  using const_reference = const T&;
+
+  MmVector() : fd_(-1), storage_(nullptr), capacity_(0) {}
+  template <typename U>
+  MmVector(const MmVector<U>&) = delete;
+  ~MmVector() {
+    if (storage_ != nullptr) {
+      if (ftruncate(fd_, kOverhead + storage_->size * sizeof(T)) == 0)
+        capacity_ = storage_->size;
+      munmap(storage_, kOverhead + capacity_ * sizeof(T));
+    }
+    close(fd_);
+  }
+
+  [[nodiscard]] int Init(const char* path, InitMode mode) {
+    switch (mode) {
+      case InitMode::CreateTemporary: {
+        size_t len = strlen(path);
+        std::unique_ptr<char[]> tempPath(new char[len + 7]);
+        memcpy(&tempPath[0], path, len);
+        memset(&tempPath[len], 'X', 6);
+        tempPath[len + 6] = '\0';
+        fd_ = mkstemp(tempPath.get());
+        if (fd_ == -1) return -errno;
+        unlink(tempPath.get());
+        return InitCreated();
+      }
+      case InitMode::CreatePersistent:
+        fd_ = open(path, O_RDWR | O_CREAT | O_TRUNC, 0644);
+        if (fd_ == -1) return -errno;
+        return InitCreated();
+      case InitMode::OpenExisting:
+        fd_ = open(path, O_RDWR);
+        if (fd_ == -1) return -errno;
+        return InitOpened();
+      default:
+        return -EINVAL;
+    }
+  }
+
+  [[nodiscard]] int InitCreated() {
+    if (ftruncate(fd_, kOverhead) == -1) return -errno;
+    void* newStorage =
+        mmap(nullptr, kOverhead, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
+    if (newStorage == MAP_FAILED) return -errno;
+    storage_ = static_cast<Storage*>(newStorage);
+    storage_->size = 0;
+    return 0;
+  }
+
+  [[nodiscard]] int InitOpened() {
+    Storage header;
+    if (ReadN(fd_, &header, kOverhead) != kOverhead) return -errno;
+    void* newStorage = mmap(nullptr, kOverhead + header.size * sizeof(T),
+                            PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
+    if (newStorage == MAP_FAILED) return -errno;
+    storage_ = static_cast<Storage*>(newStorage);
+    capacity_ = storage_->size;
+    return 0;
+  }
+
+  bool IsInitalized() const { return storage_ != nullptr; }
+
+  T* data() { return storage_->entries; }
+  const T* data() const { return storage_->entries; }
+  size_t size() const { return storage_->size; }
+  size_t capacity() const { return capacity_; }
+  iterator begin() { return storage_->entries; }
+  const_iterator begin() const { return storage_->entries; }
+  iterator end() { return &storage_->entries[storage_->size]; }
+  const_iterator end() const { return &storage_->entries[storage_->size]; }
+  reference front() { return storage_->entries[0]; }
+  const_reference front() const { return storage_->entries[0]; }
+  reference back() { return storage_->entries[storage_->size - 1]; }
+  const_reference back() const { return storage_->entries[storage_->size - 1]; }
+  reference operator[](size_t n) { return storage_->entries[n]; }
+  const_reference operator[](size_t n) const { return storage_->entries[n]; }
+
+  void reserve(size_t n) {
+    if (n <= capacity_) return;
+    if (ftruncate(fd_, kOverhead + n * sizeof(T)) == -1) throw std::bad_alloc();
+    void* newStorage = mremap(storage_, kOverhead + capacity_ * sizeof(T),
+                              kOverhead + n * sizeof(T), MREMAP_MAYMOVE);
+    if (newStorage == MAP_FAILED) throw std::bad_alloc();
+    storage_ = static_cast<Storage*>(newStorage);
+    capacity_ = n;
+  }
+
+  void push_back(const T& val) {
+    if (storage_->size + 1 > capacity_) Grow();
+    storage_->entries[storage_->size++] = val;
+  }
+
+  template <typename... Args>
+  reference emplace_back(Args&&... args) {
+    if (storage_->size + 1 > capacity_) Grow();
+    new (&storage_->entries[storage_->size]) T(std::forward(args)...);
+    return storage_->entries[storage_->size++];
+  }
+
+  template <typename InputIterator>
+  void insert(iterator position, InputIterator first, InputIterator last) {
+    size_t i = position - &storage_->entries[0];
+    size_t n = last - first;
+    if (i + n > capacity_) {
+      Grow(GetAligned((i + n - capacity_) * sizeof(T), kGrowAmount));
+      position = &storage_->entries[i];
+    }
+    InputIterator input = first;
+    iterator end = &storage_->entries[storage_->size];
+    while (position != end && input != last) *(position++) = *(input++);
+    while (input != last) new (position++) T(*(input++));
+    storage_->size = std::max(storage_->size, n + i);
+  }
+
+  void resize(size_t n, T val = T()) {
+    if (n > capacity_)
+      Grow(GetAligned((n - capacity_) * sizeof(T), kGrowAmount));
+    for (size_t i = storage_->size; i < n; i++)
+      new (&storage_->entries[i]) T(val);
+    storage_->size = n;
+  }
+
+ private:
+  static constexpr size_t kGrowAmount = 1024 * 1024 * 1024;
+
+  void Grow(size_t bytes = kGrowAmount) {
+    reserve(capacity_ + bytes / sizeof(T));
+  }
+
+  int fd_;
+  struct Storage {
+    size_t size;
+    T entries[1];  // C++ has no FAM!
+  };
+  static constexpr size_t kOverhead = sizeof(Storage) - sizeof(T);
+  Storage* storage_;
+  size_t capacity_;
+};
+
 class CsFree {
  public:
   explicit CsFree(size_t count) : count_(count) {}
@@ -579,27 +768,6 @@ struct Stats {
   std::map<Tag, TagStats> tagStats;
 };
 
-struct StatsGatherer {
-  template <Endianness E, typename W>
-  int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
-    return HandleTlv(entry.GetTlv());
-  }
-
-  template <typename Entry>
-  int operator()(size_t /* i */, Entry entry) {
-    return HandleTlv(entry.GetTlv());
-  }
-
-  int Complete() { return 0; }
-
-  template <Endianness E, typename W>
-  int HandleTlv(Tlv<E, W> tlv) {
-    return stats.tagStats[tlv.GetTag()].AddTlv(tlv);
-  }
-
-  Stats stats;
-};
-
 class TraceMmBase {
  public:
   template <typename V>
@@ -613,6 +781,9 @@ class TraceMmBase {
   virtual boost::python::object Next() = 0;
   virtual void SeekInsn(std::uint32_t index) = 0;
   virtual Stats GatherStats() = 0;
+  virtual void BuildInsnIndex(const char* path, size_t stepShift) = 0;
+  void BuildInsnIndexDefault(const char* path) { BuildInsnIndex(path, 8); }
+  virtual void LoadInsnIndex(const char* path) = 0;
 };
 
 struct EntryPy {
@@ -686,28 +857,32 @@ struct MmapEntryPy : public EntryPy {
   std::string name;
 };
 
-template <Endianness E, typename W>
 struct TraceEntry2Py {
+  template <Endianness E, typename W>
   int operator()(size_t index, LdStEntry<E, W> entry) {
     py = boost::python::object(new LdStEntryPy(index, entry));
     return 0;
   }
 
+  template <Endianness E, typename W>
   int operator()(size_t index, InsnEntry<E, W> entry) {
     py = boost::python::object(new InsnEntryPy(index, entry));
     return 0;
   }
 
+  template <Endianness E, typename W>
   int operator()(size_t index, InsnExecEntry<E, W> entry) {
     py = boost::python::object(new InsnExecEntryPy(index, entry));
     return 0;
   }
 
+  template <Endianness E, typename W>
   int operator()(size_t index, LdStNxEntry<E, W> entry) {
     py = boost::python::object(new LdStNxEntryPy(index, entry));
     return 0;
   }
 
+  template <Endianness E, typename W>
   int operator()(size_t index, MmapEntry<E, W> entry) {
     py = boost::python::object(new MmapEntryPy(index, entry));
     return 0;
@@ -716,27 +891,35 @@ struct TraceEntry2Py {
   boost::python::object py;
 };
 
-template <Endianness E, typename W>
-struct Seek {
-  Seek()
+struct Seeker {
+  Seeker()
       : insnIndex(std::numeric_limits<size_t>::max()),
         prevInsnSeq(std::numeric_limits<std::uint32_t>::max()) {}
 
+  template <Endianness E, typename W>
   int operator()(size_t /* index */, LdStEntry<E, W> entry) {
     return HandleInsnSeq(entry.GetInsnSeq());
   }
 
-  int operator()(size_t /* index */, InsnEntry<E, W> /* entry */) { return 0; }
+  template <Endianness E, typename W>
+  int operator()(size_t /* index */, InsnEntry<E, W> /* entry */) {
+    return 0;
+  }
 
+  template <Endianness E, typename W>
   int operator()(size_t /* index */, InsnExecEntry<E, W> entry) {
     return HandleInsnSeq(entry.GetInsnSeq());
   }
 
+  template <Endianness E, typename W>
   int operator()(size_t /* index */, LdStNxEntry<E, W> entry) {
     return HandleInsnSeq(entry.GetInsnSeq());
   }
 
-  int operator()(size_t /* index */, MmapEntry<E, W> /* entry */) { return 0; }
+  template <Endianness E, typename W>
+  int operator()(size_t /* index */, MmapEntry<E, W> /* entry */) {
+    return 0;
+  }
 
   int HandleInsnSeq(std::uint32_t insnSeq) {
     if (insnSeq != prevInsnSeq) {
@@ -750,13 +933,38 @@ struct Seek {
   std::uint32_t prevInsnSeq;
 };
 
+struct StatsGatherer {
+  template <Endianness E, typename W>
+  int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
+    return HandleTlv(entry.GetTlv());
+  }
+
+  template <typename Entry>
+  int operator()(size_t /* i */, Entry entry) {
+    return HandleTlv(entry.GetTlv());
+  }
+
+  template <Endianness E, typename W>
+  int HandleTlv(Tlv<E, W> tlv) {
+    return stats.tagStats[tlv.GetTag()].AddTlv(tlv);
+  }
+
+  Stats stats;
+};
+
+struct InsnIndexEntry {
+  size_t insnIndex;
+  size_t fileOffset;
+  size_t entryIndex;
+};
+
 template <Endianness E, typename W>
 class TraceMm : public TraceMmBase {
  public:
   TraceMm(void* data, size_t length)
-      : data_(data),
+      : data_(static_cast<std::uint8_t*>(data)),
         length_(length),
-        cur_(static_cast<std::uint8_t*>(data_)),
+        cur_(data_),
         end_(cur_ + length_),
         entryIndex_(0),
         header_(cur_) {}
@@ -842,17 +1050,26 @@ class TraceMm : public TraceMmBase {
 
   boost::python::object Next() override {
     if (cur_ == end_) boost::python::objects::stop_iteration_error();
-    TraceEntry2Py<E, W> visitor;
+    TraceEntry2Py visitor;
     int err = VisitOne(&visitor);
     if (err < 0) throw std::runtime_error("Failed to parse the next entry");
     return visitor.py;
   }
 
   void SeekInsn(std::uint32_t index) override {
-    cur_ =
-        static_cast<std::uint8_t*>(data_) + header_.GetTlv().GetAlignedLength();
-    entryIndex_ = 0;
-    Seek<E, W> visitor;
+    Seeker visitor;
+    if (insnIndex_.IsInitalized()) {
+      MmVector<InsnIndexEntry>::const_iterator it = std::upper_bound(
+          insnIndex_.begin(), insnIndex_.end(), index,
+          [](std::uint32_t insnIndex, const InsnIndexEntry& entry) {
+            return insnIndex < entry.insnIndex;
+          });
+      --it;
+      Rewind(*it);
+      visitor.insnIndex = it->insnIndex - 1;
+    } else {
+      Rewind();
+    }
     while (true) {
       if (cur_ == end_) throw std::invalid_argument("No such insn");
       std::uint8_t* prev = cur_;
@@ -876,6 +1093,32 @@ class TraceMm : public TraceMmBase {
     return visitor.stats;
   }
 
+  void BuildInsnIndex(const char* path, size_t stepShift) override {
+    if (insnIndex_.Init(path, InitMode::CreatePersistent) < 0)
+      throw std::runtime_error("Failed to create index");
+    size_t stepMask = (1 << stepShift) - 1;
+    Rewind();
+    Seeker visitor;
+    size_t prevInsnIndex = visitor.insnIndex;
+    while (cur_ != end_) {
+      std::uint8_t* prev = cur_;
+      if (VisitOne(&visitor) < 0)
+        throw std::runtime_error("Failed to parse the next entry");
+      if (visitor.insnIndex != prevInsnIndex) {
+        if ((visitor.insnIndex & stepMask) == 0)
+          insnIndex_.push_back(InsnIndexEntry{visitor.insnIndex,
+                                              static_cast<size_t>(prev - data_),
+                                              entryIndex_ - 1});
+        prevInsnIndex = visitor.insnIndex;
+      }
+    }
+  }
+
+  void LoadInsnIndex(const char* path) override {
+    if (insnIndex_.Init(path, InitMode::OpenExisting) < 0)
+      throw std::runtime_error("Failed to load index");
+  }
+
  private:
   bool Have(size_t n) const { return cur_ + n <= end_; }
 
@@ -886,12 +1129,23 @@ class TraceMm : public TraceMmBase {
     return true;
   }
 
-  void* data_;
+  void Rewind() {
+    cur_ = data_ + header_.GetTlv().GetAlignedLength();
+    entryIndex_ = 0;
+  }
+
+  void Rewind(const InsnIndexEntry& entry) {
+    cur_ = data_ + entry.fileOffset;
+    entryIndex_ = entry.entryIndex;
+  }
+
+  std::uint8_t* data_;
   size_t length_;
   std::uint8_t* cur_;
   std::uint8_t* end_;
   size_t entryIndex_;
   HeaderEntry<E, W> header_;
+  MmVector<InsnIndexEntry> insnIndex_;
 };
 
 int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
@@ -988,193 +1242,6 @@ struct InsnInTrace {
   std::uint32_t regDefEndIndex;
   std::uint32_t memDefStartIndex;
   std::uint32_t memDefEndIndex;
-};
-
-template <size_t N>
-struct Int;
-
-template <>
-struct Int<4> {
-  using U = std::uint32_t;
-};
-
-template <>
-struct Int<8> {
-  using U = std::uint64_t;
-};
-
-template <typename T>
-T GetAligned(T pos, size_t n) {
-  using U = typename Int<sizeof(T)>::U;
-  U uPos = (U)pos;
-  U aligned = (uPos + static_cast<U>(n - 1)) & ~static_cast<U>(n - 1);
-  return (T)aligned;
-}
-
-ssize_t ReadN(int fd, void* buf, size_t count) {
-  size_t totalSize = 0;
-  while (count != 0) {
-    ssize_t chunkSize = read(fd, buf, count);
-    if (chunkSize < 0) return chunkSize;
-    if (chunkSize == 0) {
-      errno = EINVAL;
-      break;
-    }
-    buf = static_cast<char*>(buf) + chunkSize;
-    count -= chunkSize;
-    totalSize += chunkSize;
-  }
-  return totalSize;
-}
-
-enum class InitMode {
-  CreateTemporary,
-  CreatePersistent,
-  OpenExisting,
-};
-
-template <typename T>
-class MmVector {
- public:
-  using iterator = T*;
-  using const_iterator = const T*;
-  using reference = T&;
-  using const_reference = const T&;
-
-  MmVector() : fd_(-1), storage_(nullptr), capacity_(0) {}
-  template <typename U>
-  MmVector(const MmVector<U>&) = delete;
-  ~MmVector() {
-    if (storage_ != nullptr) {
-      if (ftruncate(fd_, kOverhead + storage_->size * sizeof(T)) == 0)
-        capacity_ = storage_->size;
-      munmap(storage_, kOverhead + capacity_ * sizeof(T));
-    }
-    close(fd_);
-  }
-
-  [[nodiscard]] int Init(const char* path, InitMode mode) {
-    switch (mode) {
-      case InitMode::CreateTemporary: {
-        size_t len = strlen(path);
-        std::unique_ptr<char[]> tempPath(new char[len + 7]);
-        memcpy(&tempPath[0], path, len);
-        memset(&tempPath[len], 'X', 6);
-        tempPath[len + 6] = '\0';
-        fd_ = mkstemp(tempPath.get());
-        if (fd_ == -1) return -errno;
-        unlink(tempPath.get());
-        return InitCreated();
-      }
-      case InitMode::CreatePersistent:
-        fd_ = open(path, O_RDWR | O_CREAT | O_TRUNC, 0644);
-        if (fd_ == -1) return -errno;
-        return InitCreated();
-      case InitMode::OpenExisting:
-        fd_ = open(path, O_RDWR);
-        if (fd_ == -1) return -errno;
-        return InitOpened();
-      default:
-        return -EINVAL;
-    }
-  }
-
-  [[nodiscard]] int InitCreated() {
-    if (ftruncate(fd_, kOverhead) == -1) return -errno;
-    void* newStorage =
-        mmap(nullptr, kOverhead, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
-    if (newStorage == MAP_FAILED) return -errno;
-    storage_ = static_cast<Storage*>(newStorage);
-    storage_->size = 0;
-    return 0;
-  }
-
-  [[nodiscard]] int InitOpened() {
-    Storage header;
-    if (ReadN(fd_, &header, kOverhead) != kOverhead) return -errno;
-    void* newStorage = mmap(nullptr, kOverhead + header.size * sizeof(T),
-                            PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
-    if (newStorage == MAP_FAILED) return -errno;
-    storage_ = static_cast<Storage*>(newStorage);
-    capacity_ = storage_->size;
-    return 0;
-  }
-
-  T* data() { return storage_->entries; }
-  const T* data() const { return storage_->entries; }
-  size_t size() const { return storage_->size; }
-  size_t capacity() const { return capacity_; }
-  iterator begin() { return storage_->entries; }
-  const_iterator begin() const { return storage_->entries; }
-  iterator end() { return &storage_->entries[storage_->size]; }
-  const_iterator end() const { return &storage_->entries[storage_->size]; }
-  reference front() { return storage_->entries[0]; }
-  const_reference front() const { return storage_->entries[0]; }
-  reference back() { return storage_->entries[storage_->size - 1]; }
-  const_reference back() const { return storage_->entries[storage_->size - 1]; }
-  reference operator[](size_t n) { return storage_->entries[n]; }
-  const_reference operator[](size_t n) const { return storage_->entries[n]; }
-
-  void reserve(size_t n) {
-    if (n <= capacity_) return;
-    if (ftruncate(fd_, kOverhead + n * sizeof(T)) == -1) throw std::bad_alloc();
-    void* newStorage = mremap(storage_, kOverhead + capacity_ * sizeof(T),
-                              kOverhead + n * sizeof(T), MREMAP_MAYMOVE);
-    if (newStorage == MAP_FAILED) throw std::bad_alloc();
-    storage_ = static_cast<Storage*>(newStorage);
-    capacity_ = n;
-  }
-
-  void push_back(const T& val) {
-    if (storage_->size + 1 > capacity_) Grow();
-    storage_->entries[storage_->size++] = val;
-  }
-
-  template <typename... Args>
-  reference emplace_back(Args&&... args) {
-    if (storage_->size + 1 > capacity_) Grow();
-    new (&storage_->entries[storage_->size]) T(std::forward(args)...);
-    return storage_->entries[storage_->size++];
-  }
-
-  template <typename InputIterator>
-  void insert(iterator position, InputIterator first, InputIterator last) {
-    size_t i = position - &storage_->entries[0];
-    size_t n = last - first;
-    if (i + n > capacity_) {
-      Grow(GetAligned((i + n - capacity_) * sizeof(T), kGrowAmount));
-      position = &storage_->entries[i];
-    }
-    InputIterator input = first;
-    iterator end = &storage_->entries[storage_->size];
-    while (position != end && input != last) *(position++) = *(input++);
-    while (input != last) new (position++) T(*(input++));
-    storage_->size = std::max(storage_->size, n + i);
-  }
-
-  void resize(size_t n, T val = T()) {
-    if (n > capacity_)
-      Grow(GetAligned((n - capacity_) * sizeof(T), kGrowAmount));
-    for (size_t i = storage_->size; i < n; i++)
-      new (&storage_->entries[i]) T(val);
-    storage_->size = n;
-  }
-
- private:
-  static constexpr size_t kGrowAmount = 1024 * 1024 * 1024;
-
-  void Grow(size_t bytes = kGrowAmount) {
-    reserve(capacity_ + bytes / sizeof(T));
-  }
-
-  int fd_;
-  struct Storage {
-    size_t size;
-    T entries[1];  // C++ has no FAM!
-  };
-  static constexpr size_t kOverhead = sizeof(Storage) - sizeof(T);
-  Storage* storage_;
-  size_t capacity_;
 };
 
 size_t GetFirstPrimeGreaterThanOrEqualTo(size_t value) {
@@ -2133,7 +2200,10 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("__iter__", bp::objects::identity_function())
       .def("__next__", &TraceMmBase::Next)
       .def("seek_insn", &TraceMmBase::SeekInsn)
-      .def("gather_stats", &TraceMmBase::GatherStats);
+      .def("gather_stats", &TraceMmBase::GatherStats)
+      .def("build_insn_index", &TraceMmBase::BuildInsnIndex)
+      .def("build_insn_index", &TraceMmBase::BuildInsnIndexDefault)
+      .def("load_insn_index", &TraceMmBase::LoadInsnIndex);
   bp::def("ud_file", UdFile);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
