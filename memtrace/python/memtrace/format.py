@@ -23,25 +23,26 @@ def format_entry(entry: Entry, endianness: str, disasm: Disasm) -> str:
     # * exposing C++ implementation without hurting performance is not trivial.
     s = '[{:10}] '.format(entry.index)
     if isinstance(entry, LdStEntry):
-        s += '0x{:016x}: {} uint{}_t [0x{:x}] {}'.format(
-            entry.pc,
+        s += '0x{:08x}: {} uint{}_t [0x{:x}] {}'.format(
+            entry.insn_seq,
             get_tag_str(entry.tag),
             len(entry.value) * 8,
             entry.addr,
             format_value(bytes(entry.value), endianness),
         )
     elif isinstance(entry, InsnEntry):
-        s += '0x{:016x}: {} {} {}'.format(
-            entry.pc,
+        s += '0x{:08x}: {} 0x{:016x} {} {}'.format(
+            entry.insn_seq,
             get_tag_str(entry.tag),
+            entry.pc,
             bytes(entry.value).hex(),
             disasm.disasm_str(entry.value, entry.pc),
         )
     elif isinstance(entry, InsnExecEntry):
-        s += '0x{:016x}: {}'.format(entry.pc, get_tag_str(entry.tag))
+        s += '0x{:08x}: {}'.format(entry.insn_seq, get_tag_str(entry.tag))
     elif isinstance(entry, LdStNxEntry):
-        s += '0x{:016x}: {} uint{}_t [0x{:x}]'.format(
-            entry.pc,
+        s += '0x{:08x}: {} uint{}_t [0x{:x}]'.format(
+            entry.insn_seq,
             get_tag_str(entry.tag),
             len(entry.value) * 8,
             entry.addr,

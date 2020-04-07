@@ -3,7 +3,7 @@ import sys
 
 setuptools.setup(
     name='memtrace',
-    version='0.0.6',
+    version='0.0.7',
     author='mephi42',
     author_email='mephi42@gmail.com',
     description='memtrace post-processing scripts',

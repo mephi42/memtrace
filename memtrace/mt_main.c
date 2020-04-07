@@ -90,52 +90,56 @@ static AddrRange pc_ranges[MAX_PC_RANGES];
 static UInt n_pc_ranges;
 
 /* Generic entry header. */
-union Tlv {
+struct Tlv {
+   UShort tag;
+   UShort length;
+};
+
+/* Generic entry header combined with instruction sequence number. */
+union TlvInsnSeq {
    struct {
-      UShort tag;
-      UShort length;
-    };
-    UIntPtr packed;
+      struct Tlv tlv;
+      UInt insnSeq;
+   };
+   ULong packed;
 };
 
 /* The first entry. */
 struct HeaderEntry {
-   union Tlv tlv;
+   struct Tlv tlv;
    UShort e_machine;
+   UShort reserved;
 };
 
 /* Used for MT_LOAD, MT_STORE, MT_REG, MT_GET_REG, MT_PUT_REG. */
 struct LdStEntry {
-   union Tlv tlv;
-   Addr pc;
+   union TlvInsnSeq tlvInsnSeq;
    Addr addr;
    UChar value[0];
 };
 
 /* Used for MT_INSN. */
 struct InsnEntry {
-   union Tlv tlv;
+   union TlvInsnSeq tlvInsnSeq;
    Addr pc;
    UChar value[0];
 };
 
 /* Used for MT_INSN_EXEC. */
 struct InsnExecEntry {
-   union Tlv tlv;
-   Addr pc;
+   union TlvInsnSeq tlvInsnSeq;
 };
 
 /* Used for MT_GET_REG_NX and MT_PUT_REG_NX. */
 struct LdStNxEntry {
-   union Tlv tlv;
-   Addr pc;
+   union TlvInsnSeq tlvInsnSeq;
    Addr addr;
    UIntPtr size;
 };
 
 /* Used for MT_MMAP. */
 struct MmapEntry {
-   union Tlv tlv;
+   struct Tlv tlv;
    Addr start;
    Addr end;
    UIntPtr flags;
@@ -163,13 +167,12 @@ static void open_trace_file(void)
    trace = trace_start;
    trace_end = trace_start + TRACE_BUFFER_SIZE;
 
-   MT_STATIC_ASSERT(VG_WORDSIZE == 4 ? sizeof(struct HeaderEntry) == 8 :
-                    VG_WORDSIZE == 8 ? sizeof(struct HeaderEntry) == 16 :
-                    0);
+   MT_STATIC_ASSERT(sizeof(struct HeaderEntry) == 8);
    entry = (struct HeaderEntry*)trace;
    entry->tlv.tag = MT_MAGIC;
    entry->tlv.length = sizeof(struct HeaderEntry);
    entry->e_machine = VG_ELF_MACHINE;
+   entry->reserved = 0;
    trace += sizeof(struct HeaderEntry);
 }
 
@@ -265,36 +268,32 @@ static void update_current_entry_ptr(IRSB* out,
 }
 
 static void add_ldst_entry(IRSB* out,
-                           Addr pc,
+                           UInt insnSeq,
                            IRExpr* addr,
                            UShort tag,
                            IRExpr* value)
 {
+   union TlvInsnSeq tlvInsnSeq;
    IRTemp currentEntryPtr;
    Int valueLength;
    Int entryLength;
-   union Tlv tlv;
 
    MT_STATIC_ASSERT(VG_WORDSIZE == 4 ? sizeof(struct LdStEntry) == 12 :
-                    VG_WORDSIZE == 8 ? sizeof(struct LdStEntry) == 24 :
+                    VG_WORDSIZE == 8 ? sizeof(struct LdStEntry) == 16 :
                     0);
    valueLength = sizeofIRType(typeOfIRExpr(out->tyenv, value));
    entryLength = sizeof(struct LdStEntry) + valueLength;
    /* entry = ...; */
    currentEntryPtr = load_current_entry_ptr(out);
-   /* entry->tlv = tlv; */
-   tlv.packed = 0;
-   tlv.tag = tag;
-   tlv.length = entryLength;
+   /* entry->tlvInsnSeq = tlvInsnSeq; */
+   tlvInsnSeq.packed = 0;
+   tlvInsnSeq.tlv.tag = tag;
+   tlvInsnSeq.tlv.length = entryLength;
+   tlvInsnSeq.insnSeq = insnSeq;
    store_value(out,
                currentEntryPtr,
-               offsetof(struct LdStEntry, tlv.packed),
-               mkUIntPtr(tlv.packed));
-   /* entry->pc = pc; */
-   store_value(out,
-               currentEntryPtr,
-               offsetof(struct LdStEntry, pc),
-               mkUIntPtr(pc));
+               offsetof(struct LdStEntry, tlvInsnSeq.packed),
+               IRExpr_Const(IRConst_U64(tlvInsnSeq.packed)));
    /* entry->addr = addr; */
    store_value(out,
                currentEntryPtr,
@@ -311,36 +310,37 @@ static void add_ldst_entry(IRSB* out,
                             ALIGN_UP(entryLength, sizeof(UIntPtr)));
 }
 
-static void add_reg_entry(IRSB* out, Addr pc, Int offset)
+static void add_reg_entry(IRSB* out, UInt insnSeq, Int offset)
 {
    add_ldst_entry(out,
-                  pc,
+                  insnSeq,
                   mkUIntPtr(offset),
                   MT_REG,
                   IRExpr_Get(offset, Ity_Ptr));
 }
 
-static void add_reg_entries(IRSB* out, Addr pc)
+static void add_reg_entries(IRSB* out, UInt insnSeq)
 {
    Int i;
 
    for (i = 0; i < sizeof(VexGuestArchState); i += VG_WORDSIZE)
-      add_reg_entry(out, pc, i);
+      add_reg_entry(out, insnSeq, i);
 }
 
-static void add_insn_entry(Addr pc, UInt insn_length)
+static void add_insn_entry(UInt insnSeq, Addr pc, UInt insn_length)
 {
    struct InsnEntry* entry;
    Int alignedEntryLength;
    Int entryLength;
 
-   MT_STATIC_ASSERT(VG_WORDSIZE == 4 ? sizeof(struct InsnEntry) == 8 :
+   MT_STATIC_ASSERT(VG_WORDSIZE == 4 ? sizeof(struct InsnEntry) == 12 :
                     VG_WORDSIZE == 8 ? sizeof(struct InsnEntry) == 16 :
                     0);
    entryLength = sizeof(struct InsnEntry) + insn_length;
    entry = (struct InsnEntry*)trace;
-   entry->tlv.tag = MT_INSN;
-   entry->tlv.length = entryLength;
+   entry->tlvInsnSeq.tlv.tag = MT_INSN;
+   entry->tlvInsnSeq.tlv.length = entryLength;
+   entry->tlvInsnSeq.insnSeq = insnSeq;
    entry->pc = pc;
    VG_(memcpy)(entry->value, (void*)pc, insn_length);
    alignedEntryLength = ALIGN_UP(entryLength, sizeof(UIntPtr));
@@ -350,28 +350,23 @@ static void add_insn_entry(Addr pc, UInt insn_length)
       flush_trace_buffer();
 }
 
-static void add_insn_exec_entry(IRSB* out, Addr pc)
+static void add_insn_exec_entry(IRSB* out, UInt insnSeq)
 {
    IRTemp currentEntryPtr;
    Int entryLength;
-   union Tlv tlv;
+   union TlvInsnSeq tlvInsnSeq;
 
-   MT_STATIC_ASSERT(VG_WORDSIZE == 4 ? sizeof(struct InsnExecEntry) == 8 :
-                    VG_WORDSIZE == 8 ? sizeof(struct InsnExecEntry) == 16 :
-                    0);
+   MT_STATIC_ASSERT(sizeof(struct InsnExecEntry) == 8);
    currentEntryPtr = load_current_entry_ptr(out);
    entryLength = sizeof(struct InsnExecEntry);
-   tlv.packed = 0;
-   tlv.tag = MT_INSN_EXEC;
-   tlv.length = entryLength;
+   tlvInsnSeq.packed = 0;
+   tlvInsnSeq.tlv.tag = MT_INSN_EXEC;
+   tlvInsnSeq.tlv.length = entryLength;
+   tlvInsnSeq.insnSeq = insnSeq;
    store_value(out,
                currentEntryPtr,
-               offsetof(struct InsnExecEntry, tlv.packed),
-               mkUIntPtr(tlv.packed));
-   store_value(out,
-               currentEntryPtr,
-               offsetof(struct InsnExecEntry, pc),
-               mkUIntPtr(pc));
+               offsetof(struct InsnExecEntry, tlvInsnSeq.packed),
+               IRExpr_Const(IRConst_U64(tlvInsnSeq.packed)));
    update_current_entry_ptr(out, currentEntryPtr, entryLength);
 }
 
@@ -540,8 +535,8 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
                     IRType gWordTy,
                     IRType hWordTy)
 {
+   static UInt insnSeq = 0;
    Int pcFlags = 0;
-   Addr pc = 0;
    IRSB* out;
    Int i;
 
@@ -553,17 +548,20 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
       case Ist_NoOp:
          addStmtToIRSB(out, stmt);
          break;
-      case Ist_IMark:
-         pc = stmt->Ist.IMark.addr;
+      case Ist_IMark: {
+         Addr pc = stmt->Ist.IMark.addr;
+
+         insnSeq++;
          pcFlags = get_pc_flags(pc);
          if (pcFlags)
-            add_insn_entry(pc, stmt->Ist.IMark.len);
+            add_insn_entry(insnSeq, pc, stmt->Ist.IMark.len);
          if (pcFlags & AR_INSNS)
-            add_insn_exec_entry(out, pc);
+            add_insn_exec_entry(out, insnSeq);
          if (pcFlags & AR_ALL_REGS)
-            add_reg_entries(out, pc);
+            add_reg_entries(out, insnSeq);
          addStmtToIRSB(out, stmt);
          break;
+      }
       case Ist_AbiHint:
          addStmtToIRSB(out, stmt);
          break;
@@ -572,7 +570,7 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
             IRExpr* addr = mkUIntPtr(stmt->Ist.Put.offset);
             IRExpr* data = stmt->Ist.Put.data;
 
-            add_ldst_entry(out, pc, addr, MT_PUT_REG, data);
+            add_ldst_entry(out, insnSeq, addr, MT_PUT_REG, data);
          }
          addStmtToIRSB(out, stmt);
          break;
@@ -585,11 +583,11 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          if ((pcFlags & AR_MEM) && data->tag == Iex_Load) {
             IRExpr* addr = data->Iex.Load.addr;
 
-            add_ldst_entry(out, pc, addr, MT_LOAD, data);
+            add_ldst_entry(out, insnSeq, addr, MT_LOAD, data);
          } else if ((pcFlags & AR_REGS) && data->tag == Iex_Get) {
             IRExpr* addr = mkUIntPtr(data->Iex.Get.offset);
 
-            add_ldst_entry(out, pc, addr, MT_GET_REG, data);
+            add_ldst_entry(out, insnSeq, addr, MT_GET_REG, data);
          }
          addStmtToIRSB(out, stmt);
          break;
@@ -599,7 +597,7 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
             IRExpr* addr = stmt->Ist.Store.addr;
             IRExpr* data = stmt->Ist.Store.data;
 
-            add_ldst_entry(out, pc, addr, MT_STORE, data);
+            add_ldst_entry(out, insnSeq, addr, MT_STORE, data);
          }
          addStmtToIRSB(out, stmt);
          break;
@@ -623,14 +621,14 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          break;
       case Ist_Exit: {
          struct LdStNxEntry entry;
+         UInt insnSeqNx = insnSeq;
          Int pcFlagsNx = pcFlags;
          XArray* entries;
-         Addr pcNx = pc;
          IRDirty* d;
          Int j;
 
          MT_STATIC_ASSERT(VG_WORDSIZE == 4 ? sizeof(struct LdStNxEntry) == 16 :
-                          VG_WORDSIZE == 8 ? sizeof(struct LdStNxEntry) == 32 :
+                          VG_WORDSIZE == 8 ? sizeof(struct LdStNxEntry) == 24 :
                           0);
          entries = VG_(newXA)(VG_(malloc),
                               "mt.nx.1",
@@ -640,18 +638,21 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
             IRStmt* stmtNx = bb->stmts[j];
 
             switch (stmtNx->tag) {
-            case Ist_IMark:
-               pcNx = stmtNx->Ist.IMark.addr;
+            case Ist_IMark: {
+               Addr pcNx = stmtNx->Ist.IMark.addr;
+
+               insnSeqNx++;
                pcFlagsNx = get_pc_flags(pcNx);
                break;
+             }
             case Ist_Put:
                if (pcFlagsNx & AR_REGS) {
                   IRExpr* data = stmtNx->Ist.Put.data;
 
-                  entry.tlv.packed = 0;
-                  entry.tlv.tag = MT_PUT_REG_NX;
-                  entry.tlv.length = sizeof entry;
-                  entry.pc = pcNx;
+                  entry.tlvInsnSeq.packed = 0;
+                  entry.tlvInsnSeq.tlv.tag = MT_PUT_REG_NX;
+                  entry.tlvInsnSeq.tlv.length = sizeof entry;
+                  entry.tlvInsnSeq.insnSeq = insnSeqNx;
                   entry.addr = stmtNx->Ist.Put.offset;
                   entry.size = sizeofIRType(typeOfIRExpr(out->tyenv, data));
                   VG_(addBytesToXA)(entries, &entry, sizeof entry);
@@ -661,10 +662,10 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
                IRExpr* data = stmtNx->Ist.WrTmp.data;
 
                if ((pcFlagsNx & AR_REGS) && data->tag == Iex_Get) {
-                  entry.tlv.packed = 0;
-                  entry.tlv.tag = MT_GET_REG_NX;
-                  entry.tlv.length = sizeof entry;
-                  entry.pc = pcNx;
+                  entry.tlvInsnSeq.packed = 0;
+                  entry.tlvInsnSeq.tlv.tag = MT_GET_REG_NX;
+                  entry.tlvInsnSeq.tlv.length = sizeof entry;
+                  entry.tlvInsnSeq.insnSeq = insnSeqNx;
                   entry.addr = data->Iex.Get.offset;
                   entry.size = sizeofIRType(typeOfIRExpr(out->tyenv, data));
                   VG_(addBytesToXA)(entries, &entry, sizeof entry);

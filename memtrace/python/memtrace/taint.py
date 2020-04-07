@@ -156,7 +156,7 @@ class BackwardAnalysis:
             return reg_use_entries, mem_use_entries
         self.trace.seek_insn(trace_index - 1)
         entry = next(self.trace)
-        pc = entry.pc
+        insn_seq = entry.insn_seq
         while True:
             if entry.tag in (Tag.MT_GET_REG, Tag.MT_GET_REG_NX):
                 reg_use_entries.append(entry)
@@ -167,9 +167,9 @@ class BackwardAnalysis:
             except StopIteration:
                 break
             if isinstance(entry, (LdStEntry, InsnExecEntry, LdStNxEntry)):
-                if entry.pc != pc:
+                if entry.insn_seq != insn_seq:
                     break
-                pc = entry.pc
+                insn_seq = entry.insn_seq
         return reg_use_entries, mem_use_entries
 
 

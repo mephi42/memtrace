@@ -20,7 +20,6 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 // clang-format off
@@ -171,7 +170,7 @@ class Tlv {
  public:
   explicit Tlv(const std::uint8_t* data) : data_(data) {}
 
-  static size_t GetFixedLength() { return sizeof(std::uint16_t) * 2; }
+  static constexpr size_t kFixedLength = sizeof(std::uint16_t) * 2;
 
   Tag GetTag() const {
     return static_cast<Tag>(RawInt<E, std::uint16_t>(data_).GetValue());
@@ -191,15 +190,18 @@ class HeaderEntry {
  public:
   explicit HeaderEntry(const std::uint8_t* data) : data_(data) {}
 
-  static size_t GetFixedLength() { return sizeof(W) + sizeof(std::uint16_t); }
+  static constexpr size_t kFixedLength =
+      Tlv<E, W>::kFixedLength + sizeof(std::uint16_t);
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
   MachineType GetMachineType() const {
     return static_cast<MachineType>(
-        RawInt<E, std::uint16_t>(data_ + sizeof(W)).GetValue());
+        RawInt<E, std::uint16_t>(data_ + kMachineTypeOffset).GetValue());
   }
 
  private:
+  static constexpr size_t kMachineTypeOffset = Tlv<E, W>::kFixedLength;
+
   const std::uint8_t* data_;
 };
 
@@ -209,14 +211,20 @@ class LdStEntry {
   explicit LdStEntry(const std::uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
-  W GetAddr() const { return RawInt<E, W>(data_ + sizeof(W) * 2).GetValue(); }
-  const std::uint8_t* GetValue() const { return data_ + sizeof(W) * 3; }
+  std::uint32_t GetInsnSeq() const {
+    return RawInt<E, std::uint32_t>(data_ + kInsnSeqOffset).GetValue();
+  }
+  W GetAddr() const { return RawInt<E, W>(data_ + kAddrOffset).GetValue(); }
+  const std::uint8_t* GetValue() const { return data_ + kValueOffset; }
   W GetSize() const {
-    return GetTlv().GetLength() - static_cast<W>(sizeof(W)) * 3;
+    return GetTlv().GetLength() - static_cast<W>(kValueOffset);
   }
 
  private:
+  static constexpr size_t kInsnSeqOffset = Tlv<E, W>::kFixedLength;
+  static constexpr size_t kAddrOffset = kInsnSeqOffset + sizeof(std::uint32_t);
+  static constexpr size_t kValueOffset = kAddrOffset + sizeof(W);
+
   const std::uint8_t* data_;
 };
 
@@ -226,13 +234,20 @@ class InsnEntry {
   explicit InsnEntry(const std::uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
-  const std::uint8_t* GetValue() const { return data_ + sizeof(W) * 2; }
+  std::uint32_t GetInsnSeq() const {
+    return RawInt<E, std::uint32_t>(data_ + kInsnSeqOffset).GetValue();
+  }
+  W GetPc() const { return RawInt<E, W>(data_ + kPcOffset).GetValue(); }
+  const std::uint8_t* GetValue() const { return data_ + kValueOffset; }
   W GetSize() const {
-    return GetTlv().GetLength() - static_cast<W>(sizeof(W)) * 2;
+    return GetTlv().GetLength() - static_cast<W>(kValueOffset);
   }
 
  private:
+  static constexpr size_t kInsnSeqOffset = Tlv<E, W>::kFixedLength;
+  static constexpr size_t kPcOffset = kInsnSeqOffset + sizeof(std::uint32_t);
+  static constexpr size_t kValueOffset = kPcOffset + sizeof(W);
+
   const std::uint8_t* data_;
 };
 
@@ -242,9 +257,13 @@ class InsnExecEntry {
   explicit InsnExecEntry(const std::uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
+  std::uint32_t GetInsnSeq() const {
+    return RawInt<E, std::uint32_t>(data_ + kInsnSeqOffset).GetValue();
+  }
 
  private:
+  static constexpr size_t kInsnSeqOffset = Tlv<E, W>::kFixedLength;
+
   const std::uint8_t* data_;
 };
 
@@ -254,11 +273,17 @@ class LdStNxEntry {
   explicit LdStNxEntry(const std::uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetPc() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
-  W GetAddr() const { return RawInt<E, W>(data_ + sizeof(W) * 2).GetValue(); }
-  W GetSize() const { return RawInt<E, W>(data_ + sizeof(W) * 3).GetValue(); }
+  std::uint32_t GetInsnSeq() const {
+    return RawInt<E, std::uint32_t>(data_ + kInsnSeqOffset).GetValue();
+  }
+  W GetAddr() const { return RawInt<E, W>(data_ + kAddrOffset).GetValue(); }
+  W GetSize() const { return RawInt<E, W>(data_ + kSizeOffset).GetValue(); }
 
  private:
+  static constexpr size_t kInsnSeqOffset = Tlv<E, W>::kFixedLength;
+  static constexpr size_t kAddrOffset = kInsnSeqOffset + sizeof(std::uint32_t);
+  static constexpr size_t kSizeOffset = kAddrOffset + sizeof(W);
+
   const std::uint8_t* data_;
 };
 
@@ -472,9 +497,8 @@ class Dumper {
 
   template <Endianness E>
   int operator()(size_t i, LdStEntry<E, W> entry) {
-    std::printf("[%10zu] 0x%016" PRIx64 ": %s uint%zu_t [0x%" PRIx64 "] ", i,
-                static_cast<std::uint64_t>(entry.GetPc()),
-                GetTagStr(entry.GetTlv().GetTag()),
+    std::printf("[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "] ", i,
+                entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
                 static_cast<size_t>(entry.GetSize() * 8),
                 static_cast<std::uint64_t>(entry.GetAddr()));
     ValueDump<E>(entry.GetValue(), entry.GetSize());
@@ -484,9 +508,9 @@ class Dumper {
 
   template <Endianness E>
   int operator()(size_t i, InsnEntry<E, W> entry) {
-    std::printf("[%10zu] 0x%016" PRIx64 ": %s ", i,
-                static_cast<std::uint64_t>(entry.GetPc()),
-                GetTagStr(entry.GetTlv().GetTag()));
+    std::printf("[%10zu] 0x%08" PRIx32 ": %s 0x%016" PRIx64 " ", i,
+                entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
+                static_cast<std::uint64_t>(entry.GetPc()));
     HexDump(stdout, entry.GetValue(), entry.GetSize());
     std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
         entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
@@ -499,8 +523,7 @@ class Dumper {
 
   template <Endianness E>
   int operator()(size_t i, InsnExecEntry<E, W> entry) {
-    std::printf("[%10zu] 0x%016" PRIx64 ": %s\n", i,
-                static_cast<std::uint64_t>(entry.GetPc()),
+    std::printf("[%10zu] 0x%08" PRIx32 ": %s\n", i, entry.GetInsnSeq(),
                 GetTagStr(entry.GetTlv().GetTag()));
     insnCount_++;
     return 0;
@@ -508,9 +531,8 @@ class Dumper {
 
   template <Endianness E>
   int operator()(size_t i, LdStNxEntry<E, W> entry) {
-    std::printf("[%10zu] 0x%016" PRIx64 ": %s uint%zu_t [0x%" PRIx64 "]\n", i,
-                static_cast<std::uint64_t>(entry.GetPc()),
-                GetTagStr(entry.GetTlv().GetTag()),
+    std::printf("[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "]\n", i,
+                entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
                 static_cast<size_t>(entry.GetSize() * 8),
                 static_cast<std::uint64_t>(entry.GetAddr()));
     return 0;
@@ -565,11 +587,11 @@ struct LdStEntryPy : public EntryPy {
   template <Endianness E, typename W>
   LdStEntryPy(size_t index, LdStEntry<E, W> entry)
       : EntryPy(index, entry.GetTlv()),
-        pc(entry.GetPc()),
+        insnSeq(entry.GetInsnSeq()),
         addr(entry.GetAddr()),
         value(entry.GetValue(), entry.GetValue() + entry.GetSize()) {}
 
-  std::uint64_t pc;
+  std::uint32_t insnSeq;
   std::uint64_t addr;
   std::vector<std::uint8_t> value;
 };
@@ -578,9 +600,11 @@ struct InsnEntryPy : public EntryPy {
   template <Endianness E, typename W>
   InsnEntryPy(size_t index, const InsnEntry<E, W>& entry)
       : EntryPy(index, entry.GetTlv()),
+        insnSeq(entry.GetInsnSeq()),
         pc(entry.GetPc()),
         value(entry.GetValue(), entry.GetValue() + entry.GetSize()) {}
 
+  std::uint32_t insnSeq;
   std::uint64_t pc;
   std::vector<std::uint8_t> value;
 };
@@ -588,20 +612,20 @@ struct InsnEntryPy : public EntryPy {
 struct InsnExecEntryPy : public EntryPy {
   template <Endianness E, typename W>
   InsnExecEntryPy(size_t index, const InsnExecEntry<E, W>& entry)
-      : EntryPy(index, entry.GetTlv()), pc(entry.GetPc()) {}
+      : EntryPy(index, entry.GetTlv()), insnSeq(entry.GetInsnSeq()) {}
 
-  std::uint64_t pc;
+  std::uint32_t insnSeq;
 };
 
 struct LdStNxEntryPy : public EntryPy {
   template <Endianness E, typename W>
   LdStNxEntryPy(size_t index, const LdStNxEntry<E, W>& entry)
       : EntryPy(index, entry.GetTlv()),
-        pc(entry.GetPc()),
+        insnSeq(entry.GetInsnSeq()),
         addr(entry.GetAddr()),
         size(entry.GetSize()) {}
 
-  std::uint64_t pc;
+  std::uint32_t insnSeq;
   std::uint64_t addr;
   std::uint64_t size;
 };
@@ -655,34 +679,34 @@ template <Endianness E, typename W>
 struct Seek {
   Seek()
       : insnIndex(std::numeric_limits<size_t>::max()),
-        prevPc(std::numeric_limits<W>::max()) {}
+        prevInsnSeq(std::numeric_limits<std::uint32_t>::max()) {}
 
   int operator()(size_t /* index */, LdStEntry<E, W> entry) {
-    return HandlePc(entry.GetPc());
+    return HandleInsnSeq(entry.GetInsnSeq());
   }
 
   int operator()(size_t /* index */, InsnEntry<E, W> /* entry */) { return 0; }
 
   int operator()(size_t /* index */, InsnExecEntry<E, W> entry) {
-    return HandlePc(entry.GetPc());
+    return HandleInsnSeq(entry.GetInsnSeq());
   }
 
   int operator()(size_t /* index */, LdStNxEntry<E, W> entry) {
-    return HandlePc(entry.GetPc());
+    return HandleInsnSeq(entry.GetInsnSeq());
   }
 
   int operator()(size_t /* index */, MmapEntry<E, W> /* entry */) { return 0; }
 
-  int HandlePc(W pc) {
-    if (pc != prevPc) {
+  int HandleInsnSeq(std::uint32_t insnSeq) {
+    if (insnSeq != prevInsnSeq) {
       insnIndex++;
-      prevPc = pc;
+      prevInsnSeq = insnSeq;
     }
     return 0;
   }
 
   size_t insnIndex;
-  W prevPc;
+  std::uint32_t prevInsnSeq;
 };
 
 template <Endianness E, typename W>
@@ -709,7 +733,7 @@ class TraceMm : public TraceMmBase {
   }
 
   int Init() {
-    if (!Have(HeaderEntry<E, W>::GetFixedLength())) return -EINVAL;
+    if (!Have(HeaderEntry<E, W>::kFixedLength)) return -EINVAL;
     if (!Advance(header_.GetTlv().GetAlignedLength())) return -EINVAL;
     return 0;
   }
@@ -728,7 +752,7 @@ class TraceMm : public TraceMmBase {
 
   template <typename V>
   int VisitOne(size_t start, size_t end, V* visitor) {
-    if (!Have(Tlv<E, W>::GetFixedLength())) return -EINVAL;
+    if (!Have(Tlv<E, W>::kFixedLength)) return -EINVAL;
     Tlv<E, W> tlv(cur_);
     if (!Have(tlv.GetAlignedLength())) return -EINVAL;
     if (entryIndex_ >= start && entryIndex_ < end) {
@@ -1571,7 +1595,7 @@ class Ud : public UdBase {
   template <Endianness E>
   int operator()(size_t /* i */, LdStEntry<E, W> entry) {
     int ret;
-    if ((ret = HandlePc(entry.GetPc())) < 0) return ret;
+    if ((ret = HandleInsnSeq(entry.GetInsnSeq())) < 0) return ret;
     switch (entry.GetTlv().GetTag()) {
       case Tag::MT_LOAD:
         memState_.AddUses(entry.GetAddr(), entry.GetSize());
@@ -1592,7 +1616,8 @@ class Ud : public UdBase {
 
   template <Endianness E>
   int operator()(size_t /* i */, InsnEntry<E, W> entry) {
-    pcs_[entry.GetPc()] = static_cast<std::uint32_t>(code_.size());
+    if (entry.GetInsnSeq() != static_cast<std::uint32_t>(code_.size()))
+      return -EINVAL;
     InsnInCode<W>& code = code_.emplace_back();
     code.pc = entry.GetPc();
     code.textIndex = static_cast<std::uint32_t>(text_.size());
@@ -1614,14 +1639,14 @@ class Ud : public UdBase {
   template <Endianness E>
   int operator()(size_t /* i */, InsnExecEntry<E, W> entry) {
     int ret;
-    if ((ret = HandlePc(entry.GetPc())) < 0) return ret;
+    if ((ret = HandleInsnSeq(entry.GetInsnSeq())) < 0) return ret;
     return 0;
   }
 
   template <Endianness E>
   int operator()(size_t /* i */, LdStNxEntry<E, W> entry) {
     int ret;
-    if ((ret = HandlePc(entry.GetPc())) < 0) return ret;
+    if ((ret = HandleInsnSeq(entry.GetInsnSeq())) < 0) return ret;
     switch (entry.GetTlv().GetTag()) {
       case Tag::MT_GET_REG_NX:
         regState_.AddUses(entry.GetAddr(), entry.GetSize());
@@ -1760,11 +1785,11 @@ class Ud : public UdBase {
     return 0;
   }
 
-  int HandlePc(W pc) {
-    if (code_[trace_.back().codeIndex].pc == pc) return 0;
+  int HandleInsnSeq(std::uint32_t insnSeq) {
+    if (trace_.back().codeIndex == insnSeq) return 0;
     int ret;
     if ((ret = Flush()) < 0) return ret;
-    if ((ret = AddTrace(pcs_[pc])) < 0) return ret;
+    if ((ret = AddTrace(insnSeq)) < 0) return ret;
     return 0;
   }
 
@@ -1932,7 +1957,6 @@ class Ud : public UdBase {
   MmVector<InsnInCode<W>> code_;
   MmVector<std::uint8_t> text_;
   std::vector<std::string> disasm_;
-  std::unordered_map<W, std::uint32_t> pcs_;
   MmVector<InsnInTrace> trace_;
   UdState<W> regState_;
   UdState<W> memState_;
@@ -2018,16 +2042,17 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def_readonly("index", &EntryPy::index)
       .def_readonly("tag", &EntryPy::tag);
   bp::class_<LdStEntryPy, bp::bases<EntryPy>>("LdStEntry", bp::no_init)
-      .def_readonly("pc", &LdStEntryPy::pc)
+      .def_readonly("insn_seq", &LdStEntryPy::insnSeq)
       .def_readonly("addr", &LdStEntryPy::addr)
       .def_readonly("value", &LdStEntryPy::value);
   bp::class_<InsnEntryPy, bp::bases<EntryPy>>("InsnEntry", bp::no_init)
+      .def_readonly("insn_seq", &InsnEntryPy::insnSeq)
       .def_readonly("pc", &InsnEntryPy::pc)
       .def_readonly("value", &InsnEntryPy::value);
   bp::class_<InsnExecEntryPy, bp::bases<EntryPy>>("InsnExecEntry", bp::no_init)
-      .def_readonly("pc", &InsnExecEntryPy::pc);
+      .def_readonly("insn_seq", &InsnExecEntryPy::insnSeq);
   bp::class_<LdStNxEntryPy, bp::bases<EntryPy>>("LdStNxEntry", bp::no_init)
-      .def_readonly("pc", &LdStNxEntryPy::pc)
+      .def_readonly("insn_seq", &LdStNxEntryPy::insnSeq)
       .def_readonly("addr", &LdStNxEntryPy::addr)
       .def_readonly("size", &LdStNxEntryPy::size);
   bp::class_<MmapEntryPy, bp::bases<EntryPy>>("MmapEntry", bp::no_init)
