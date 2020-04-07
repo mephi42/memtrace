@@ -26,6 +26,7 @@
 #include <boost/python.hpp>
 #include <boost/python/object/iterator_core.hpp>
 #include <boost/python/scope.hpp>
+#include <boost/python/suite/indexing/map_indexing_suite.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 #include <capstone/capstone.h>  // NOLINT(build/include_order)
 // clang-format on
@@ -560,6 +561,45 @@ class Dumper {
   Disasm disasmEngine_;
 };
 
+struct TagStats {
+  TagStats() : count(0), size(0) {}
+
+  template <Endianness E, typename W>
+  int AddTlv(Tlv<E, W> tlv) {
+    count++;
+    size += tlv.GetAlignedLength();
+    return 0;
+  }
+
+  size_t count;
+  size_t size;
+};
+
+struct Stats {
+  std::map<Tag, TagStats> tagStats;
+};
+
+struct StatsGatherer {
+  template <Endianness E, typename W>
+  int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
+    return HandleTlv(entry.GetTlv());
+  }
+
+  template <typename Entry>
+  int operator()(size_t /* i */, Entry entry) {
+    return HandleTlv(entry.GetTlv());
+  }
+
+  int Complete() { return 0; }
+
+  template <Endianness E, typename W>
+  int HandleTlv(Tlv<E, W> tlv) {
+    return stats.tagStats[tlv.GetTag()].AddTlv(tlv);
+  }
+
+  Stats stats;
+};
+
 class TraceMmBase {
  public:
   template <typename V>
@@ -572,6 +612,7 @@ class TraceMmBase {
   virtual MachineType GetMachineType() = 0;
   virtual boost::python::object Next() = 0;
   virtual void SeekInsn(std::uint32_t index) = 0;
+  virtual Stats GatherStats() = 0;
 };
 
 struct EntryPy {
@@ -738,20 +779,26 @@ class TraceMm : public TraceMmBase {
     return 0;
   }
 
+  template <typename V>
+  int InitVisitor(V* visitor) {
+    // On average, one executed instruction takes 132.7 bytes in the trace file.
+    return visitor->Init(header_, length_ / 128);
+  }
+
   template <template <typename> typename V, typename... Args>
   int Visit(size_t start, size_t end, Args&&... args) {
     V<W> visitor(std::forward<Args>(args)...);
-    // On average, one executed instruction takes 132.7 bytes in the trace file.
     int err;
-    if ((err = visitor.Init(header_, length_ / 128)) < 0) return err;
+    if ((err = InitVisitor(&visitor)) < 0) return err;
     while (cur_ != end_)
-      if ((err = VisitOne(start, end, &visitor)) < 0) return err;
+      if ((err = VisitOne(&visitor, start, end)) < 0) return err;
     if ((err = visitor.Complete()) < 0) return err;
     return 0;
   }
 
   template <typename V>
-  int VisitOne(size_t start, size_t end, V* visitor) {
+  int VisitOne(V* visitor, size_t start = std::numeric_limits<size_t>::min(),
+               size_t end = std::numeric_limits<size_t>::max()) {
     if (!Have(Tlv<E, W>::kFixedLength)) return -EINVAL;
     Tlv<E, W> tlv(cur_);
     if (!Have(tlv.GetAlignedLength())) return -EINVAL;
@@ -796,8 +843,7 @@ class TraceMm : public TraceMmBase {
   boost::python::object Next() override {
     if (cur_ == end_) boost::python::objects::stop_iteration_error();
     TraceEntry2Py<E, W> visitor;
-    int err = VisitOne(std::numeric_limits<size_t>::min(),
-                       std::numeric_limits<size_t>::max(), &visitor);
+    int err = VisitOne(&visitor);
     if (err < 0) throw std::runtime_error("Failed to parse the next entry");
     return visitor.py;
   }
@@ -810,8 +856,7 @@ class TraceMm : public TraceMmBase {
     while (true) {
       if (cur_ == end_) throw std::invalid_argument("No such insn");
       std::uint8_t* prev = cur_;
-      int err = VisitOne(std::numeric_limits<size_t>::min(),
-                         std::numeric_limits<size_t>::max(), &visitor);
+      int err = VisitOne(&visitor);
       if (err < 0) throw std::runtime_error("Failed to parse the next entry");
       if (visitor.insnIndex == index) {
         cur_ = prev;
@@ -819,6 +864,16 @@ class TraceMm : public TraceMmBase {
         break;
       }
     }
+  }
+
+  Stats GatherStats() override {
+    StatsGatherer visitor;
+    if (InitVisitor(&visitor) < 0)
+      throw std::runtime_error("Failed to parse the header");
+    while (cur_ != end_)
+      if (VisitOne(&visitor) < 0)
+        throw std::runtime_error("Failed to parse the next entry");
+    return visitor.stats;
   }
 
  private:
@@ -2061,6 +2116,13 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def_readonly("flags", &MmapEntryPy::flags)
       .def_readonly("name", &MmapEntryPy::name);
   bp::def("dump_file", DumpFile);
+  bp::class_<TagStats>("TagStats", bp::no_init)
+      .def_readonly("count", &TagStats::count)
+      .def_readonly("size", &TagStats::size);
+  bp::class_<std::map<Tag, TagStats>>("std::map<Tag, TagStats>")
+      .def(bp::map_indexing_suite<std::map<Tag, TagStats>>());
+  bp::class_<Stats>("Stats", bp::no_init)
+      .def_readonly("tag_stats", &Stats::tagStats);
   bp::class_<TraceMmBase, boost::noncopyable>("Trace", bp::no_init)
       .def("load", &TraceMmBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
@@ -2070,7 +2132,8 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("get_machine_type", &TraceMmBase::GetMachineType)
       .def("__iter__", bp::objects::identity_function())
       .def("__next__", &TraceMmBase::Next)
-      .def("seek_insn", &TraceMmBase::SeekInsn);
+      .def("seek_insn", &TraceMmBase::SeekInsn)
+      .def("gather_stats", &TraceMmBase::GatherStats);
   bp::def("ud_file", UdFile);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());

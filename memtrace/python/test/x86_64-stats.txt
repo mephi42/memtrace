@@ -1,0 +1,7 @@
+MT_GET_REG count=4 size=96
+MT_INSN count=10 size=240
+MT_LOAD count=1 size=24
+19768 count=1 size=8
+MT_MMAP count=6 size=328
+MT_PUT_REG count=15 size=360
+MT_INSN_EXEC count=10 size=80

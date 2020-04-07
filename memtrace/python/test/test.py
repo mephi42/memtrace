@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from memtrace.format import format_entry
+import memtrace.stats as stats
 import memtrace.taint as taint
 from memtrace_ext import Disasm, get_endianness_str, get_machine_type_str, \
     InsnExecEntry, Trace
@@ -195,6 +196,21 @@ class TestCommon(unittest.TestCase):
             actual_taint_txt,
         ])
 
+    def _stats(self, workdir, target):
+        stats_txt = f'{target}-stats.txt'
+        actual_stats_txt = os.path.join(workdir, stats_txt)
+        expected_stats_txt = os.path.join(self.basedir, stats_txt)
+        result = stats.from_trace_file(
+            os.path.join(workdir, 'memtrace.out'))
+        with open(actual_stats_txt, 'w') as fp:
+            stats.pp(result, fp)
+        subprocess.check_call([
+            'diff',
+            '-au',
+            expected_stats_txt,
+            actual_stats_txt,
+        ])
+
 
 class TestX86_64(TestCommon):
     machines = ['x86_64']
@@ -215,6 +231,9 @@ class TestX86_64(TestCommon):
     def test_taint(self) -> None:
         self._taint(self.workdir.name, self.target)
 
+    def test_stats(self) -> None:
+        self._stats(self.workdir.name, self.target)
+
 
 class TestI386(TestCommon):
     machines = ['i386', 'x86_64']
@@ -234,6 +253,9 @@ class TestI386(TestCommon):
 
     def test_taint(self) -> None:
         self._taint(self.workdir.name, self.target)
+
+    def test_stats(self) -> None:
+        self._stats(self.workdir.name, self.target)
 
 
 if __name__ == '__main__':

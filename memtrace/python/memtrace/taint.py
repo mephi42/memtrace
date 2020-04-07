@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 from collections import deque
 from dataclasses import dataclass, field
 import os
@@ -174,6 +175,13 @@ class BackwardAnalysis:
 
 
 if __name__ == '__main__':
-    path = sys.argv[1]
-    pc = int(sys.argv[2], 0)
-    Backward.from_trace_file(path).main(pc)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('trace')
+    parser.add_argument('pc', type=lambda pc: int(pc, 0))
+    parser.add_argument('--ud')
+    args = parser.parse_args()
+    if args.ud is None:
+        backward = Backward.from_trace_file(args.trace)
+    else:
+        backward = Backward(Trace.load(args.trace), Ud.load(args.ud))
+    backward.main(args.pc)
