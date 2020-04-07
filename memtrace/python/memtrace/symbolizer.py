@@ -16,7 +16,7 @@ def fake_maps(mappings):
         for mapping in mappings_for_name:
             maps.write(
                 (f'{mapping.start:x}-{mapping.end:x} ---- '
-                 f'0 00:00 {inode} {mapping.name}\n').encode())
+                 f'0 00:00 {inode + 1} {mapping.name}\n').encode())
     maps.flush()
     return maps
 
