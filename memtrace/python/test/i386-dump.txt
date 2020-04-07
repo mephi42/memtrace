@@ -11,7 +11,7 @@ Machine           : EM_386
 [         6] 0x00000003: MT_INSN 0x000000000804900b bb00000000 mov ebx, 0
 [         7] 0x00000003: MT_INSN_EXEC
 [         8] 0x00000003: MT_PUT_REG uint32_t [0x14] 0x0
-[         9] 0x00000004: MT_INSN 0x0000000008049010 8d8dfb0f0000 lea ecx, dword ptr [ebp + 0xffb]
+[         9] 0x00000004: MT_INSN 0x0000000008049010 8d8dfb0f0000 lea ecx, [ebp + 0xffb]
 [        10] 0x00000004: MT_INSN_EXEC
 [        11] 0x00000004: MT_GET_REG uint32_t [0x1c] 0x8049005
 [        12] 0x00000004: MT_PUT_REG uint32_t [0xc] 0x804a000

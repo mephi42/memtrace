@@ -1,7 +1,7 @@
 [0]0x0:  <unknown> reg_uses=[] reg_defs=[0x0-0xffffffffffffffff] mem_uses=[] mem_defs=[0x0-0xffffffffffffffff]
 [1]0x401000: 48c7c000000000 mov rax, 0 reg_uses=[] reg_defs=[0x10-0x18] mem_uses=[] mem_defs=[]
 [2]0x401007: 48c7c700000000 mov rdi, 0 reg_uses=[] reg_defs=[0x48-0x50] mem_uses=[] mem_defs=[]
-[3]0x40100e: 488d35eb0f0000 lea rsi, qword ptr [rip + 0xfeb] reg_uses=[] reg_defs=[0x40-0x48] mem_uses=[] mem_defs=[]
+[3]0x40100e: 488d35eb0f0000 lea rsi, [rip + 0xfeb] reg_uses=[] reg_defs=[0x40-0x48] mem_uses=[] mem_defs=[]
 [4]0x401015: 48c7c201000000 mov rdx, 1 reg_uses=[] reg_defs=[0x20-0x28] mem_uses=[] mem_defs=[]
 [5]0x40101c: 0f05 syscall  reg_uses=[] reg_defs=[0x18-0x20] mem_uses=[] mem_defs=[]
 [6]0x40101e: 48c7c03c000000 mov rax, 0x3c reg_uses=[] reg_defs=[0x10-0x18] mem_uses=[] mem_defs=[]

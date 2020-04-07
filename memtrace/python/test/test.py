@@ -6,9 +6,10 @@ import sys
 import tempfile
 import unittest
 
+from memtrace.analysis import Analysis
 from memtrace.format import format_entry
 import memtrace.stats as stats
-import memtrace.taint as taint
+from memtrace.taint import BackwardAnalysis
 from memtrace_ext import Disasm, get_endianness_str, get_machine_type_str, \
     InsnExecEntry, Trace
 
@@ -184,13 +185,19 @@ class TestCommon(unittest.TestCase):
         taint_txt = f'{target}-taint.txt'
         actual_taint_txt = os.path.join(workdir, taint_txt)
         expected_taint_txt = os.path.join(self.basedir, taint_txt)
-        backward = taint.Backward.from_trace_file(
-            os.path.join(workdir, 'memtrace.out'))
+        analysis = Analysis(
+            trace_path=os.path.join(workdir, 'memtrace.out'),
+        )
         with open(taint_pc_txt) as fp:
             pc = int(fp.read(), 0)
-        dag = backward.analyze(pc)
+        backward = BackwardAnalysis(
+            analysis=analysis,
+            trace_index0=analysis.get_last_trace_for_pc(pc),
+            depth=9,
+        )
+        dag = backward.analyze()
         with open(actual_taint_txt, 'w') as fp:
-            dag.pp(backward, fp)
+            dag.pp(analysis, fp)
         subprocess.check_call([
             'diff',
             '-au',
