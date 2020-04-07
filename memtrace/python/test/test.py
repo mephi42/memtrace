@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -68,17 +69,13 @@ class TestCommon(unittest.TestCase):
         if b'[stack]' in line:
             return
         line = line.replace(workdir, b'{workdir}')
+        line = re.sub(b'(lea [^,]+, )[^ ]+ ptr ', b'\\g<1>', line)
         fp.write(line)
 
-    def _dump(self, workdir: str, target: str) -> None:
-        dump_txt = f'{target}-dump.txt'
-        actual_dump_txt = os.path.join(workdir, dump_txt)
-        expected_dump_txt = os.path.join(self.basedir, dump_txt)
-        args = ['python3', '-m', 'memtrace.dump']
-        sys.stderr.write('{}\n'.format(' '.join(args)))
+    def check_call_filtered(self, args, workdir, output_path):
         p = subprocess.Popen(args, stdout=subprocess.PIPE, cwd=workdir)
         try:
-            with open(actual_dump_txt, 'wb') as fp:
+            with open(output_path, 'wb') as fp:
                 rootdir_bytes = self.rootdir.encode()
                 workdir_bytes = workdir.encode()
                 for line in p.stdout:
@@ -88,6 +85,14 @@ class TestCommon(unittest.TestCase):
             returncode = p.wait()
             if returncode != 0:
                 raise subprocess.CalledProcessError(returncode, args)
+
+    def _dump(self, workdir: str, target: str) -> None:
+        dump_txt = f'{target}-dump.txt'
+        actual_dump_txt = os.path.join(workdir, dump_txt)
+        expected_dump_txt = os.path.join(self.basedir, dump_txt)
+        args = ['python3', '-m', 'memtrace.dump']
+        sys.stderr.write('{}\n'.format(' '.join(args)))
+        self.check_call_filtered(args, workdir, actual_dump_txt)
         subprocess.check_call([
             'diff',
             '-au',
@@ -101,8 +106,7 @@ class TestCommon(unittest.TestCase):
         expected_ud_txt = os.path.join(self.basedir, ud_txt)
         args = ['python3', '-m', 'memtrace.ud', '--verbose']
         sys.stderr.write('{}\n'.format(' '.join(args)))
-        with open(actual_ud_txt, 'w') as fp:
-            subprocess.check_call(args, stdout=fp, cwd=workdir)
+        self.check_call_filtered(args, workdir, actual_ud_txt)
         subprocess.check_call([
             'diff',
             '-au',

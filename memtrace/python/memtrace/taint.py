@@ -87,12 +87,14 @@ class BackwardAnalysis:
         for use, entry in zip(
                 self.ud.get_reg_uses_for_trace(node.trace_index),
                 reg_use_entries):
-            def_node = self.get_node(self.ud.get_trace_for_reg_use(use), node.depth - 1)
+            def_node = self.get_node(
+                self.ud.get_trace_for_reg_use(use), node.depth - 1)
             node.get_edge(def_node).reg.append(entry)
         for use, entry in zip(
                 self.ud.get_mem_uses_for_trace(node.trace_index),
                 mem_use_entries):
-            def_node = self.get_node(self.ud.get_trace_for_mem_use(use), node.depth - 1)
+            def_node = self.get_node(
+                self.ud.get_trace_for_mem_use(use), node.depth - 1)
             node.get_edge(def_node).mem.append(entry)
         node.done = True
 

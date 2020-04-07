@@ -52,9 +52,11 @@ class Analysis:
         return max(self.get_traces_for_pc(pc))
 
 
-if __name__ == '__main__':
-    int_any_base = lambda x: int(x, 0)
+def int_any_base(x):
+    return int(x, 0)
 
+
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--trace-path', default='memtrace.out')
     parser.add_argument('--ud-path')
@@ -85,6 +87,7 @@ if __name__ == '__main__':
         else:
             trace_index0 = args.trace
         from memtrace.taint import BackwardAnalysis
+
         backward = BackwardAnalysis(
             analysis,
             trace_index0=trace_index0,
