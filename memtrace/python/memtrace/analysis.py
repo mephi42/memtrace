@@ -3,6 +3,7 @@ import argparse
 import os
 import tempfile
 
+from memtrace.symbolizer import Symbolizer
 from memtrace_ext import Disasm, get_endianness_str, Trace, Ud, ud_file
 
 
@@ -94,4 +95,8 @@ if __name__ == '__main__':
             depth=args.depth,
         )
         dag = backward.analyze()
-        dag.pp(analysis)
+        symbolizer = Symbolizer(analysis.trace.get_mmap_entries())
+        try:
+            dag.pp(analysis, symbolizer=symbolizer)
+        finally:
+            symbolizer.close()

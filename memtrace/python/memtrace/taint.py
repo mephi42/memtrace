@@ -1,11 +1,11 @@
-#!/usr/bin/env python3
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List, Set, Tuple
+from typing import Deque, Dict, List, Set, Tuple, Union
 import sys
 
 from memtrace.analysis import Analysis
 from memtrace.format import format_entry
+from memtrace.symbolizer import Symbolizer
 from memtrace_ext import Entry, InsnExecEntry, LdStEntry, LdStNxEntry, Tag, \
     Trace, Ud
 
@@ -28,6 +28,7 @@ class BackwardNode:
             self,
             analysis: Analysis,
             fp=sys.stdout,
+            symbolizer: Union[Symbolizer, None] = None,
     ) -> None:
         class StackEntry:
             def __init__(self, edge: BackwardEdge):
@@ -46,6 +47,8 @@ class BackwardNode:
                 code_index = analysis.ud.get_code_for_trace(node.trace_index)
                 pc = analysis.ud.get_pc_for_code(code_index)
                 disasm_str = analysis.ud.get_disasm_for_code(code_index)
+                if symbolizer is not None:
+                    disasm_str = f'{disasm_str} {symbolizer.symbolize(pc)}'
                 is_seen = node.trace_index in seen
                 if is_seen:
                     fp.write(

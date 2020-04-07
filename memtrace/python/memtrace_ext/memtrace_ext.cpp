@@ -768,24 +768,6 @@ struct Stats {
   std::map<Tag, TagStats> tagStats;
 };
 
-class TraceMmBase {
- public:
-  template <typename V>
-  static int Visit(const char* path, const V& v);
-  static TraceMmBase* Load(const char* path);
-
-  virtual ~TraceMmBase() = default;
-  virtual Endianness GetEndianness() = 0;
-  virtual size_t GetWordSize() = 0;
-  virtual MachineType GetMachineType() = 0;
-  virtual boost::python::object Next() = 0;
-  virtual void SeekInsn(std::uint32_t index) = 0;
-  virtual Stats GatherStats() = 0;
-  virtual void BuildInsnIndex(const char* path, size_t stepShift) = 0;
-  void BuildInsnIndexDefault(const char* path) { BuildInsnIndex(path, 8); }
-  virtual void LoadInsnIndex(const char* path) = 0;
-};
-
 struct EntryPy {
   template <Endianness E, typename W>
   EntryPy(size_t index, Tlv<E, W> tlv) : index(index), tag(tlv.GetTag()) {}
@@ -850,6 +832,11 @@ struct MmapEntryPy : public EntryPy {
         end(entry.GetEnd()),
         flags(entry.GetFlags()),
         name(reinterpret_cast<const char*>(entry.GetValue())) {}
+
+  bool operator==(const MmapEntryPy& rhs) const {
+    return start == rhs.start && end == rhs.end && flags == rhs.flags &&
+           name == rhs.name;
+  }
 
   std::uint64_t start;
   std::uint64_t end;
@@ -952,10 +939,44 @@ struct StatsGatherer {
   Stats stats;
 };
 
+struct MmapEntryGatherer {
+  template <Endianness E, typename W>
+  int operator()(size_t i, MmapEntry<E, W> entry) {
+    mmapEntries.push_back(MmapEntryPy(i, entry));
+    return 0;
+  }
+
+  template <typename Entry>
+  int operator()(size_t /* i */, Entry /* entry */) {
+    return 0;
+  }
+
+  std::vector<MmapEntryPy> mmapEntries;
+};
+
 struct InsnIndexEntry {
   size_t insnIndex;
   size_t fileOffset;
   size_t entryIndex;
+};
+
+class TraceMmBase {
+ public:
+  template <typename V>
+  static int Visit(const char* path, const V& v);
+  static TraceMmBase* Load(const char* path);
+
+  virtual ~TraceMmBase() = default;
+  virtual Endianness GetEndianness() = 0;
+  virtual size_t GetWordSize() = 0;
+  virtual MachineType GetMachineType() = 0;
+  virtual boost::python::object Next() = 0;
+  virtual void SeekInsn(std::uint32_t index) = 0;
+  virtual Stats GatherStats() = 0;
+  virtual void BuildInsnIndex(const char* path, size_t stepShift) = 0;
+  void BuildInsnIndexDefault(const char* path) { BuildInsnIndex(path, 8); }
+  virtual void LoadInsnIndex(const char* path) = 0;
+  virtual std::vector<MmapEntryPy> GetMmapEntries() = 0;
 };
 
 template <Endianness E, typename W>
@@ -1117,6 +1138,18 @@ class TraceMm : public TraceMmBase {
   void LoadInsnIndex(const char* path) override {
     if (insnIndex_.Init(path, InitMode::OpenExisting) < 0)
       throw std::runtime_error("Failed to load index");
+  }
+
+  std::vector<MmapEntryPy> GetMmapEntries() override {
+    if (insnIndex_.IsInitalized())
+      Rewind(insnIndex_[insnIndex_.size() - 1]);
+    else
+      Rewind();
+    MmapEntryGatherer visitor;
+    while (cur_ != end_)
+      if (VisitOne(&visitor) < 0)
+        throw std::runtime_error("Failed to parse the next entry");
+    return visitor.mmapEntries;
   }
 
  private:
@@ -2190,6 +2223,8 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def(bp::map_indexing_suite<std::map<Tag, TagStats>>());
   bp::class_<Stats>("Stats", bp::no_init)
       .def_readonly("tag_stats", &Stats::tagStats);
+  bp::class_<std::vector<MmapEntryPy>>("std::vector<MmapEntryPy>")
+      .def(bp::vector_indexing_suite<std::vector<MmapEntryPy>>());
   bp::class_<TraceMmBase, boost::noncopyable>("Trace", bp::no_init)
       .def("load", &TraceMmBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
@@ -2203,7 +2238,8 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("gather_stats", &TraceMmBase::GatherStats)
       .def("build_insn_index", &TraceMmBase::BuildInsnIndex)
       .def("build_insn_index", &TraceMmBase::BuildInsnIndexDefault)
-      .def("load_insn_index", &TraceMmBase::LoadInsnIndex);
+      .def("load_insn_index", &TraceMmBase::LoadInsnIndex)
+      .def("get_mmap_entries", &TraceMmBase::GetMmapEntries);
   bp::def("ud_file", UdFile);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
