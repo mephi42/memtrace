@@ -15,11 +15,21 @@ from memtrace_ext import Disasm, get_endianness_str, get_machine_type_str, \
 class TestCommon(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        cls.target = cls.machines[0]
+        if platform.machine() not in cls.machines:
+            raise unittest.SkipTest(f'{cls.machines} only')
         cls.basedir = os.path.dirname(os.path.realpath(__file__))
         pythondir = os.path.dirname(cls.basedir)
         memtracedir = os.path.dirname(pythondir)
         cls.rootdir = os.path.dirname(memtracedir)
         cls.vg_in_place = os.path.join(cls.rootdir, 'vg-in-place')
+        cls.workdir = tempfile.TemporaryDirectory()
+        cls._compile(cls.workdir.name, cls.target)
+        cls._memtrace(cls.workdir.name, cls.target)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.workdir.cleanup()
 
     @classmethod
     def _compile(cls, workdir: str, target: str) -> None:
@@ -28,6 +38,7 @@ class TestCommon(unittest.TestCase):
             '-o', os.path.join(workdir, target),
             '-nostdlib',
             '-static',
+            *cls.cflags,
             f'{target}.S',
         ]
         sys.stderr.write('{}\n'.format(' '.join(args)))
@@ -186,19 +197,28 @@ class TestCommon(unittest.TestCase):
 
 
 class TestX86_64(TestCommon):
-    @classmethod
-    def setUpClass(cls) -> None:
-        if platform.machine() != 'x86_64':
-            raise unittest.SkipTest('x86_64 only')
-        super().setUpClass()
-        cls.target = 'x86_64'
-        cls.workdir = tempfile.TemporaryDirectory()
-        cls._compile(cls.workdir.name, cls.target)
-        cls._memtrace(cls.workdir.name, cls.target)
+    machines = ['x86_64']
+    cflags = []
 
-    @classmethod
-    def tearDownClass(cls) -> None:
-        cls.workdir.cleanup()
+    def test_dump(self) -> None:
+        self._dump(self.workdir.name, self.target)
+
+    def test_ud(self) -> None:
+        self._ud(self.workdir.name, self.target)
+
+    def test_trace(self) -> None:
+        self._trace(self.workdir.name, self.target)
+
+    def test_seek_insn(self) -> None:
+        self._seek(self.workdir.name, self.target)
+
+    def test_taint(self) -> None:
+        self._taint(self.workdir.name, self.target)
+
+
+class TestI386(TestCommon):
+    machines = ['i386', 'x86_64']
+    cflags = ['-m32']
 
     def test_dump(self) -> None:
         self._dump(self.workdir.name, self.target)
