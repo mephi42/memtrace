@@ -95,17 +95,33 @@ class BackwardEdge:
 
 
 class BackwardAnalysis:
-    def __init__(self, analysis: Analysis, trace_index0: int, depth: int):
+    def __init__(
+            self,
+            analysis: Analysis,
+            trace_index0: int,
+            depth: int,
+            ignore_registers: List[Tuple[int, int]] = None
+    ):
         self.trace: Trace = analysis.trace
         self.ud: Ud = analysis.ud
         self.node0: BackwardNode = BackwardNode(trace_index0, depth)
         self.nodes: Dict[int, BackwardNode] = {trace_index0: self.node0}
         self.worklist: Deque[BackwardNode] = deque((self.node0,))
+        self.ignore_registers = \
+            [] if ignore_registers is None else ignore_registers
 
     def analyze(self) -> BackwardNode:
         while len(self.worklist) > 0:
             self.step(self.worklist.popleft())
         return self.node0
+
+    def should_ignore_register(self, trace_entry) -> bool:
+        start = trace_entry.addr
+        end = start + len(trace_entry.value)
+        for ignore_start, ignore_end in self.ignore_registers:
+            if start >= ignore_start and end <= ignore_end:
+                return True
+        return False
 
     def step(self, node: BackwardNode) -> None:
         if node.done or node.depth == 0:
@@ -115,6 +131,8 @@ class BackwardAnalysis:
         for use, entry in zip(
                 self.ud.get_reg_uses_for_trace(node.trace_index),
                 reg_use_entries):
+            if self.should_ignore_register(entry):
+                continue
             def_node = self.get_node(
                 self.ud.get_trace_for_reg_use(use), node.depth - 1)
             node.get_edge(def_node).reg.append(entry)

@@ -57,6 +57,11 @@ def int_any_base(x):
     return int(x, 0)
 
 
+def range_any_base(x):
+    start, end = x.split('-')
+    return int_any_base(start), int_any_base(end)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--trace-path', default='memtrace.out')
@@ -72,6 +77,8 @@ if __name__ == '__main__':
     group.add_argument('--pc', type=int_any_base)
     group.add_argument('--trace', type=int_any_base)
     subparser.add_argument('--depth', type=int_any_base, default=1)
+    subparser.add_argument(
+        '--ignore-register', action='append', type=range_any_base)
 
     args = parser.parse_args()
     analysis = Analysis(
@@ -93,6 +100,7 @@ if __name__ == '__main__':
             analysis,
             trace_index0=trace_index0,
             depth=args.depth,
+            ignore_registers=args.ignore_register,
         )
         dag = backward.analyze()
         symbolizer = Symbolizer(analysis.trace.get_mmap_entries())
