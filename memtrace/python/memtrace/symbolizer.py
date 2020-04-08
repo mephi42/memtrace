@@ -1,4 +1,5 @@
 from collections import defaultdict
+import os
 import subprocess
 import tempfile
 from typing import List, Union
@@ -12,11 +13,13 @@ def fake_maps(mappings):
     mappings_by_name = defaultdict(list)
     for mapping in mappings:
         mappings_by_name[mapping.name].append(mapping)
-    for inode, mappings_for_name in enumerate(mappings_by_name.values()):
+    for mappings_for_name in mappings_by_name.values():
         for mapping in mappings_for_name:
             maps.write(
                 (f'{mapping.start:x}-{mapping.end:x} ---- '
-                 f'0 00:00 {inode + 1} {mapping.name}\n').encode())
+                 f'{mapping.offset:x} {os.major(mapping.dev):02x}:'
+                 f'{os.minor(mapping.dev):02x} {mapping.inode} '
+                 f'{mapping.name}\n').encode())
     maps.flush()
     return maps
 

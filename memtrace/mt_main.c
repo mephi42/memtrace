@@ -140,9 +140,15 @@ struct LdStNxEntry {
 /* Used for MT_MMAP. */
 struct MmapEntry {
    struct Tlv tlv;
+#if VG_WORDSIZE == 8
+   UInt padding;
+#endif
    Addr start;
    Addr end;
    UIntPtr flags;
+   ULong offset;
+   ULong dev;
+   ULong inode;
    UChar value[0];
 };
 
@@ -409,11 +415,17 @@ static void trace_segments(void)
       entry = (struct MmapEntry*)trace;
       entry->tlv.tag = MT_MMAP;
       entry->tlv.length = entryLength;
+#if VG_WORDSIZE == 8
+      entry->padding = 0;
+#endif
       entry->start = seg->start;
       entry->end = seg->end;
       entry->flags = (seg->hasR ? 1 : 0) |
                      (seg->hasW ? 2 : 0) |
                      (seg->hasX ? 4 : 0);
+      entry->offset = seg->offset;
+      entry->dev = seg->dev;
+      entry->inode = seg->ino;
       if (nameLength == 1)
          entry->value[0] = 0;
       else

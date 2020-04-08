@@ -294,15 +294,31 @@ class MmapEntry {
   explicit MmapEntry(const std::uint8_t* data) : data_(data) {}
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetStart() const { return RawInt<E, W>(data_ + sizeof(W)).GetValue(); }
-  W GetEnd() const { return RawInt<E, W>(data_ + sizeof(W) * 2).GetValue(); }
-  W GetFlags() const { return RawInt<E, W>(data_ + sizeof(W) * 3).GetValue(); }
-  const std::uint8_t* GetValue() const { return data_ + sizeof(W) * 4; }
-  W GetSize() const {
-    return GetTlv().GetLength() - static_cast<W>(sizeof(W)) * 4;
+  W GetStart() const { return RawInt<E, W>(data_ + kStartOffset).GetValue(); }
+  W GetEnd() const { return RawInt<E, W>(data_ + kEndOffset).GetValue(); }
+  W GetFlags() const { return RawInt<E, W>(data_ + kFlagsOffset).GetValue(); }
+  std::uint64_t GetOffset() const {
+    return RawInt<E, std::uint64_t>(data_ + kOffsetOffset).GetValue();
   }
+  std::uint64_t GetDev() const {
+    return RawInt<E, std::uint64_t>(data_ + kDevOffset).GetValue();
+  }
+  std::uint64_t GetInode() const {
+    return RawInt<E, std::uint64_t>(data_ + kInodeOffset).GetValue();
+  }
+  const std::uint8_t* GetValue() const { return data_ + kValueOffset; }
+  W GetSize() const { return GetTlv().GetLength() - kValueOffset; }
 
  private:
+  // Not Tlv<E, W>::kFixedLength due to padding.
+  static constexpr size_t kStartOffset = sizeof(W);
+  static constexpr size_t kEndOffset = kStartOffset + sizeof(W);
+  static constexpr size_t kFlagsOffset = kEndOffset + sizeof(W);
+  static constexpr size_t kOffsetOffset = kFlagsOffset + sizeof(W);
+  static constexpr size_t kDevOffset = kOffsetOffset + sizeof(std::uint64_t);
+  static constexpr size_t kInodeOffset = kDevOffset + sizeof(std::uint64_t);
+  static constexpr size_t kValueOffset = kInodeOffset + sizeof(std::uint64_t);
+
   const std::uint8_t* data_;
 };
 
@@ -831,6 +847,9 @@ struct MmapEntryPy : public EntryPy {
         start(entry.GetStart()),
         end(entry.GetEnd()),
         flags(entry.GetFlags()),
+        offset(entry.GetOffset()),
+        dev(entry.GetDev()),
+        inode(entry.GetInode()),
         name(reinterpret_cast<const char*>(entry.GetValue())) {}
 
   bool operator==(const MmapEntryPy& rhs) const {
@@ -841,6 +860,9 @@ struct MmapEntryPy : public EntryPy {
   std::uint64_t start;
   std::uint64_t end;
   std::uint64_t flags;
+  std::uint64_t offset;
+  std::uint64_t dev;
+  std::uint64_t inode;
   std::string name;
 };
 
@@ -2214,6 +2236,9 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def_readonly("start", &MmapEntryPy::start)
       .def_readonly("end", &MmapEntryPy::end)
       .def_readonly("flags", &MmapEntryPy::flags)
+      .def_readonly("offset", &MmapEntryPy::offset)
+      .def_readonly("dev", &MmapEntryPy::dev)
+      .def_readonly("inode", &MmapEntryPy::inode)
       .def_readonly("name", &MmapEntryPy::name);
   bp::def("dump_file", DumpFile);
   bp::class_<TagStats>("TagStats", bp::no_init)

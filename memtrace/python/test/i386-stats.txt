@@ -2,6 +2,6 @@ MT_GET_REG count=6 size=96
 MT_INSN count=11 size=204
 MT_LOAD count=1 size=16
 19764 count=1 size=8
-MT_MMAP count=6 size=220
+MT_MMAP count=6 size=364
 MT_PUT_REG count=18 size=288
 MT_INSN_EXEC count=11 size=88
