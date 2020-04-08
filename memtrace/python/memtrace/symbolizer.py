@@ -1,7 +1,7 @@
 from collections import defaultdict
 import subprocess
 import tempfile
-from typing import List
+from typing import List, Union
 
 from memtrace_ext import MmapEntry
 
@@ -27,6 +27,7 @@ class Symbolizer:
         self.cmd: List[str] = [
             'eu-addr2line',
             f'--linux-process-map={self.maps.name}',
+            '--addresses',
             '--demangle',
             '--symbols-sections',
         ]
@@ -34,18 +35,31 @@ class Symbolizer:
             self.cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
         )
 
     def close(self) -> None:
         self.process.stdin.close()
-        returncode = self.process.wait()
-        if returncode != 0:
-            raise subprocess.CalledProcessError(returncode, self.cmd)
+        self.process.wait()
         self.maps.close()
 
     def symbolize(self, addr: int) -> str:
         self.process.stdin.write(f'0x{addr:x}\n'.encode())
         self.process.stdin.flush()
-        function = self.process.stdout.readline().strip().decode()
-        line = self.process.stdout.readline().strip().decode()
-        return f'in {function} at {line}'
+        self.readline()
+        line2 = self.readline()
+        line3 = self.process.stdout.readline().strip().decode()
+        return f'in {line2} at {line3}'
+
+    def resolve(self, symbol: str) -> Union[int, None]:
+        self.process.stdin.write(f'{symbol}\n'.encode())
+        self.process.stdin.flush()
+        line1 = self.readline()
+        if ': cannot find symbol \'' in line1:
+            return None
+        self.readline()
+        self.readline()
+        return int(line1, 0)
+
+    def readline(self):
+        return self.process.stdout.readline().strip().decode()

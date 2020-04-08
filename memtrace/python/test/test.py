@@ -189,19 +189,19 @@ class TestCommon(unittest.TestCase):
         taint_org = f'{target}-taint.org'
         actual_taint_org = os.path.join(workdir, taint_org)
         expected_taint_org = os.path.join(self.basedir, taint_org)
-        analysis = Analysis(
-            trace_path=os.path.join(workdir, 'memtrace.out'),
-        )
         with open(taint_pc_txt) as fp:
             pc = int(fp.read(), 0)
-        backward = BackwardAnalysis(
-            analysis=analysis,
-            trace_index0=analysis.get_last_trace_for_pc(pc),
-            depth=9,
-        )
-        dag = backward.analyze()
-        with open(actual_taint_org, 'w') as fp:
-            dag.pp(analysis, fp)
+        with Analysis(
+                trace_path=os.path.join(workdir, 'memtrace.out'),
+        ) as analysis:
+            backward = BackwardAnalysis(
+                analysis=analysis,
+                trace_index0=analysis.get_last_trace_for_pc(pc),
+                depth=9,
+            )
+            dag = backward.analyze()
+            with open(actual_taint_org, 'w') as fp:
+                dag.pp(analysis, fp)
         subprocess.check_call([
             'diff',
             '-au',
