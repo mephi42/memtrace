@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 
+from memtrace.format import format_entry
 from memtrace.symbolizer import Symbolizer
 from memtrace_ext import Disasm, get_endianness_str, Trace, Ud, ud_file
 
@@ -91,6 +92,10 @@ if __name__ == '__main__':
     subparser.add_argument(
         '--ignore-register', action='append', type=range_any_base)
 
+    subparser = subparsers.add_parser('dump-entries')
+    subparser.add_argument('--start-trace', type=int_any_base, default=0)
+    subparser.add_argument('--count', type=int_any_base, default=10)
+
     args = parser.parse_args()
     with Analysis(
             trace_path=args.trace_path,
@@ -119,3 +124,11 @@ if __name__ == '__main__':
             )
             dag = backward.analyze()
             dag.pp(analysis)
+        elif args.subparser_name == 'dump-entries':
+            analysis.trace.seek_insn(args.start_trace)
+            for _ in range(args.count):
+                print(format_entry(
+                    entry=next(analysis.trace),
+                    endianness=analysis.endianness_str,
+                    disasm=analysis.disasm,
+                ))
