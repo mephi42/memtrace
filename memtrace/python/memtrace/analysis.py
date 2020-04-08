@@ -6,7 +6,7 @@ import tempfile
 
 from memtrace.format import format_entry
 from memtrace.symbolizer import Symbolizer
-from memtrace_ext import Disasm, get_endianness_str, Trace, Ud, ud_file
+from memtrace_ext import Disasm, get_endianness_str, Tag, Trace, Ud, ud_file
 
 
 class Analysis:
@@ -127,8 +127,15 @@ if __name__ == '__main__':
         elif args.subparser_name == 'dump-entries':
             analysis.trace.seek_insn(args.start_trace)
             for _ in range(args.count):
-                print(format_entry(
-                    entry=next(analysis.trace),
+                entry = next(analysis.trace)
+                entry_str = format_entry(
+                    entry=entry,
                     endianness=analysis.endianness_str,
                     disasm=analysis.disasm,
-                ))
+                )
+                if entry.tag == Tag.MT_INSN_EXEC:
+                    pc = analysis.ud.get_pc_for_code(entry.insn_seq)
+                    disasm_str = analysis.ud.get_disasm_for_code(
+                        entry.insn_seq)
+                    entry_str = f'{entry_str} 0x{pc:016x}: {disasm_str}'
+                print(entry_str)
