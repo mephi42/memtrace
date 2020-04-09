@@ -1,10 +1,11 @@
+#+STARTUP: indent
 * [InsnInTrace:10] 0x000000000804902b setne bl in _base+0x26 (.text) at ??:0
-  * [InsnInTrace:9] 0x0000000008049024 cmp byte ptr [ebp + 0xffb], 0x2a in _base+0x1f (.text) at ??:0
-    * Reason: [        39] 0x0000000a: MT_GET_REG uint32_t [0x28] 0x4
-    * Reason: [        40] 0x0000000a: MT_GET_REG uint32_t [0x2c] 0x2a
-    * Reason: [        41] 0x0000000a: MT_GET_REG uint32_t [0x30] 0x2a
-    * Reason: [        42] 0x0000000a: MT_GET_REG uint32_t [0x34] 0x0
-    * [InsnInTrace:1] 0x0000000008049000 call 0x8049005 in _start (.text) at ??:0
-      * Reason: [        31] 0x00000009: MT_GET_REG uint32_t [0x1c] 0x8049005
-    * [InsnInTrace:0] 0x0000000000000000 <unknown> in ?? at ??:0
-      * Reason: [        32] 0x00000009: MT_LOAD uint8_t [0x804a000] 0x2a
+** [InsnInTrace:9] 0x0000000008049024 cmp byte ptr [ebp + 0xffb], 0x2a in _base+0x1f (.text) at ??:0
+Reason: [        39] 0x0000000a: MT_GET_REG uint32_t [0x28] 0x4
+Reason: [        40] 0x0000000a: MT_GET_REG uint32_t [0x2c] 0x2a
+Reason: [        41] 0x0000000a: MT_GET_REG uint32_t [0x30] 0x2a
+Reason: [        42] 0x0000000a: MT_GET_REG uint32_t [0x34] 0x0
+*** [InsnInTrace:1] 0x0000000008049000 call 0x8049005 in _start (.text) at ??:0
+Reason: [        31] 0x00000009: MT_GET_REG uint32_t [0x1c] 0x8049005
+*** [InsnInTrace:0] 0x0000000000000000 <unknown> in ?? at ??:0
+Reason: [        32] 0x00000009: MT_LOAD uint8_t [0x804a000] 0x2a

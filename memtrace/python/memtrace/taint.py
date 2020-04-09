@@ -1,6 +1,7 @@
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Set, Tuple
+import re
 import sys
 
 from memtrace.analysis import Analysis
@@ -34,10 +35,11 @@ class BackwardNode:
                 self.is_fresh = True
                 self.edges = iter(edge.dst.edges.values())
 
+        fp.write('#+STARTUP: indent\n')
         stack: List[StackEntry] = [StackEntry(BackwardEdge(self))]
         seen: Set[int] = set()
         while len(stack) > 0:
-            indent = ' ' * ((len(stack) - 1) * 2)
+            indent = '*' * len(stack)
             entry = stack[-1]
             if entry.is_fresh:
                 edge = entry.edge
@@ -48,30 +50,27 @@ class BackwardNode:
                 symbolized_pc = analysis.symbolizer.symbolize(pc)
                 disasm_str = f'{disasm_str} {symbolized_pc}'
                 is_seen = node.trace_index in seen
+                headline = f'[InsnInTrace:{node.trace_index}] ' \
+                           f'0x{pc:016x} {disasm_str}'
                 if is_seen:
-                    fp.write(
-                        f'{indent}* (InsnInTrace:{node.trace_index}) '
-                        f'0x{pc:016x} {disasm_str}\n'
-                    )
+                    link = '*' + re.sub(r'([\[\]])', r'\\\g<1>', headline)
+                    fp.write(f'{indent} [[{link}][{headline}]]\n')
                 else:
-                    fp.write(
-                        f'{indent}* [InsnInTrace:{node.trace_index}] '
-                        f'0x{pc:016x} {disasm_str}\n'
-                    )
+                    fp.write(f'{indent} {headline}\n')
                 for trace_entry in edge.reg:
                     entry_str = format_entry(
                         entry=trace_entry,
                         endianness=analysis.endianness_str,
                         disasm=analysis.disasm,
                     )
-                    fp.write(f'{indent}  * Reason: {entry_str}\n')
+                    fp.write(f'Reason: {entry_str}\n')
                 for trace_entry in edge.mem:
                     entry_str = format_entry(
                         entry=trace_entry,
                         endianness=analysis.endianness_str,
                         disasm=analysis.disasm,
                     )
-                    fp.write(f'{indent}  * Reason: {entry_str}\n')
+                    fp.write(f'Reason: {entry_str}\n')
                 if is_seen:
                     stack.pop()
                     continue
