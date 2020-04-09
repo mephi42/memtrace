@@ -6,8 +6,7 @@ import sys
 
 from memtrace.analysis import Analysis
 from memtrace.format import format_entry
-from memtrace_ext import Entry, InsnExecEntry, LdStEntry, LdStNxEntry, Tag, \
-    Trace, Ud
+from memtrace_ext import Entry, Tag, Trace, Ud
 
 
 @dataclass
@@ -167,7 +166,10 @@ class BackwardAnalysis:
                 entry = next(self.trace)
             except StopIteration:
                 break
-            if isinstance(entry, (LdStEntry, InsnExecEntry, LdStNxEntry)):
+            if entry.tag in (
+                    Tag.MT_LOAD, Tag.MT_STORE, Tag.MT_REG, Tag.MT_GET_REG,
+                    Tag.MT_PUT_REG, Tag.MT_INSN_EXEC, Tag.MT_GET_REG_NX,
+                    Tag.MT_PUT_REG_NX):
                 if entry.insn_seq != insn_seq:
                     break
                 insn_seq = entry.insn_seq

@@ -1,7 +1,6 @@
 import struct
 
-from memtrace_ext import Disasm, Entry, get_tag_str, InsnEntry, \
-    InsnExecEntry, LdStEntry, LdStNxEntry, MmapEntry
+from memtrace_ext import Disasm, Entry, Tag
 
 
 def format_value(value: bytes, endianness: str) -> str:
@@ -22,34 +21,36 @@ def format_entry(entry: Entry, endianness: str, disasm: Disasm) -> str:
     # * test that all the properties are accessible in Python;
     # * exposing C++ implementation without hurting performance is not trivial.
     s = '[{:10}] '.format(entry.index)
-    if isinstance(entry, LdStEntry):
+    if entry.tag in (
+            Tag.MT_LOAD, Tag.MT_STORE, Tag.MT_REG, Tag.MT_GET_REG,
+            Tag.MT_PUT_REG):
         s += '0x{:08x}: {} uint{}_t [0x{:x}] {}'.format(
             entry.insn_seq,
-            get_tag_str(entry.tag),
+            entry.tag,
             len(entry.value) * 8,
             entry.addr,
             format_value(bytes(entry.value), endianness),
         )
-    elif isinstance(entry, InsnEntry):
+    elif entry.tag == Tag.MT_INSN:
         s += '0x{:08x}: {} 0x{:016x} {} {}'.format(
             entry.insn_seq,
-            get_tag_str(entry.tag),
+            entry.tag,
             entry.pc,
             bytes(entry.value).hex(),
             disasm.disasm_str(entry.value, entry.pc),
         )
-    elif isinstance(entry, InsnExecEntry):
-        s += '0x{:08x}: {}'.format(entry.insn_seq, get_tag_str(entry.tag))
-    elif isinstance(entry, LdStNxEntry):
+    elif entry.tag == Tag.MT_INSN_EXEC:
+        s += '0x{:08x}: {}'.format(entry.insn_seq, entry.tag)
+    elif entry.tag in (Tag.MT_GET_REG_NX, Tag.MT_PUT_REG_NX):
         s += '0x{:08x}: {} uint{}_t [0x{:x}]'.format(
             entry.insn_seq,
-            get_tag_str(entry.tag),
+            entry.tag,
             len(entry.value) * 8,
             entry.addr,
         )
-    elif isinstance(entry, MmapEntry):
+    elif entry.tag == Tag.MT_MMAP:
         s += '{} {:016x}-{:016x} {}{}{} {}'.format(
-            get_tag_str(entry.tag),
+            entry.tag,
             entry.start,
             entry.end + 1,
             'r' if entry.flags & 1 else '-',

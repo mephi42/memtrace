@@ -12,7 +12,7 @@ from memtrace.format import format_entry
 import memtrace.stats as stats
 from memtrace.taint import BackwardAnalysis
 from memtrace_ext import Disasm, get_endianness_str, get_machine_type_str, \
-    InsnExecEntry, Trace
+    Tag, Trace
 
 
 class TestCommon(unittest.TestCase):
@@ -139,7 +139,7 @@ class TestCommon(unittest.TestCase):
             rootdir_bytes = self.rootdir.encode()
             workdir_bytes = workdir.encode()
             for entry in trace:
-                if isinstance(entry, InsnExecEntry):
+                if entry.tag == Tag.MT_INSN_EXEC:
                     insn_count += 1
                 line_str = format_entry(entry, endianness_str, disasm)
                 line = (line_str + '\n').encode()

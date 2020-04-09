@@ -4,8 +4,6 @@ import subprocess
 import tempfile
 from typing import List, Union
 
-from memtrace_ext import MmapEntry
-
 
 def fake_maps(mappings):
     # Make proc_maps_report in libdwfl/linux-proc-maps.c happy.
@@ -25,7 +23,7 @@ def fake_maps(mappings):
 
 
 class Symbolizer:
-    def __init__(self, mappings: List[MmapEntry]):
+    def __init__(self, mappings: List[object]):
         self.maps = fake_maps(mappings)
         self.cmd: List[str] = [
             'eu-addr2line',

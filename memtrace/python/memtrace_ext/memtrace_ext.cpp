@@ -118,6 +118,17 @@ enum class Endianness {
 const char* GetEndiannessStr(Endianness endianness) {
   switch (endianness) {
     case Endianness::Little:
+      return "Little";
+    case Endianness::Big:
+      return "Big";
+    default:
+      return nullptr;
+  }
+}
+
+const char* GetEndiannessStrPy(Endianness endianness) {
+  switch (endianness) {
+    case Endianness::Little:
       return "<";
     case Endianness::Big:
       return ">";
@@ -152,162 +163,194 @@ struct IntConversions<kHostEndianness, T> {
   static T ConvertToHost(T value) { return value; }
 };
 
-template <Endianness E, typename T>
-class RawInt {
+class Overlay {
  public:
-  explicit RawInt(const std::uint8_t* data) : data_(data) {}
-
-  T GetValue() const {
-    return IntConversions<E, T>::ConvertToHost(
-        *reinterpret_cast<const T*>(data_));
-  }
+  explicit Overlay(const std::uint8_t* data) : data_(data) {}
+  const uint8_t* GetData() const { return data_; }
 
  private:
   const std::uint8_t* data_;
 };
 
-template <Endianness E, typename W>
-class Tlv {
+template <Endianness E, typename T, typename B = Overlay>
+class RawInt : public B {
  public:
-  explicit Tlv(const std::uint8_t* data) : data_(data) {}
+  using B::B;
+
+  T GetValue() const {
+    return IntConversions<E, T>::ConvertToHost(
+        *reinterpret_cast<const T*>(this->GetData()));
+  }
+};
+
+template <Endianness E, typename W, typename B = Overlay>
+class Tlv : public B {
+ public:
+  using B::B;
 
   static constexpr size_t kFixedLength = sizeof(std::uint16_t) * 2;
 
   Tag GetTag() const {
-    return static_cast<Tag>(RawInt<E, std::uint16_t>(data_).GetValue());
+    return static_cast<Tag>(
+        RawInt<E, std::uint16_t>(this->GetData()).GetValue());
   }
-  W GetLength() const { return RawInt<E, std::uint16_t>(data_ + 2).GetValue(); }
+  W GetLength() const {
+    return RawInt<E, std::uint16_t>(this->GetData() + 2).GetValue();
+  }
   W GetAlignedLength() const {
     return (GetLength() + (static_cast<W>(sizeof(W)) - 1)) &
            ~(static_cast<W>(sizeof(W)) - 1);
   }
-
- private:
-  const std::uint8_t* data_;
 };
 
-template <Endianness E, typename W>
-class HeaderEntry {
+template <Endianness E, typename W, typename B = Overlay>
+class HeaderEntry : public B {
  public:
-  explicit HeaderEntry(const std::uint8_t* data) : data_(data) {}
+  using B::B;
 
   static constexpr size_t kFixedLength =
       Tlv<E, W>::kFixedLength + sizeof(std::uint16_t);
 
-  Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
+  Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
   MachineType GetMachineType() const {
     return static_cast<MachineType>(
-        RawInt<E, std::uint16_t>(data_ + kMachineTypeOffset).GetValue());
+        RawInt<E, std::uint16_t>(this->GetData() + kMachineTypeOffset)
+            .GetValue());
   }
 
  private:
   static constexpr size_t kMachineTypeOffset = Tlv<E, W>::kFixedLength;
-
-  const std::uint8_t* data_;
 };
 
-template <Endianness E, typename W>
-class LdStEntry {
+template <Endianness E, typename W, typename B = Overlay>
+class LdStEntry : public B {
  public:
-  explicit LdStEntry(const std::uint8_t* data) : data_(data) {}
+  using B::B;
 
-  Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
+  Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
   std::uint32_t GetInsnSeq() const {
-    return RawInt<E, std::uint32_t>(data_ + kInsnSeqOffset).GetValue();
+    return RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset)
+        .GetValue();
   }
-  W GetAddr() const { return RawInt<E, W>(data_ + kAddrOffset).GetValue(); }
-  const std::uint8_t* GetValue() const { return data_ + kValueOffset; }
+  W GetAddr() const {
+    return RawInt<E, W>(this->GetData() + kAddrOffset).GetValue();
+  }
+  const std::uint8_t* GetValue() const {
+    return this->GetData() + kValueOffset;
+  }
   W GetSize() const {
     return GetTlv().GetLength() - static_cast<W>(kValueOffset);
+  }
+  std::vector<std::uint8_t> CopyValue() const {
+    return std::vector<std::uint8_t>(GetValue(), GetValue() + GetSize());
   }
 
  private:
   static constexpr size_t kInsnSeqOffset = Tlv<E, W>::kFixedLength;
   static constexpr size_t kAddrOffset = kInsnSeqOffset + sizeof(std::uint32_t);
   static constexpr size_t kValueOffset = kAddrOffset + sizeof(W);
-
-  const std::uint8_t* data_;
 };
 
-template <Endianness E, typename W>
-class InsnEntry {
+template <Endianness E, typename W, typename B = Overlay>
+class InsnEntry : public B {
  public:
-  explicit InsnEntry(const std::uint8_t* data) : data_(data) {}
+  using B::B;
 
-  Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
+  Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
   std::uint32_t GetInsnSeq() const {
-    return RawInt<E, std::uint32_t>(data_ + kInsnSeqOffset).GetValue();
+    return RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset)
+        .GetValue();
   }
-  W GetPc() const { return RawInt<E, W>(data_ + kPcOffset).GetValue(); }
-  const std::uint8_t* GetValue() const { return data_ + kValueOffset; }
+  W GetPc() const {
+    return RawInt<E, W>(this->GetData() + kPcOffset).GetValue();
+  }
+  const std::uint8_t* GetValue() const {
+    return this->GetData() + kValueOffset;
+  }
   W GetSize() const {
     return GetTlv().GetLength() - static_cast<W>(kValueOffset);
+  }
+  std::vector<std::uint8_t> CopyValue() const {
+    return std::vector<std::uint8_t>(GetValue(), GetValue() + GetSize());
   }
 
  private:
   static constexpr size_t kInsnSeqOffset = Tlv<E, W>::kFixedLength;
   static constexpr size_t kPcOffset = kInsnSeqOffset + sizeof(std::uint32_t);
   static constexpr size_t kValueOffset = kPcOffset + sizeof(W);
-
-  const std::uint8_t* data_;
 };
 
-template <Endianness E, typename W>
-class InsnExecEntry {
+template <Endianness E, typename W, typename B = Overlay>
+class InsnExecEntry : public B {
  public:
-  explicit InsnExecEntry(const std::uint8_t* data) : data_(data) {}
+  using B::B;
 
-  Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
+  Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
   std::uint32_t GetInsnSeq() const {
-    return RawInt<E, std::uint32_t>(data_ + kInsnSeqOffset).GetValue();
+    return RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset)
+        .GetValue();
   }
 
  private:
   static constexpr size_t kInsnSeqOffset = Tlv<E, W>::kFixedLength;
-
-  const std::uint8_t* data_;
 };
 
-template <Endianness E, typename W>
-class LdStNxEntry {
+template <Endianness E, typename W, typename B = Overlay>
+class LdStNxEntry : public B {
  public:
-  explicit LdStNxEntry(const std::uint8_t* data) : data_(data) {}
+  using B::B;
 
-  Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
+  Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
   std::uint32_t GetInsnSeq() const {
-    return RawInt<E, std::uint32_t>(data_ + kInsnSeqOffset).GetValue();
+    return RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset)
+        .GetValue();
   }
-  W GetAddr() const { return RawInt<E, W>(data_ + kAddrOffset).GetValue(); }
-  W GetSize() const { return RawInt<E, W>(data_ + kSizeOffset).GetValue(); }
+  W GetAddr() const {
+    return RawInt<E, W>(this->GetData() + kAddrOffset).GetValue();
+  }
+  W GetSize() const {
+    return RawInt<E, W>(this->GetData() + kSizeOffset).GetValue();
+  }
 
  private:
   static constexpr size_t kInsnSeqOffset = Tlv<E, W>::kFixedLength;
   static constexpr size_t kAddrOffset = kInsnSeqOffset + sizeof(std::uint32_t);
   static constexpr size_t kSizeOffset = kAddrOffset + sizeof(W);
-
-  const std::uint8_t* data_;
 };
 
-template <Endianness E, typename W>
-class MmapEntry {
+template <Endianness E, typename W, typename B = Overlay>
+class MmapEntry : public B {
  public:
-  explicit MmapEntry(const std::uint8_t* data) : data_(data) {}
+  using B::B;
 
-  Tlv<E, W> GetTlv() const { return Tlv<E, W>(data_); }
-  W GetStart() const { return RawInt<E, W>(data_ + kStartOffset).GetValue(); }
-  W GetEnd() const { return RawInt<E, W>(data_ + kEndOffset).GetValue(); }
-  W GetFlags() const { return RawInt<E, W>(data_ + kFlagsOffset).GetValue(); }
+  Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
+  W GetStart() const {
+    return RawInt<E, W>(this->GetData() + kStartOffset).GetValue();
+  }
+  W GetEnd() const {
+    return RawInt<E, W>(this->GetData() + kEndOffset).GetValue();
+  }
+  W GetFlags() const {
+    return RawInt<E, W>(this->GetData() + kFlagsOffset).GetValue();
+  }
   std::uint64_t GetOffset() const {
-    return RawInt<E, std::uint64_t>(data_ + kOffsetOffset).GetValue();
+    return RawInt<E, std::uint64_t>(this->GetData() + kOffsetOffset).GetValue();
   }
   std::uint64_t GetDev() const {
-    return RawInt<E, std::uint64_t>(data_ + kDevOffset).GetValue();
+    return RawInt<E, std::uint64_t>(this->GetData() + kDevOffset).GetValue();
   }
   std::uint64_t GetInode() const {
-    return RawInt<E, std::uint64_t>(data_ + kInodeOffset).GetValue();
+    return RawInt<E, std::uint64_t>(this->GetData() + kInodeOffset).GetValue();
   }
-  const std::uint8_t* GetValue() const { return data_ + kValueOffset; }
-  W GetSize() const { return GetTlv().GetLength() - kValueOffset; }
+  const std::uint8_t* GetValue() const {
+    return this->GetData() + kValueOffset;
+  }
+  W GetSize() const {
+    return GetTlv().GetLength() - static_cast<W>(kValueOffset);
+  }
+  std::string CopyValue() const {
+    return reinterpret_cast<const char*>(GetValue());
+  }
 
  private:
   // Not Tlv<E, W>::kFixedLength due to padding.
@@ -318,8 +361,6 @@ class MmapEntry {
   static constexpr size_t kDevOffset = kOffsetOffset + sizeof(std::uint64_t);
   static constexpr size_t kInodeOffset = kDevOffset + sizeof(std::uint64_t);
   static constexpr size_t kValueOffset = kInodeOffset + sizeof(std::uint64_t);
-
-  const std::uint8_t* data_;
 };
 
 void HexDump(std::FILE* f, const std::uint8_t* buf, size_t n) {
@@ -693,7 +734,7 @@ class Dumper {
 
   template <Endianness E>
   int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
-    std::printf("Endian            : %s\n", GetEndiannessStr(E));
+    std::printf("Endian            : %s\n", GetEndiannessStrPy(E));
     std::printf("Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
     std::printf("Word size         : %zu\n", sizeof(W));
     std::printf("Machine           : %s\n",
@@ -785,119 +826,50 @@ struct Stats {
 };
 
 struct EntryPy {
-  template <Endianness E, typename W>
-  EntryPy(size_t index, Tlv<E, W> tlv) : index(index), tag(tlv.GetTag()) {}
+  explicit EntryPy(size_t index) : index(index) {}
+  EntryPy(const EntryPy&) = delete;
   virtual ~EntryPy() = default;
 
+  virtual Tag GetTag() const = 0;
+
   std::uint64_t index;
-  Tag tag;
 };
 
-struct LdStEntryPy : public EntryPy {
-  template <Endianness E, typename W>
-  LdStEntryPy(size_t index, LdStEntry<E, W> entry)
-      : EntryPy(index, entry.GetTlv()),
-        insnSeq(entry.GetInsnSeq()),
-        addr(entry.GetAddr()),
-        value(entry.GetValue(), entry.GetValue() + entry.GetSize()) {}
+template <Endianness E, typename W>
+struct EntryPyEW : public EntryPy {
+  using EntryPy::EntryPy;
 
-  std::uint32_t insnSeq;
-  std::uint64_t addr;
-  std::vector<std::uint8_t> value;
-};
-
-struct InsnEntryPy : public EntryPy {
-  template <Endianness E, typename W>
-  InsnEntryPy(size_t index, const InsnEntry<E, W>& entry)
-      : EntryPy(index, entry.GetTlv()),
-        insnSeq(entry.GetInsnSeq()),
-        pc(entry.GetPc()),
-        value(entry.GetValue(), entry.GetValue() + entry.GetSize()) {}
-
-  std::uint32_t insnSeq;
-  std::uint64_t pc;
-  std::vector<std::uint8_t> value;
-};
-
-struct InsnExecEntryPy : public EntryPy {
-  template <Endianness E, typename W>
-  InsnExecEntryPy(size_t index, const InsnExecEntry<E, W>& entry)
-      : EntryPy(index, entry.GetTlv()), insnSeq(entry.GetInsnSeq()) {}
-
-  std::uint32_t insnSeq;
-};
-
-struct LdStNxEntryPy : public EntryPy {
-  template <Endianness E, typename W>
-  LdStNxEntryPy(size_t index, const LdStNxEntry<E, W>& entry)
-      : EntryPy(index, entry.GetTlv()),
-        insnSeq(entry.GetInsnSeq()),
-        addr(entry.GetAddr()),
-        size(entry.GetSize()) {}
-
-  std::uint32_t insnSeq;
-  std::uint64_t addr;
-  std::uint64_t size;
-};
-
-struct MmapEntryPy : public EntryPy {
-  template <Endianness E, typename W>
-  MmapEntryPy(size_t index, const MmapEntry<E, W>& entry)
-      : EntryPy(index, entry.GetTlv()),
-        start(entry.GetStart()),
-        end(entry.GetEnd()),
-        flags(entry.GetFlags()),
-        offset(entry.GetOffset()),
-        dev(entry.GetDev()),
-        inode(entry.GetInode()),
-        name(reinterpret_cast<const char*>(entry.GetValue())) {}
-
-  bool operator==(const MmapEntryPy& rhs) const {
-    return start == rhs.start && end == rhs.end && flags == rhs.flags &&
-           name == rhs.name;
+  const std::uint8_t* GetData() const {
+    return reinterpret_cast<const std::uint8_t*>(this + 1);
   }
 
-  std::uint64_t start;
-  std::uint64_t end;
-  std::uint64_t flags;
-  std::uint64_t offset;
-  std::uint64_t dev;
-  std::uint64_t inode;
-  std::string name;
+  Tag GetTag() const override { return Tlv<E, W>(GetData()).GetTag(); }
 };
+
+template <Endianness E, typename W, typename B,
+          template <Endianness, typename, typename> typename Entry>
+Entry<E, W, EntryPyEW<E, W>>* CreateEntryPy(size_t index,
+                                            Entry<E, W, B> entry) {
+  using Result = Entry<E, W, EntryPyEW<E, W>>;
+  static_assert(sizeof(Result) == sizeof(EntryPy));
+  size_t srcLength = entry.GetTlv().GetLength();
+  size_t size = sizeof(Result) + srcLength;
+  Result* result = reinterpret_cast<Result*>(new char[size]);
+  void* dst = result + 1;
+  const void* src = entry.GetData();
+  std::memcpy(dst, src, srcLength);
+  new (result) Result(index);
+  return result;
+}
 
 struct TraceEntry2Py {
-  template <Endianness E, typename W>
-  int operator()(size_t index, LdStEntry<E, W> entry) {
-    py = boost::python::object(new LdStEntryPy(index, entry));
+  template <typename Entry>
+  int operator()(size_t index, Entry entry) {
+    py = CreateEntryPy(index, entry);
     return 0;
   }
 
-  template <Endianness E, typename W>
-  int operator()(size_t index, InsnEntry<E, W> entry) {
-    py = boost::python::object(new InsnEntryPy(index, entry));
-    return 0;
-  }
-
-  template <Endianness E, typename W>
-  int operator()(size_t index, InsnExecEntry<E, W> entry) {
-    py = boost::python::object(new InsnExecEntryPy(index, entry));
-    return 0;
-  }
-
-  template <Endianness E, typename W>
-  int operator()(size_t index, LdStNxEntry<E, W> entry) {
-    py = boost::python::object(new LdStNxEntryPy(index, entry));
-    return 0;
-  }
-
-  template <Endianness E, typename W>
-  int operator()(size_t index, MmapEntry<E, W> entry) {
-    py = boost::python::object(new MmapEntryPy(index, entry));
-    return 0;
-  }
-
-  boost::python::object py;
+  EntryPy* py;
 };
 
 struct Seeker {
@@ -964,7 +936,8 @@ struct StatsGatherer {
 struct MmapEntryGatherer {
   template <Endianness E, typename W>
   int operator()(size_t i, MmapEntry<E, W> entry) {
-    mmapEntries.push_back(MmapEntryPy(i, entry));
+    mmapEntries.append(
+        boost::python::object(boost::python::ptr(CreateEntryPy(i, entry))));
     return 0;
   }
 
@@ -973,7 +946,7 @@ struct MmapEntryGatherer {
     return 0;
   }
 
-  std::vector<MmapEntryPy> mmapEntries;
+  boost::python::list mmapEntries;
 };
 
 struct InsnIndexEntry {
@@ -998,7 +971,7 @@ class TraceMmBase {
   virtual void BuildInsnIndex(const char* path, size_t stepShift) = 0;
   void BuildInsnIndexDefault(const char* path) { BuildInsnIndex(path, 8); }
   virtual void LoadInsnIndex(const char* path) = 0;
-  virtual std::vector<MmapEntryPy> GetMmapEntries() = 0;
+  virtual boost::python::list GetMmapEntries() = 0;
 };
 
 template <Endianness E, typename W>
@@ -1096,7 +1069,7 @@ class TraceMm : public TraceMmBase {
     TraceEntry2Py visitor;
     int err = VisitOne(&visitor);
     if (err < 0) throw std::runtime_error("Failed to parse the next entry");
-    return visitor.py;
+    return boost::python::object(boost::python::ptr(visitor.py));
   }
 
   void SeekInsn(std::uint32_t index) override {
@@ -1162,7 +1135,7 @@ class TraceMm : public TraceMmBase {
       throw std::runtime_error("Failed to load index");
   }
 
-  std::vector<MmapEntryPy> GetMmapEntries() override {
+  boost::python::list GetMmapEntries() override {
     if (insnIndex_.IsInitalized())
       Rewind(insnIndex_[insnIndex_.size() - 1]);
     else
@@ -2184,14 +2157,57 @@ UdBase* UdBase::Load(const char* rawPath) {
   return ud;
 }
 
+template <Endianness E, typename W>
+static std::string MangleName(const char* name) {
+  return std::string(name) + GetEndiannessStr(E) +
+         std::to_string(sizeof(W) * 8);
+}
+
+template <Endianness E, typename W>
+void RegisterEntries() {
+  namespace bp = boost::python;
+  using LdStEntryPy = LdStEntry<E, W, EntryPyEW<E, W>>;
+  bp::class_<LdStEntryPy, boost::noncopyable, bp::bases<EntryPy>>(
+      MangleName<E, W>("LdStEntry").c_str(), bp::no_init)
+      .add_property("insn_seq", &LdStEntryPy::GetInsnSeq)
+      .add_property("addr", &LdStEntryPy::GetAddr)
+      .add_property("value", &LdStEntryPy::CopyValue);
+  using InsnEntryPy = InsnEntry<E, W, EntryPyEW<E, W>>;
+  bp::class_<InsnEntryPy, boost::noncopyable, bp::bases<EntryPy>>(
+      MangleName<E, W>("InsnEntry").c_str(), bp::no_init)
+      .add_property("insn_seq", &InsnEntryPy::GetInsnSeq)
+      .add_property("pc", &InsnEntryPy::GetPc)
+      .add_property("value", &InsnEntryPy::CopyValue);
+  using InsnExecEntryPy = InsnExecEntry<E, W, EntryPyEW<E, W>>;
+  bp::class_<InsnExecEntryPy, boost::noncopyable, bp::bases<EntryPy>>(
+      MangleName<E, W>("InsnExecEntry").c_str(), bp::no_init)
+      .add_property("insn_seq", &InsnExecEntryPy::GetInsnSeq);
+  using LdStNxEntryPy = LdStNxEntry<E, W, EntryPyEW<E, W>>;
+  bp::class_<LdStNxEntryPy, boost::noncopyable, bp::bases<EntryPy>>(
+      MangleName<E, W>("LdStNxEntry").c_str(), bp::no_init)
+      .add_property("insn_seq", &LdStNxEntryPy::GetInsnSeq)
+      .add_property("addr", &LdStNxEntryPy::GetAddr)
+      .add_property("size", &LdStNxEntryPy::GetSize);
+  using MmapEntryPy = MmapEntry<E, W, EntryPyEW<E, W>>;
+  bp::class_<MmapEntryPy, boost::noncopyable, bp::bases<EntryPy>>(
+      MangleName<E, W>("MmapEntry").c_str(), bp::no_init)
+      .add_property("start", &MmapEntryPy::GetStart)
+      .add_property("end", &MmapEntryPy::GetEnd)
+      .add_property("flags", &MmapEntryPy::GetFlags)
+      .add_property("offset", &MmapEntryPy::GetOffset)
+      .add_property("dev", &MmapEntryPy::GetDev)
+      .add_property("inode", &MmapEntryPy::GetInode)
+      .add_property("name", &MmapEntryPy::CopyValue);
+}
+
 }  // namespace
 
 BOOST_PYTHON_MODULE(memtrace_ext) {
   namespace bp = boost::python;
   bp::enum_<Endianness>("Endianness")
-      .value("BIG_ENDIAN", Endianness::Big)
-      .value("LITTLE_ENDIAN", Endianness::Little);
-  bp::def("get_endianness_str", GetEndiannessStr);
+      .value("Little", Endianness::Little)
+      .value("Big", Endianness::Big);
+  bp::def("get_endianness_str", GetEndiannessStrPy);
   bp::enum_<Tag>("Tag")
       .value("MT_LOAD", Tag::MT_LOAD)
       .value("MT_STORE", Tag::MT_STORE)
@@ -2203,7 +2219,6 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .value("MT_GET_REG_NX", Tag::MT_GET_REG_NX)
       .value("MT_PUT_REG_NX", Tag::MT_PUT_REG_NX)
       .value("MT_MMAP", Tag::MT_MMAP);
-  bp::def("get_tag_str", GetTagStr);
   bp::enum_<MachineType>("MachineType")
       .value("EM_386", MachineType::EM_386)
       .value("EM_X86_64", MachineType::EM_X86_64)
@@ -2215,31 +2230,13 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .value("EM_MIPS", MachineType::EM_MIPS)
       .value("EM_NANOMIPS", MachineType::EM_NANOMIPS);
   bp::def("get_machine_type_str", GetMachineTypeStr);
-  bp::class_<EntryPy>("Entry", bp::no_init)
+  bp::class_<EntryPy, boost::noncopyable>("Entry", bp::no_init)
       .def_readonly("index", &EntryPy::index)
-      .def_readonly("tag", &EntryPy::tag);
-  bp::class_<LdStEntryPy, bp::bases<EntryPy>>("LdStEntry", bp::no_init)
-      .def_readonly("insn_seq", &LdStEntryPy::insnSeq)
-      .def_readonly("addr", &LdStEntryPy::addr)
-      .def_readonly("value", &LdStEntryPy::value);
-  bp::class_<InsnEntryPy, bp::bases<EntryPy>>("InsnEntry", bp::no_init)
-      .def_readonly("insn_seq", &InsnEntryPy::insnSeq)
-      .def_readonly("pc", &InsnEntryPy::pc)
-      .def_readonly("value", &InsnEntryPy::value);
-  bp::class_<InsnExecEntryPy, bp::bases<EntryPy>>("InsnExecEntry", bp::no_init)
-      .def_readonly("insn_seq", &InsnExecEntryPy::insnSeq);
-  bp::class_<LdStNxEntryPy, bp::bases<EntryPy>>("LdStNxEntry", bp::no_init)
-      .def_readonly("insn_seq", &LdStNxEntryPy::insnSeq)
-      .def_readonly("addr", &LdStNxEntryPy::addr)
-      .def_readonly("size", &LdStNxEntryPy::size);
-  bp::class_<MmapEntryPy, bp::bases<EntryPy>>("MmapEntry", bp::no_init)
-      .def_readonly("start", &MmapEntryPy::start)
-      .def_readonly("end", &MmapEntryPy::end)
-      .def_readonly("flags", &MmapEntryPy::flags)
-      .def_readonly("offset", &MmapEntryPy::offset)
-      .def_readonly("dev", &MmapEntryPy::dev)
-      .def_readonly("inode", &MmapEntryPy::inode)
-      .def_readonly("name", &MmapEntryPy::name);
+      .add_property("tag", &EntryPy::GetTag);
+  RegisterEntries<Endianness::Little, std::uint32_t>();
+  RegisterEntries<Endianness::Little, std::uint64_t>();
+  RegisterEntries<Endianness::Big, std::uint32_t>();
+  RegisterEntries<Endianness::Big, std::uint64_t>();
   bp::def("dump_file", DumpFile);
   bp::class_<TagStats>("TagStats", bp::no_init)
       .def_readonly("count", &TagStats::count)
@@ -2248,8 +2245,6 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def(bp::map_indexing_suite<std::map<Tag, TagStats>>());
   bp::class_<Stats>("Stats", bp::no_init)
       .def_readonly("tag_stats", &Stats::tagStats);
-  bp::class_<std::vector<MmapEntryPy>>("std::vector<MmapEntryPy>")
-      .def(bp::vector_indexing_suite<std::vector<MmapEntryPy>>());
   bp::class_<TraceMmBase, boost::noncopyable>("Trace", bp::no_init)
       .def("load", &TraceMmBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
