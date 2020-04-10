@@ -83,7 +83,6 @@ class CommonTest(unittest.TestCase):
         args = [
             cls.vg_in_place,
             '--tool=memtrace',
-            '--pc-range=0-0xffffffffffffffff:imr',
             f'./{cls.get_target()}',
         ]
         sys.stderr.write('{}\n'.format(' '.join(args)))

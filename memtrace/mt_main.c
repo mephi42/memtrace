@@ -79,7 +79,7 @@ static UChar* trace_end;
 #define AR_REGS (1 << 2)
 #define AR_INSNS (1 << 3)
 #define AR_ALL_REGS (1 << 4)
-#define AR_DEFAULT AR_MEM
+#define AR_DEFAULT (AR_MEM | AR_REGS | AR_INSNS)
 typedef struct {
    Addr start;
    Addr end;
