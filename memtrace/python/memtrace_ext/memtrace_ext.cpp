@@ -1136,6 +1136,8 @@ class TraceMm : public TraceMmBase {
   }
 
   boost::python::list GetMmapEntries() override {
+    InsnIndexEntry saved = {static_cast<size_t>(-1),
+                            static_cast<size_t>(cur_ - data_), entryIndex_};
     if (insnIndex_.IsInitalized())
       Rewind(insnIndex_[insnIndex_.size() - 1]);
     else
@@ -1144,6 +1146,7 @@ class TraceMm : public TraceMmBase {
     while (cur_ != end_)
       if (VisitOne(&visitor) < 0)
         throw std::runtime_error("Failed to parse the next entry");
+    Rewind(saved);
     return visitor.mmapEntries;
   }
 

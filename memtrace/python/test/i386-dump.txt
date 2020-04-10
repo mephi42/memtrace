@@ -21,36 +21,47 @@ Machine           : EM_386
 [        16] 0x00000006: MT_INSN 0x000000000804901b cd80 int 0x80
 [        17] 0x00000006: MT_INSN_EXEC
 [        18] 0x00000006: MT_PUT_REG uint32_t [0x150] 0x804901b
-[        19] 0x00000007: MT_INSN 0x000000000804901d b801000000 mov eax, 1
-[        20] 0x00000007: MT_INSN_EXEC
-[        21] 0x00000007: MT_PUT_REG uint32_t [0x8] 0x1
-[        22] 0x00000008: MT_INSN 0x0000000008049022 31db xor ebx, ebx
-[        23] 0x00000008: MT_INSN_EXEC
-[        24] 0x00000008: MT_PUT_REG uint32_t [0x28] 0xf
-[        25] 0x00000008: MT_PUT_REG uint32_t [0x2c] 0x0
-[        26] 0x00000008: MT_PUT_REG uint32_t [0x30] 0x0
-[        27] 0x00000008: MT_PUT_REG uint32_t [0x34] 0x0
-[        28] 0x00000008: MT_PUT_REG uint32_t [0x14] 0x0
-[        29] 0x00000009: MT_INSN 0x0000000008049024 80bdfb0f00002a cmp byte ptr [ebp + 0xffb], 0x2a
-[        30] 0x00000009: MT_INSN_EXEC
-[        31] 0x00000009: MT_GET_REG uint32_t [0x1c] 0x8049005
-[        32] 0x00000009: MT_LOAD uint8_t [0x804a000] 0x2a
-[        33] 0x00000009: MT_PUT_REG uint32_t [0x28] 0x4
-[        34] 0x00000009: MT_PUT_REG uint32_t [0x2c] 0x2a
-[        35] 0x00000009: MT_PUT_REG uint32_t [0x30] 0x2a
-[        36] 0x00000009: MT_PUT_REG uint32_t [0x34] 0x0
-[        37] 0x0000000a: MT_INSN 0x000000000804902b 0f95c3 setne bl
-[        38] 0x0000000a: MT_INSN_EXEC
-[        39] 0x0000000a: MT_GET_REG uint32_t [0x28] 0x4
-[        40] 0x0000000a: MT_GET_REG uint32_t [0x2c] 0x2a
-[        41] 0x0000000a: MT_GET_REG uint32_t [0x30] 0x2a
-[        42] 0x0000000a: MT_GET_REG uint32_t [0x34] 0x0
-[        43] 0x0000000a: MT_PUT_REG uint8_t [0x14] 0x0
-[        44] 0x0000000b: MT_INSN 0x000000000804902e cd80 int 0x80
-[        45] 0x0000000b: MT_INSN_EXEC
-[        46] 0x0000000b: MT_PUT_REG uint32_t [0x150] 0x804902e
-[        47] MT_MMAP 0000000008048000-0000000008049000 r-- {workdir}/i386
-[        48] MT_MMAP 0000000008049000-000000000804a000 r-x {workdir}/i386
-[        49] MT_MMAP 000000000804a000-000000000804b000 rw- 
-[        50] MT_MMAP 000000000804b000-000000000804c000 rwx 
+[        19] 0x00000006: MT_GET_REG uint32_t [0x8] 0x3
+[        20] 0x00000006: MT_GET_REG uint32_t [0x14] 0x0
+[        21] 0x00000006: MT_GET_REG uint32_t [0xc] 0x804a000
+[        22] 0x00000006: MT_GET_REG uint32_t [0x10] 0x1
+[        23] 0x00000006: MT_PUT_REG uint32_t [0x8] 0x1
+[        24] 0x00000006: MT_STORE uint8_t [0x804a000] 0x2a
+[        25] 0x00000006: MT_PUT_REG uint32_t [0x8] 0x1
+[        26] 0x00000007: MT_INSN 0x000000000804901d b801000000 mov eax, 1
+[        27] 0x00000007: MT_INSN_EXEC
+[        28] 0x00000007: MT_PUT_REG uint32_t [0x8] 0x1
+[        29] 0x00000008: MT_INSN 0x0000000008049022 31db xor ebx, ebx
+[        30] 0x00000008: MT_INSN_EXEC
+[        31] 0x00000008: MT_PUT_REG uint32_t [0x28] 0xf
+[        32] 0x00000008: MT_PUT_REG uint32_t [0x2c] 0x0
+[        33] 0x00000008: MT_PUT_REG uint32_t [0x30] 0x0
+[        34] 0x00000008: MT_PUT_REG uint32_t [0x34] 0x0
+[        35] 0x00000008: MT_PUT_REG uint32_t [0x14] 0x0
+[        36] 0x00000009: MT_INSN 0x0000000008049024 80bdfb0f00002a cmp byte ptr [ebp + 0xffb], 0x2a
+[        37] 0x00000009: MT_INSN_EXEC
+[        38] 0x00000009: MT_GET_REG uint32_t [0x1c] 0x8049005
+[        39] 0x00000009: MT_LOAD uint8_t [0x804a000] 0x2a
+[        40] 0x00000009: MT_PUT_REG uint32_t [0x28] 0x4
+[        41] 0x00000009: MT_PUT_REG uint32_t [0x2c] 0x2a
+[        42] 0x00000009: MT_PUT_REG uint32_t [0x30] 0x2a
+[        43] 0x00000009: MT_PUT_REG uint32_t [0x34] 0x0
+[        44] 0x0000000a: MT_INSN 0x000000000804902b 0f95c3 setne bl
+[        45] 0x0000000a: MT_INSN_EXEC
+[        46] 0x0000000a: MT_GET_REG uint32_t [0x28] 0x4
+[        47] 0x0000000a: MT_GET_REG uint32_t [0x2c] 0x2a
+[        48] 0x0000000a: MT_GET_REG uint32_t [0x30] 0x2a
+[        49] 0x0000000a: MT_GET_REG uint32_t [0x34] 0x0
+[        50] 0x0000000a: MT_PUT_REG uint8_t [0x14] 0x0
+[        51] 0x0000000b: MT_INSN 0x000000000804902e cd80 int 0x80
+[        52] 0x0000000b: MT_INSN_EXEC
+[        53] 0x0000000b: MT_PUT_REG uint32_t [0x150] 0x804902e
+[        54] 0x0000000b: MT_GET_REG uint32_t [0x8] 0x1
+[        55] 0x0000000b: MT_GET_REG uint32_t [0x14] 0x0
+[        56] 0x0000000b: MT_PUT_REG uint32_t [0x8] 0x0
+[        57] 0x0000000b: MT_PUT_REG uint32_t [0x8] 0x0
+[        58] MT_MMAP 0000000008048000-0000000008049000 r-- {workdir}/i386
+[        59] MT_MMAP 0000000008049000-000000000804a000 r-x {workdir}/i386
+[        60] MT_MMAP 000000000804a000-000000000804b000 rw- 
+[        61] MT_MMAP 000000000804b000-000000000804c000 rwx 
 Insns             : 11

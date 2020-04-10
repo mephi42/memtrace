@@ -42,7 +42,14 @@ class Symbolizer:
     def close(self) -> None:
         self.process.stdin.close()
         self.process.wait()
+        self.process.stdout.close()
         self.maps.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def symbolize(self, addr: int) -> str:
         self.process.stdin.write(f'0x{addr:x}\n'.encode())

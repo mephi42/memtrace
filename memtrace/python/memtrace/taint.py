@@ -1,7 +1,6 @@
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Set, Tuple
-import re
 import sys
 
 from memtrace.analysis import Analysis
@@ -49,13 +48,14 @@ class BackwardNode:
                 symbolized_pc = analysis.symbolizer.symbolize(pc)
                 disasm_str = f'{disasm_str} {symbolized_pc}'
                 is_seen = node.trace_index in seen
-                headline = f'[InsnInTrace:{node.trace_index}] ' \
-                           f'0x{pc:016x} {disasm_str}'
                 if is_seen:
-                    link = '*' + re.sub(r'([\[\]])', r'\\\g<1>', headline)
-                    fp.write(f'{indent} [[{link}][{headline}]]\n')
+                    prefix, suffix = '[[', ']]'
                 else:
-                    fp.write(f'{indent} {headline}\n')
+                    prefix, suffix = '<<', '>>'
+                fp.write(
+                    f'{indent} {prefix}InsnInTrace:{node.trace_index}'
+                    f'{suffix} 0x{pc:016x} {disasm_str}\n'
+                )
                 for trace_entry in edge.reg:
                     entry_str = format_entry(
                         entry=trace_entry,

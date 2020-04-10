@@ -17,33 +17,44 @@ Machine           : EM_X86_64
 [        12] 0x00000005: MT_INSN 0x000000000040101c 0f05 syscall 
 [        13] 0x00000005: MT_INSN_EXEC
 [        14] 0x00000005: MT_PUT_REG uint64_t [0x18] 0x40101e
-[        15] 0x00000006: MT_INSN 0x000000000040101e 48c7c03c000000 mov rax, 0x3c
-[        16] 0x00000006: MT_INSN_EXEC
-[        17] 0x00000006: MT_PUT_REG uint64_t [0x10] 0x3c
-[        18] 0x00000007: MT_INSN 0x0000000000401025 4831ff xor rdi, rdi
-[        19] 0x00000007: MT_INSN_EXEC
-[        20] 0x00000007: MT_PUT_REG uint64_t [0x90] 0x14
-[        21] 0x00000007: MT_PUT_REG uint64_t [0x98] 0x0
-[        22] 0x00000007: MT_PUT_REG uint64_t [0xa0] 0x0
-[        23] 0x00000007: MT_PUT_REG uint64_t [0x48] 0x0
-[        24] 0x00000008: MT_INSN 0x0000000000401028 803dd10f00002a cmp byte ptr [rip + 0xfd1], 0x2a
-[        25] 0x00000008: MT_INSN_EXEC
-[        26] 0x00000008: MT_LOAD uint8_t [0x402000] 0x2a
-[        27] 0x00000008: MT_PUT_REG uint64_t [0x90] 0x5
-[        28] 0x00000008: MT_PUT_REG uint64_t [0x98] 0x2a
-[        29] 0x00000008: MT_PUT_REG uint64_t [0xa0] 0x2a
-[        30] 0x00000009: MT_INSN 0x000000000040102f 400f95c7 setne dil
-[        31] 0x00000009: MT_INSN_EXEC
-[        32] 0x00000009: MT_GET_REG uint64_t [0x90] 0x5
-[        33] 0x00000009: MT_GET_REG uint64_t [0x98] 0x2a
-[        34] 0x00000009: MT_GET_REG uint64_t [0xa0] 0x2a
-[        35] 0x00000009: MT_GET_REG uint64_t [0xa8] 0x0
-[        36] 0x00000009: MT_PUT_REG uint8_t [0x48] 0x0
-[        37] 0x0000000a: MT_INSN 0x0000000000401033 0f05 syscall 
-[        38] 0x0000000a: MT_INSN_EXEC
-[        39] 0x0000000a: MT_PUT_REG uint64_t [0x18] 0x401035
-[        40] MT_MMAP 0000000000400000-0000000000401000 r-- {workdir}/x86_64
-[        41] MT_MMAP 0000000000401000-0000000000402000 r-x {workdir}/x86_64
-[        42] MT_MMAP 0000000000402000-0000000000403000 rw- 
-[        43] MT_MMAP 0000000004000000-0000000004001000 rwx 
+[        15] 0x00000005: MT_GET_REG uint64_t [0x10] 0x0
+[        16] 0x00000005: MT_GET_REG uint32_t [0x48] 0x0
+[        17] 0x00000005: MT_GET_REG uint64_t [0x40] 0x402000
+[        18] 0x00000005: MT_GET_REG uint64_t [0x20] 0x1
+[        19] 0x00000005: MT_PUT_REG uint64_t [0x10] 0x1
+[        20] 0x00000005: MT_STORE uint8_t [0x402000] 0x2a
+[        21] 0x00000005: MT_PUT_REG uint64_t [0x10] 0x1
+[        22] 0x00000006: MT_INSN 0x000000000040101e 48c7c03c000000 mov rax, 0x3c
+[        23] 0x00000006: MT_INSN_EXEC
+[        24] 0x00000006: MT_PUT_REG uint64_t [0x10] 0x3c
+[        25] 0x00000007: MT_INSN 0x0000000000401025 4831ff xor rdi, rdi
+[        26] 0x00000007: MT_INSN_EXEC
+[        27] 0x00000007: MT_PUT_REG uint64_t [0x90] 0x14
+[        28] 0x00000007: MT_PUT_REG uint64_t [0x98] 0x0
+[        29] 0x00000007: MT_PUT_REG uint64_t [0xa0] 0x0
+[        30] 0x00000007: MT_PUT_REG uint64_t [0x48] 0x0
+[        31] 0x00000008: MT_INSN 0x0000000000401028 803dd10f00002a cmp byte ptr [rip + 0xfd1], 0x2a
+[        32] 0x00000008: MT_INSN_EXEC
+[        33] 0x00000008: MT_LOAD uint8_t [0x402000] 0x2a
+[        34] 0x00000008: MT_PUT_REG uint64_t [0x90] 0x5
+[        35] 0x00000008: MT_PUT_REG uint64_t [0x98] 0x2a
+[        36] 0x00000008: MT_PUT_REG uint64_t [0xa0] 0x2a
+[        37] 0x00000009: MT_INSN 0x000000000040102f 400f95c7 setne dil
+[        38] 0x00000009: MT_INSN_EXEC
+[        39] 0x00000009: MT_GET_REG uint64_t [0x90] 0x5
+[        40] 0x00000009: MT_GET_REG uint64_t [0x98] 0x2a
+[        41] 0x00000009: MT_GET_REG uint64_t [0xa0] 0x2a
+[        42] 0x00000009: MT_GET_REG uint64_t [0xa8] 0x0
+[        43] 0x00000009: MT_PUT_REG uint8_t [0x48] 0x0
+[        44] 0x0000000a: MT_INSN 0x0000000000401033 0f05 syscall 
+[        45] 0x0000000a: MT_INSN_EXEC
+[        46] 0x0000000a: MT_PUT_REG uint64_t [0x18] 0x401035
+[        47] 0x0000000a: MT_GET_REG uint64_t [0x10] 0x3c
+[        48] 0x0000000a: MT_GET_REG uint32_t [0x48] 0x0
+[        49] 0x0000000a: MT_PUT_REG uint64_t [0x10] 0x0
+[        50] 0x0000000a: MT_PUT_REG uint64_t [0x10] 0x0
+[        51] MT_MMAP 0000000000400000-0000000000401000 r-- {workdir}/x86_64
+[        52] MT_MMAP 0000000000401000-0000000000402000 r-x {workdir}/x86_64
+[        53] MT_MMAP 0000000000402000-0000000000403000 rw- 
+[        54] MT_MMAP 0000000004000000-0000000004001000 rwx 
 Insns             : 10

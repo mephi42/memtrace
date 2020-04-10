@@ -2,65 +2,130 @@
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
+from typing import List
 import unittest
 
 from memtrace.analysis import Analysis
 from memtrace.format import format_entry
 import memtrace.stats as stats
+from memtrace.symbolizer import Symbolizer
 from memtrace.taint import BackwardAnalysis
 from memtrace_ext import Disasm, get_endianness_str, get_machine_type_str, \
     Tag, Trace
 
 
-class TestCommon(unittest.TestCase):
+def diff_files(expected, actual):
+    if 'UPDATE_EXPECTATIONS' in os.environ:
+        shutil.copyfile(actual, expected)
+    subprocess.check_call([
+        'diff',
+        '-au',
+        expected,
+        actual,
+    ])
+
+
+class CommonTest(unittest.TestCase):
+    @staticmethod
+    def get_cflags() -> List[str]:
+        return [
+            '-Wall',
+            '-Wextra',
+            '-Wconversion',
+            '-pedantic',
+            '-O3',
+        ]
+
+    @staticmethod
+    def get_target() -> str:
+        raise NotImplementedError()
+
+    @staticmethod
+    def get_source_ext() -> str:
+        raise NotImplementedError()
+
+    @staticmethod
+    def get_input() -> bytes:
+        return b'*'
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.target = cls.machines[0]
-        if platform.machine() not in cls.machines:
-            raise unittest.SkipTest(f'{cls.machines} only')
         cls.basedir = os.path.dirname(os.path.realpath(__file__))
         pythondir = os.path.dirname(cls.basedir)
         memtracedir = os.path.dirname(pythondir)
         cls.rootdir = os.path.dirname(memtracedir)
         cls.vg_in_place = os.path.join(cls.rootdir, 'vg-in-place')
         cls.workdir = tempfile.TemporaryDirectory()
-        cls._compile(cls.workdir.name, cls.target)
-        cls._memtrace(cls.workdir.name, cls.target)
+        cls._compile()
+        cls._memtrace()
 
     @classmethod
     def tearDownClass(cls) -> None:
         cls.workdir.cleanup()
 
     @classmethod
-    def _compile(cls, workdir: str, target: str) -> None:
+    def _compile(cls) -> None:
         args = [
             'cc',
-            '-o', os.path.join(workdir, target),
-            '-nostdlib',
-            '-static',
-            *cls.cflags,
-            f'{target}.S',
+            '-o', os.path.join(cls.workdir.name, cls.get_target()),
+            *cls.get_cflags(),
+            f'{cls.get_target()}{cls.get_source_ext()}',
         ]
         sys.stderr.write('{}\n'.format(' '.join(args)))
         subprocess.check_call(args, cwd=cls.basedir)
 
     @classmethod
-    def _memtrace(cls, workdir: str, target: str) -> None:
+    def _memtrace(cls) -> None:
         args = [
             cls.vg_in_place,
             '--tool=memtrace',
             '--pc-range=0-0xffffffffffffffff:imr',
-            f'./{target}',
+            f'./{cls.get_target()}',
         ]
         sys.stderr.write('{}\n'.format(' '.join(args)))
         with tempfile.NamedTemporaryFile() as fp:
-            fp.write(b'*')
+            fp.write(cls.get_input())
             fp.flush()
             fp.seek(0)
-            subprocess.check_call(args, stdin=fp, cwd=workdir)
+            subprocess.check_call(
+                args,
+                stdin=fp,
+                stdout=subprocess.DEVNULL,
+                cwd=cls.workdir.name,
+            )
+
+
+class MachineTest(CommonTest):
+    @staticmethod
+    def get_machines() -> List[str]:
+        raise NotImplementedError()
+
+    @classmethod
+    def get_target(cls):
+        return cls.get_machines()[0]
+
+    @staticmethod
+    def get_source_ext():
+        return '.S'
+
+    @classmethod
+    def get_cflags(cls) -> List[str]:
+        return super().get_cflags() + [
+            '-nostdlib',
+            '-static',
+        ]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        if cls == MachineTest:
+            raise unittest.SkipTest('Subclasses only')
+        if platform.machine() not in cls.get_machines():
+            raise unittest.SkipTest(f'{cls.get_machines()} only')
+        super().setUpClass()
 
     def _filter_line(
             self, fp, line: bytes, rootdir: bytes, workdir: bytes) -> None:
@@ -86,39 +151,29 @@ class TestCommon(unittest.TestCase):
             if returncode != 0:
                 raise subprocess.CalledProcessError(returncode, args)
 
-    def _dump(self, workdir: str, target: str) -> None:
-        dump_txt = f'{target}-dump.txt'
-        actual_dump_txt = os.path.join(workdir, dump_txt)
+    def test_dump(self) -> None:
+        dump_txt = f'{self.get_target()}-dump.txt'
+        actual_dump_txt = os.path.join(self.workdir.name, dump_txt)
         expected_dump_txt = os.path.join(self.basedir, dump_txt)
         args = ['python3', '-m', 'memtrace.dump']
         sys.stderr.write('{}\n'.format(' '.join(args)))
-        self.check_call_filtered(args, workdir, actual_dump_txt)
-        subprocess.check_call([
-            'diff',
-            '-au',
-            expected_dump_txt,
-            actual_dump_txt,
-        ])
+        self.check_call_filtered(args, self.workdir.name, actual_dump_txt)
+        diff_files(expected_dump_txt, actual_dump_txt)
 
-    def _ud(self, workdir: str, target: str) -> None:
-        ud_txt = f'{target}-ud.txt'
-        actual_ud_txt = os.path.join(workdir, ud_txt)
+    def test_ud(self) -> None:
+        ud_txt = f'{self.get_target()}-ud.txt'
+        actual_ud_txt = os.path.join(self.workdir.name, ud_txt)
         expected_ud_txt = os.path.join(self.basedir, ud_txt)
         args = ['python3', '-m', 'memtrace.ud', '--verbose']
         sys.stderr.write('{}\n'.format(' '.join(args)))
-        self.check_call_filtered(args, workdir, actual_ud_txt)
-        subprocess.check_call([
-            'diff',
-            '-au',
-            expected_ud_txt,
-            actual_ud_txt,
-        ])
+        self.check_call_filtered(args, self.workdir.name, actual_ud_txt)
+        diff_files(expected_ud_txt, actual_ud_txt)
 
-    def _trace(self, workdir: str, target: str) -> None:
-        dump_txt = f'{target}-dump.txt'
-        actual_dump_txt = os.path.join(workdir, dump_txt)
+    def test_trace(self) -> None:
+        dump_txt = f'{self.get_target()}-dump.txt'
+        actual_dump_txt = os.path.join(self.workdir.name, dump_txt)
         expected_dump_txt = os.path.join(self.basedir, dump_txt)
-        trace = Trace.load(os.path.join(workdir, 'memtrace.out'))
+        trace = Trace.load(os.path.join(self.workdir.name, 'memtrace.out'))
         endianness = trace.get_endianness()
         endianness_str = get_endianness_str(endianness)
         disasm = Disasm(
@@ -137,7 +192,7 @@ class TestCommon(unittest.TestCase):
             fp.write('Machine           : {}\n'.format(
                 get_machine_type_str(trace.get_machine_type())).encode())
             rootdir_bytes = self.rootdir.encode()
-            workdir_bytes = workdir.encode()
+            workdir_bytes = self.workdir.name.encode()
             for entry in trace:
                 if entry.tag == Tag.MT_INSN_EXEC:
                     insn_count += 1
@@ -145,20 +200,16 @@ class TestCommon(unittest.TestCase):
                 line = (line_str + '\n').encode()
                 self._filter_line(fp, line, rootdir_bytes, workdir_bytes)
             fp.write('Insns             : {}\n'.format(insn_count).encode())
-        subprocess.check_call([
-            'diff',
-            '-au',
-            expected_dump_txt,
-            actual_dump_txt,
-        ])
+        diff_files(expected_dump_txt, actual_dump_txt)
 
-    def _seek(self, workdir: str, target: str, with_index: bool) -> None:
-        seek_txt = f'{target}-seek.txt'
-        actual_seek_txt = os.path.join(workdir, seek_txt)
+    def _seek(self, with_index: bool) -> None:
+        seek_txt = f'{self.get_target()}-seek.txt'
+        actual_seek_txt = os.path.join(self.workdir.name, seek_txt)
         expected_seek_txt = os.path.join(self.basedir, seek_txt)
-        trace = Trace.load(os.path.join(workdir, 'memtrace.out'))
+        trace = Trace.load(os.path.join(self.workdir.name, 'memtrace.out'))
         if with_index:
-            trace.build_insn_index(os.path.join(workdir, 'memtrace.idx'), 2)
+            memtrace_idx = os.path.join(self.workdir.name, 'memtrace.idx')
+            trace.build_insn_index(memtrace_idx, 2)
         endianness = trace.get_endianness()
         endianness_str = get_endianness_str(endianness)
         disasm = Disasm(
@@ -177,22 +228,24 @@ class TestCommon(unittest.TestCase):
                 entry_str = format_entry(entry, endianness_str, disasm)
                 fp.write(entry_str + '\n')
                 i += 1
-        subprocess.check_call([
-            'diff',
-            '-au',
-            expected_seek_txt,
-            actual_seek_txt,
-        ])
+        diff_files(expected_seek_txt, actual_seek_txt)
 
-    def _taint(self, workdir, target):
-        taint_pc_txt = os.path.join(self.basedir, f'{target}-taint-pc.txt')
-        taint_org = f'{target}-taint.org'
-        actual_taint_org = os.path.join(workdir, taint_org)
+    def test_seek_insn(self) -> None:
+        self._seek(with_index=False)
+
+    def test_seek_insn_with_index(self) -> None:
+        self._seek(with_index=True)
+
+    def test_taint(self) -> None:
+        taint_pc_txt = os.path.join(
+            self.basedir, f'{self.get_target()}-taint-pc.txt')
+        taint_org = f'{self.get_target()}-taint.org'
+        actual_taint_org = os.path.join(self.workdir.name, taint_org)
         expected_taint_org = os.path.join(self.basedir, taint_org)
         with open(taint_pc_txt) as fp:
             pc = int(fp.read(), 0)
         with Analysis(
-                trace_path=os.path.join(workdir, 'memtrace.out'),
+                trace_path=os.path.join(self.workdir.name, 'memtrace.out'),
         ) as analysis:
             backward = BackwardAnalysis(
                 analysis=analysis,
@@ -202,79 +255,68 @@ class TestCommon(unittest.TestCase):
             dag = backward.analyze()
             with open(actual_taint_org, 'w') as fp:
                 dag.pp(analysis, fp)
-        subprocess.check_call([
-            'diff',
-            '-au',
-            expected_taint_org,
-            actual_taint_org,
-        ])
+        diff_files(expected_taint_org, actual_taint_org)
 
-    def _stats(self, workdir, target):
-        stats_txt = f'{target}-stats.txt'
-        actual_stats_txt = os.path.join(workdir, stats_txt)
+    def test_stats(self) -> None:
+        stats_txt = f'{self.get_target()}-stats.txt'
+        actual_stats_txt = os.path.join(self.workdir.name, stats_txt)
         expected_stats_txt = os.path.join(self.basedir, stats_txt)
         result = stats.from_trace_file(
-            os.path.join(workdir, 'memtrace.out'))
+            os.path.join(self.workdir.name, 'memtrace.out'))
         with open(actual_stats_txt, 'w') as fp:
             stats.pp(result, fp)
-        subprocess.check_call([
-            'diff',
-            '-au',
-            expected_stats_txt,
-            actual_stats_txt,
-        ])
+        diff_files(expected_stats_txt, actual_stats_txt)
 
 
-class TestX86_64(TestCommon):
-    machines = ['x86_64']
-    cflags = []
+class TestX86_64(MachineTest):
+    @staticmethod
+    def get_machines() -> List[str]:
+        return ['x86_64']
 
-    def test_dump(self) -> None:
-        self._dump(self.workdir.name, self.target)
-
-    def test_ud(self) -> None:
-        self._ud(self.workdir.name, self.target)
-
-    def test_trace(self) -> None:
-        self._trace(self.workdir.name, self.target)
-
-    def test_seek_insn(self) -> None:
-        self._seek(self.workdir.name, self.target, with_index=False)
-
-    def test_seek_insn_with_index(self) -> None:
-        self._seek(self.workdir.name, self.target, with_index=True)
-
-    def test_taint(self) -> None:
-        self._taint(self.workdir.name, self.target)
-
-    def test_stats(self) -> None:
-        self._stats(self.workdir.name, self.target)
+    @classmethod
+    def get_cflags(cls) -> List[str]:
+        return super().get_cflags() + ['-m64']
 
 
-class TestI386(TestCommon):
-    machines = ['i386', 'x86_64']
-    cflags = ['-m32']
+class TestI386(MachineTest):
+    @staticmethod
+    def get_machines() -> List[str]:
+        return ['i386', 'x86_64']
 
-    def test_dump(self) -> None:
-        self._dump(self.workdir.name, self.target)
+    @classmethod
+    def get_cflags(cls) -> List[str]:
+        return super().get_cflags() + ['-m32']
 
-    def test_ud(self) -> None:
-        self._ud(self.workdir.name, self.target)
 
-    def test_trace(self) -> None:
-        self._trace(self.workdir.name, self.target)
+class TestCat(CommonTest):
+    @staticmethod
+    def get_target() -> str:
+        return 'cat'
 
-    def test_seek_insn(self) -> None:
-        self._seek(self.workdir.name, self.target, with_index=False)
+    @staticmethod
+    def get_source_ext() -> str:
+        return '.c'
 
-    def test_seek_insn_with_index(self) -> None:
-        self._seek(self.workdir.name, self.target, with_index=True)
+    @staticmethod
+    def get_input() -> bytes:
+        return bytes(range(256)) * (128 * 1024 // 256)
 
-    def test_taint(self) -> None:
-        self._taint(self.workdir.name, self.target)
-
-    def test_stats(self) -> None:
-        self._stats(self.workdir.name, self.target)
+    def test(self):
+        trace = Trace.load(os.path.join(self.workdir.name, 'memtrace.out'))
+        cat_buf = bytearray(128 * 1024)
+        with Symbolizer(trace.get_mmap_entries()) as symbolizer:
+            cat_buf_start = symbolizer.resolve('cat_buf')
+        self.assertIsNotNone(cat_buf_start)
+        cat_buf_end = cat_buf_start + len(cat_buf)
+        for entry in trace:
+            if (entry.tag == Tag.MT_STORE and
+                    cat_buf_start <= entry.addr < cat_buf_end):
+                value = entry.value
+                end = entry.addr + len(value)
+                self.assertLessEqual(end, cat_buf_end)
+                offset = entry.addr - cat_buf_start
+                cat_buf[offset:offset + len(value)] = value
+        self.assertEqual(self.get_input(), cat_buf)
 
 
 if __name__ == '__main__':

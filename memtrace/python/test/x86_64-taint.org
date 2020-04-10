@@ -1,10 +1,18 @@
 #+STARTUP: indent
-* [InsnInTrace:9] 0x000000000040102f setne dil in _start+0x2f (.text) at ??:0
-** [InsnInTrace:8] 0x0000000000401028 cmp byte ptr [rip + 0xfd1], 0x2a in _start+0x28 (.text) at ??:0
-Reason: [        32] 0x00000009: MT_GET_REG uint64_t [0x90] 0x5
-Reason: [        33] 0x00000009: MT_GET_REG uint64_t [0x98] 0x2a
-Reason: [        34] 0x00000009: MT_GET_REG uint64_t [0xa0] 0x2a
-*** [InsnInTrace:0] 0x0000000000000000 <unknown> in ?? at ??:0
-Reason: [        26] 0x00000008: MT_LOAD uint8_t [0x402000] 0x2a
-** [[*\[InsnInTrace:0\] 0x0000000000000000 <unknown> in ?? at ??:0][[InsnInTrace:0] 0x0000000000000000 <unknown> in ?? at ??:0]]
-Reason: [        35] 0x00000009: MT_GET_REG uint64_t [0xa8] 0x0
+* <<InsnInTrace:9>> 0x000000000040102f setne dil in _start+0x2f (.text) at ??:0
+** <<InsnInTrace:8>> 0x0000000000401028 cmp byte ptr [rip + 0xfd1], 0x2a in _start+0x28 (.text) at ??:0
+Reason: [        39] 0x00000009: MT_GET_REG uint64_t [0x90] 0x5
+Reason: [        40] 0x00000009: MT_GET_REG uint64_t [0x98] 0x2a
+Reason: [        41] 0x00000009: MT_GET_REG uint64_t [0xa0] 0x2a
+*** <<InsnInTrace:5>> 0x000000000040101c syscall  in _start+0x1c (.text) at ??:0
+Reason: [        33] 0x00000008: MT_LOAD uint8_t [0x402000] 0x2a
+**** <<InsnInTrace:1>> 0x0000000000401000 mov rax, 0 in _start (.text) at ??:0
+Reason: [        15] 0x00000005: MT_GET_REG uint64_t [0x10] 0x0
+**** <<InsnInTrace:2>> 0x0000000000401007 mov rdi, 0 in _start+0x7 (.text) at ??:0
+Reason: [        16] 0x00000005: MT_GET_REG uint32_t [0x48] 0x0
+**** <<InsnInTrace:3>> 0x000000000040100e lea rsi, qword ptr [rip + 0xfeb] in _start+0xe (.text) at ??:0
+Reason: [        17] 0x00000005: MT_GET_REG uint64_t [0x40] 0x402000
+**** <<InsnInTrace:4>> 0x0000000000401015 mov rdx, 1 in _start+0x15 (.text) at ??:0
+Reason: [        18] 0x00000005: MT_GET_REG uint64_t [0x20] 0x1
+** <<InsnInTrace:0>> 0x0000000000000000 <unknown> in ?? at ??:0
+Reason: [        42] 0x00000009: MT_GET_REG uint64_t [0xa8] 0x0

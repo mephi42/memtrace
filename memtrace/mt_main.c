@@ -9,6 +9,7 @@
 #include "pub_tool_libcbase.h"
 #include "pub_tool_libcfile.h"
 #include "pub_tool_libcprint.h"
+#include "pub_tool_machine.h"
 #include "pub_tool_mallocfree.h"
 #include "pub_tool_options.h"
 #include "pub_tool_tooliface.h"
@@ -86,8 +87,9 @@ typedef struct {
    Int flags;
 } AddrRange;
 #define MAX_PC_RANGES 32
-static AddrRange pc_ranges[MAX_PC_RANGES];
-static UInt n_pc_ranges;
+static AddrRange pcRanges[MAX_PC_RANGES];
+static UInt nPcRanges;
+static UInt syscallInsnSeq;
 
 /* Generic entry header. */
 struct Tlv {
@@ -316,6 +318,40 @@ static void add_ldst_entry(IRSB* out,
                             ALIGN_UP(entryLength, sizeof(UIntPtr)));
 }
 
+static void add_ldst_entries_now(UShort tag,
+                                 UInt insnSeq,
+                                 ThreadId tid,
+                                 Addr addr,
+                                 SizeT size)
+{
+   while (size > 0) {
+      struct LdStEntry* entry = (struct LdStEntry*)trace;
+      Int alignedEntryLength;
+      Int entryLength;
+      SizeT chunkSize;
+
+      chunkSize = MAX_ENTRY_LENGTH - sizeof(struct LdStEntry);
+      if (chunkSize > size)
+         chunkSize = size;
+      entryLength = sizeof(struct LdStEntry) + chunkSize;
+      alignedEntryLength = ALIGN_UP(entryLength, sizeof(UIntPtr));
+      tl_assert(alignedEntryLength <= MAX_ENTRY_LENGTH);
+      entry->tlvInsnSeq.tlv.tag = tag;
+      entry->tlvInsnSeq.tlv.length = entryLength;
+      entry->tlvInsnSeq.insnSeq = insnSeq;
+      entry->addr = addr;
+      if (tag == MT_GET_REG || tag == MT_PUT_REG)
+         VG_(get_shadow_regs_area)(tid, entry->value, 0, addr, chunkSize);
+      else
+         VG_(memcpy)(entry->value, (void*)addr, chunkSize);
+      trace += alignedEntryLength;
+      if (trace > trace_end - MAX_ENTRY_LENGTH)
+         flush_trace_buffer();
+      addr += chunkSize;
+      size -= chunkSize;
+   }
+}
+
 static void add_reg_entry(IRSB* out, UInt insnSeq, Int offset)
 {
    add_ldst_entry(out,
@@ -333,7 +369,7 @@ static void add_reg_entries(IRSB* out, UInt insnSeq)
       add_reg_entry(out, insnSeq, i);
 }
 
-static void add_insn_entry(UInt insnSeq, Addr pc, UInt insn_length)
+static void add_insn_entry_now(UInt insnSeq, Addr pc, UInt insn_length)
 {
    struct InsnEntry* entry;
    Int alignedEntryLength;
@@ -376,7 +412,7 @@ static void add_insn_exec_entry(IRSB* out, UInt insnSeq)
    update_current_entry_ptr(out, currentEntryPtr, entryLength);
 }
 
-static void add_raw_entries(XArray* entries)
+static void add_raw_entries_now(XArray* entries)
 {
    void* ptr;
    Word n;
@@ -441,9 +477,9 @@ static Int get_pc_flags(Addr pc)
    Int flags = 0;
    UInt i;
 
-   for (i = 0; i < n_pc_ranges; i++)
-      if (pc >= pc_ranges[i].start && pc <= pc_ranges[i].end)
-         flags |= pc_ranges[i].flags;
+   for (i = 0; i < nPcRanges; i++)
+      if (pc >= pcRanges[i].start && pc <= pcRanges[i].end)
+         flags |= pcRanges[i].flags;
    return flags;
 }
 
@@ -452,14 +488,14 @@ static void show_pc_ranges(void)
    UInt i;
 
    VG_(umsg)("Traced addresses:\n");
-   for (i = 0; i < n_pc_ranges; i++)
+   for (i = 0; i < nPcRanges; i++)
       VG_(umsg)("%016llx-%016llx %c%c%c%c\n",
-                (ULong)pc_ranges[i].start,
-                (ULong)pc_ranges[i].end,
-                (pc_ranges[i].flags & AR_MEM) ? 'm' : '-',
-                (pc_ranges[i].flags & AR_REGS) ? 'r' : '-',
-                (pc_ranges[i].flags & AR_INSNS) ? 'i' : '-',
-                (pc_ranges[i].flags & AR_ALL_REGS) ? 'R' : '-');
+                (ULong)pcRanges[i].start,
+                (ULong)pcRanges[i].end,
+                (pcRanges[i].flags & AR_MEM) ? 'm' : '-',
+                (pcRanges[i].flags & AR_REGS) ? 'r' : '-',
+                (pcRanges[i].flags & AR_INSNS) ? 'i' : '-',
+                (pcRanges[i].flags & AR_ALL_REGS) ? 'R' : '-');
 }
 
 static Bool add_pc_range(const HChar* spec)
@@ -468,43 +504,43 @@ static Bool add_pc_range(const HChar* spec)
    const HChar* dash;
    HChar* endptr;
 
-   if (n_pc_ranges == MAX_PC_RANGES)
+   if (nPcRanges == MAX_PC_RANGES)
       return False;
    dash = VG_(strchr)(spec, '-');
    if (dash == NULL)
       return False;
    colon = VG_(strchr)(dash, ':');
-   pc_ranges[n_pc_ranges].start = VG_(strtoull16)(spec, &endptr);
+   pcRanges[nPcRanges].start = VG_(strtoull16)(spec, &endptr);
    if (endptr != dash)
       return False;
-   pc_ranges[n_pc_ranges].end = VG_(strtoull16)(dash + 1, &endptr);
+   pcRanges[nPcRanges].end = VG_(strtoull16)(dash + 1, &endptr);
    if (colon == NULL) {
       if (*endptr != '\0')
          return False;
-      pc_ranges[n_pc_ranges].flags = AR_DEFAULT;
+      pcRanges[nPcRanges].flags = AR_DEFAULT;
    } else {
       if (endptr != colon)
          return False;
       for (endptr++; *endptr; endptr++) {
          switch (*endptr) {
          case 'i':
-            pc_ranges[n_pc_ranges].flags |= AR_INSNS;
+            pcRanges[nPcRanges].flags |= AR_INSNS;
             break;
          case 'm':
-            pc_ranges[n_pc_ranges].flags |= AR_MEM;
+            pcRanges[nPcRanges].flags |= AR_MEM;
             break;
          case 'r':
-            pc_ranges[n_pc_ranges].flags |= AR_REGS;
+            pcRanges[nPcRanges].flags |= AR_REGS;
             break;
          case 'R':
-            pc_ranges[n_pc_ranges].flags |= AR_ALL_REGS;
+            pcRanges[nPcRanges].flags |= AR_ALL_REGS;
             break;
          default:
             return False;
          }
       }
    }
-   n_pc_ranges++;
+   nPcRanges++;
    return True;
 }
 
@@ -528,14 +564,37 @@ static void mt_print_debug_usage(void)
 
 static void mt_post_clo_init(void)
 {
-   if (n_pc_ranges == 0) {
-      pc_ranges[0].start = 0;
-      pc_ranges[0].end = (Addr)-1;
-      pc_ranges[0].flags = AR_DEFAULT;
-      n_pc_ranges = 1;
+   if (nPcRanges == 0) {
+      pcRanges[0].start = 0;
+      pcRanges[0].end = (Addr)-1;
+      pcRanges[0].flags = AR_DEFAULT;
+      nPcRanges = 1;
    }
 
    show_pc_ranges();
+}
+
+static Bool is_ijk_syscall(IRJumpKind ijk) {
+   switch (ijk) {
+   case Ijk_Sys_syscall:
+   case Ijk_Sys_int32:
+   case Ijk_Sys_int128:
+   case Ijk_Sys_int129:
+   case Ijk_Sys_int130:
+   case Ijk_Sys_int145:
+   case Ijk_Sys_int210:
+   case Ijk_Sys_sysenter:
+      return True;
+   default:
+      return False;
+   }
+}
+
+static void store_syscall_insn_seq(IRSB* out, UInt insnSeq) {
+   addStmtToIRSB(out,
+                 IRStmt_Store(END,
+                              mkPtr(&syscallInsnSeq),
+                              IRExpr_Const(IRConst_U32(insnSeq))));
 }
 
 static
@@ -566,7 +625,7 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          insnSeq++;
          pcFlags = get_pc_flags(pc);
          if (pcFlags)
-            add_insn_entry(insnSeq, pc, stmt->Ist.IMark.len);
+            add_insn_entry_now(insnSeq, pc, stmt->Ist.IMark.len);
          if (pcFlags & AR_INSNS)
             add_insn_exec_entry(out, insnSeq);
          if (pcFlags & AR_ALL_REGS)
@@ -690,14 +749,17 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          }
 
          d = unsafeIRDirty_0_N(0,
-                               "add_raw_entries",
-                               add_raw_entries,
+                               "add_raw_entries_now",
+                               add_raw_entries_now,
                                mkIRExprVec_1(mkPtr(entries)));
          d->guard = stmt->Ist.Exit.guard;
          d->mFx   = Ifx_Write;
          d->mAddr = mkPtr(&trace);
          d->mSize = sizeof trace;
          addStmtToIRSB(out, IRStmt_Dirty(d));
+
+         if (is_ijk_syscall(stmt->Ist.Exit.jk))
+            store_syscall_insn_seq(out, insnSeq);
 
          addStmtToIRSB(out, stmt);
          break;
@@ -707,7 +769,56 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
          tl_assert(0);
       }
    }
+   if (is_ijk_syscall(bb->jumpkind))
+      store_syscall_insn_seq(out, insnSeq);
    return out;
+}
+
+static void mt_track_pre_mem_read(CorePart part,
+                                  ThreadId tid,
+                                  const HChar* s,
+                                  Addr a,
+                                  SizeT size)
+{
+   if (part == Vg_CoreSysCall)
+      add_ldst_entries_now(MT_LOAD, syscallInsnSeq, tid, a, size);
+}
+
+static void mt_track_pre_mem_read_asciiz(CorePart part,
+                                         ThreadId tid,
+                                         const HChar* s,
+                                         Addr a)
+{
+   /* Treat this as a 1-byte read for now. */
+   mt_track_pre_mem_read(part, tid, s, a, 1);
+}
+
+static void mt_track_post_mem_write(CorePart part,
+                                    ThreadId tid,
+                                    Addr a,
+                                    SizeT size)
+{
+   if (part == Vg_CoreSysCall)
+      add_ldst_entries_now(MT_STORE, syscallInsnSeq, tid, a, size);
+}
+
+static void mt_track_pre_reg_read(CorePart part,
+                                  ThreadId tid,
+                                  const HChar* s,
+                                  PtrdiffT offset,
+                                  SizeT size)
+{
+   if (part == Vg_CoreSysCall)
+      add_ldst_entries_now(MT_GET_REG, syscallInsnSeq, tid, offset, size);
+}
+
+static void mt_track_post_reg_write(CorePart part,
+                                    ThreadId tid,
+                                    PtrdiffT offset,
+                                    SizeT size)
+{
+   if (part == Vg_CoreSysCall)
+      add_ldst_entries_now(MT_PUT_REG, syscallInsnSeq, tid, offset, size);
 }
 
 static void mt_fini(Int exitcode)
@@ -731,9 +842,17 @@ static void mt_pre_clo_init(void)
                                    mt_print_debug_usage);
    /* Valgrind passes an optimized IRSB to mt_instrument, in which nearby
       instructions might be intertwined. Therefore, in order to get the
-      accurate associaton of data accesses to instructions, we need to look at
-      one instruction at a time. */
+      accurate association of data accesses to instructions, we need to look at
+      one instruction at a time.
+      Note: this might not always work, e.g., on x86, call+pop merging ignores
+      this settings. */
    VG_(clo_vex_control).guest_max_insns = 1;
+   /* Track syscalls. */
+   VG_(track_pre_mem_read)(mt_track_pre_mem_read);
+   VG_(track_pre_mem_read_asciiz)(mt_track_pre_mem_read_asciiz);
+   VG_(track_post_mem_write)(mt_track_post_mem_write);
+   VG_(track_pre_reg_read)(mt_track_pre_reg_read);
+   VG_(track_post_reg_write)(mt_track_post_reg_write);
    open_trace_file();
 }
 
