@@ -1263,9 +1263,14 @@ int DumpFile(const char* path, size_t start, size_t end) {
 }
 
 template <typename W>
-struct Def {
+struct Range {
   W startAddr;
   W endAddr;
+};
+
+template <typename W>
+struct Def {
+  Range<W> range;
 };
 
 template <typename W>
@@ -1308,7 +1313,7 @@ size_t GetFirstPrimeGreaterThanOrEqualTo(size_t value) {
 template <typename W>
 struct PartialUse {
   std::uint32_t first;  // uses_ index
-  Def<W> second;        // range
+  Range<W> second;
 };
 
 template <typename W>
@@ -1357,7 +1362,7 @@ class PartialUses {
 
   PartialUse<W>* end() const { return nullptr; }
 
-  Def<W>& operator[](std::uint32_t useIndex) {
+  Range<W>& operator[](std::uint32_t useIndex) {
     PartialUse<W>& result1 = const_cast<PartialUse<W>&>(
         FindPartialUse(entries_.data(), entries_.size(), useIndex));
     if (result1.first == useIndex) return result1.second;
@@ -1407,21 +1412,28 @@ class PartialUses {
   std::string path_;
 };
 
+template <typename W>
+struct ResolvedUse {
+  const Range<W>* range;
+  std::uint32_t traceIndex;
+};
+
 template <typename W, typename UseIterator, typename DefIterator,
           typename PartialUseIterator, typename InsnInTraceIterator>
-std::pair<const Def<W>*, std::uint32_t> ResolveUse(
-    std::uint32_t useIndex, UseIterator uses, DefIterator defs,
-    PartialUseIterator partialUses, size_t partialUseCount,
-    InsnInTraceIterator traceBegin, InsnInTraceIterator traceEnd,
-    std::uint32_t InsnInTrace::*startDefIndex) {
+ResolvedUse<W> ResolveUse(std::uint32_t useIndex, UseIterator uses,
+                          DefIterator defs, PartialUseIterator partialUses,
+                          size_t partialUseCount,
+                          InsnInTraceIterator traceBegin,
+                          InsnInTraceIterator traceEnd,
+                          std::uint32_t InsnInTrace::*startDefIndex) {
   std::uint32_t defIndex = uses[useIndex];
-  const Def<W>* def;
+  const Range<W>* range;
   const PartialUse<W>& partialUse =
       FindPartialUse(partialUses, partialUseCount, useIndex);
   if (partialUse.first == static_cast<std::uint32_t>(-1))
-    def = &*(defs + defIndex);
+    range = &(defs + defIndex)->range;
   else
-    def = &partialUse.second;
+    range = &partialUse.second;
 
   InsnInTraceIterator it =
       std::upper_bound(traceBegin, traceEnd, defIndex,
@@ -1432,7 +1444,7 @@ std::pair<const Def<W>*, std::uint32_t> ResolveUse(
   --it;
   std::uint32_t traceIndex = static_cast<std::uint32_t>(it - traceBegin);
 
-  return std::make_pair(def, traceIndex);
+  return ResolvedUse<W>{range, traceIndex};
 }
 
 const char kPlaceholder[] = "{}";
@@ -1495,8 +1507,9 @@ class UdState {
       const Def<W>& def = defs_[it->second.defIndex];
       W maxStartAddr = std::max(startAddr, it->second.startAddr);
       W minEndAddr = std::min(endAddr, it->first);
-      if (def.startAddr != maxStartAddr || def.endAddr != minEndAddr)
-        partialUses_[useIndex] = Def<W>{maxStartAddr, minEndAddr};
+      if (def.range.startAddr != maxStartAddr ||
+          def.range.endAddr != minEndAddr)
+        partialUses_[useIndex] = Range<W>{maxStartAddr, minEndAddr};
     }
   }
 
@@ -1552,13 +1565,13 @@ class UdState {
                 const MmVector<InsnInTrace>& trace,
                 std::uint32_t InsnInTrace::*startDefIndex) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
-      std::pair<const Def<W>*, std::uint32_t> use =
-          ResolveUse(useIndex, trace, startDefIndex);
+      ResolvedUse<W> use = ResolveUse(useIndex, trace, startDefIndex);
       std::printf(useIndex == startIndex
                       ? "0x%" PRIx64 "-0x%" PRIx64 "@[%" PRIu32 "]"
                       : ", 0x%" PRIx64 "-0x%" PRIx64 "@[%" PRIu32 "]",
-                  static_cast<std::uint64_t>(use.first->startAddr),
-                  static_cast<std::uint64_t>(use.first->endAddr), use.second);
+                  static_cast<std::uint64_t>(use.range->startAddr),
+                  static_cast<std::uint64_t>(use.range->endAddr),
+                  use.traceIndex);
     }
   }
 
@@ -1566,8 +1579,8 @@ class UdState {
     for (std::uint32_t defIndex = startIndex; defIndex < endIndex; defIndex++)
       std::printf(defIndex == startIndex ? "0x%" PRIx64 "-0x%" PRIx64
                                          : ", 0x%" PRIx64 "-0x%" PRIx64,
-                  static_cast<std::uint64_t>(defs_[defIndex].startAddr),
-                  static_cast<std::uint64_t>(defs_[defIndex].endAddr));
+                  static_cast<std::uint64_t>(defs_[defIndex].range.startAddr),
+                  static_cast<std::uint64_t>(defs_[defIndex].range.endAddr));
   }
 
   void DumpUsesDot(std::FILE* f, std::uint32_t traceIndex,
@@ -1576,14 +1589,13 @@ class UdState {
                    std::uint32_t InsnInTrace::*startDefIndex,
                    const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
-      std::pair<const Def<W>*, std::uint32_t> use =
-          ResolveUse(useIndex, trace, startDefIndex);
+      ResolvedUse<W> use = ResolveUse(useIndex, trace, startDefIndex);
       std::fprintf(f,
                    "    %" PRIu32 " -> %" PRIu32 " [label=\"%s0x%" PRIx64
                    "-0x%" PRIx64 "\"]\n",
-                   traceIndex, use.second, prefix,
-                   static_cast<std::uint64_t>(use.first->startAddr),
-                   static_cast<std::uint64_t>(use.first->endAddr));
+                   traceIndex, use.traceIndex, prefix,
+                   static_cast<std::uint64_t>(use.range->startAddr),
+                   static_cast<std::uint64_t>(use.range->endAddr));
     }
   }
 
@@ -1592,14 +1604,13 @@ class UdState {
                     std::uint32_t InsnInTrace::*startDefIndex,
                     const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
-      std::pair<const Def<W>*, std::uint32_t> use =
-          ResolveUse(useIndex, trace, startDefIndex);
+      ResolvedUse<W> use = ResolveUse(useIndex, trace, startDefIndex);
       std::fprintf(f,
                    "            <a href=\"#%" PRIu32 "\">%s0x%" PRIx64
                    "-0x%" PRIx64 "</a>\n",
-                   use.second, prefix,
-                   static_cast<std::uint64_t>(use.first->startAddr),
-                   static_cast<std::uint64_t>(use.first->endAddr));
+                   use.traceIndex, prefix,
+                   static_cast<std::uint64_t>(use.range->startAddr),
+                   static_cast<std::uint64_t>(use.range->endAddr));
     }
   }
 
@@ -1607,8 +1618,8 @@ class UdState {
                     std::uint32_t endIndex, const char* prefix) const {
     for (std::uint32_t i = startIndex; i < endIndex; i++)
       std::fprintf(f, "            %s0x%" PRIx64 "-0x%" PRIx64 "\n", prefix,
-                   static_cast<std::uint64_t>(defs_[i].startAddr),
-                   static_cast<std::uint64_t>(defs_[i].endAddr));
+                   static_cast<std::uint64_t>(defs_[i].range.startAddr),
+                   static_cast<std::uint64_t>(defs_[i].range.endAddr));
   }
 
   void DumpUsesCsv(std::FILE* f, std::uint32_t traceIndex,
@@ -1617,26 +1628,25 @@ class UdState {
                    std::uint32_t InsnInTrace::*startDefIndex,
                    const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
-      std::pair<const Def<W>*, std::uint32_t> use =
-          ResolveUse(useIndex, trace, startDefIndex);
+      ResolvedUse<W> use = ResolveUse(useIndex, trace, startDefIndex);
       std::fprintf(f, "%" PRIu32 ",%" PRIu32 ",%s,%" PRIu64 ",%" PRIu64 "\n",
-                   traceIndex, use.second, prefix,
-                   static_cast<std::uint64_t>(use.first->startAddr),
-                   static_cast<std::uint64_t>(use.first->endAddr));
+                   traceIndex, use.traceIndex, prefix,
+                   static_cast<std::uint64_t>(use.range->startAddr),
+                   static_cast<std::uint64_t>(use.range->endAddr));
     }
   }
 
   void AddDef(W startAddr, W endAddr) {
     std::uint32_t defIndex = static_cast<std::uint32_t>(defs_.size());
     Def<W>& def = defs_.emplace_back();
-    def.startAddr = startAddr;
-    def.endAddr = endAddr;
+    def.range.startAddr = startAddr;
+    def.range.endAddr = endAddr;
     addressSpace_[endAddr] = EntryValue{startAddr, defIndex};
   }
 
-  std::pair<const Def<W>*, std::uint32_t> ResolveUse(
-      std::uint32_t useIndex, const MmVector<InsnInTrace>& trace,
-      std::uint32_t InsnInTrace::*startDefIndex) const {
+  ResolvedUse<W> ResolveUse(std::uint32_t useIndex,
+                            const MmVector<InsnInTrace>& trace,
+                            std::uint32_t InsnInTrace::*startDefIndex) const {
     return ::ResolveUse<W>(useIndex, uses_.begin(), defs_.begin(),
                            partialUses_.GetData().data(),
                            partialUses_.GetData().size(), trace.begin(),
@@ -1899,12 +1909,12 @@ class Ud : public UdBase {
 
   std::uint32_t GetTraceForRegUse(std::uint32_t regUse) const override {
     return regState_.ResolveUse(regUse, trace_, &InsnInTrace::regDefStartIndex)
-        .second;
+        .traceIndex;
   }
 
   std::uint32_t GetTraceForMemUse(std::uint32_t memUse) const override {
     return memState_.ResolveUse(memUse, trace_, &InsnInTrace::memDefStartIndex)
-        .second;
+        .traceIndex;
   }
 
  private:
