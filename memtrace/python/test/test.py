@@ -190,6 +190,8 @@ class MachineTest(CommonTest):
                 trace.get_word_size()).encode())
             fp.write('Machine           : {}\n'.format(
                 get_machine_type_str(trace.get_machine_type())).encode())
+            fp.write('Regs size         : {}\n'.format(
+                trace.get_regs_size()).encode())
             rootdir_bytes = self.rootdir.encode()
             workdir_bytes = self.workdir.name.encode()
             for entry in trace:

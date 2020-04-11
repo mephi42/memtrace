@@ -110,7 +110,7 @@ union TlvInsnSeq {
 struct HeaderEntry {
    struct Tlv tlv;
    UShort e_machine;
-   UShort reserved;
+   UShort regsSize;
 };
 
 /* Used for MT_LOAD, MT_STORE, MT_REG, MT_GET_REG, MT_PUT_REG. */
@@ -180,7 +180,7 @@ static void open_trace_file(void)
    entry->tlv.tag = MT_MAGIC;
    entry->tlv.length = sizeof(struct HeaderEntry);
    entry->e_machine = VG_ELF_MACHINE;
-   entry->reserved = 0;
+   entry->regsSize = sizeof(VexGuestArchState);
    trace += sizeof(struct HeaderEntry);
 }
 

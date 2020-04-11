@@ -2,6 +2,7 @@ Endian            : <
 Word              : Q
 Word size         : 8
 Machine           : EM_X86_64
+Regs size         : 928
 [         0] 0x00000001: MT_INSN 0x0000000000401000 48c7c000000000 mov rax, 0
 [         1] 0x00000001: MT_INSN_EXEC
 [         2] 0x00000001: MT_PUT_REG uint64_t [0x10] 0x0

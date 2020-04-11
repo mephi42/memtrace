@@ -217,9 +217,15 @@ class HeaderEntry : public B {
         RawInt<E, std::uint16_t>(this->GetData() + kMachineTypeOffset)
             .GetValue());
   }
+  std::uint16_t GetRegsSize() const {
+    return RawInt<E, std::uint16_t>(this->GetData() + kRegsSizeOffset)
+        .GetValue();
+  }
 
  private:
   static constexpr size_t kMachineTypeOffset = Tlv<E, W>::kFixedLength;
+  static constexpr size_t kRegsSizeOffset =
+      kMachineTypeOffset + sizeof(std::uint16_t);
 };
 
 template <Endianness E, typename W, typename B = Overlay>
@@ -739,6 +745,7 @@ class Dumper {
     std::printf("Word size         : %zu\n", sizeof(W));
     std::printf("Machine           : %s\n",
                 GetMachineTypeStr(entry.GetMachineType()));
+    std::printf("Regs size         : %d\n", entry.GetRegsSize());
     return disasmEngine_.Init(entry.GetMachineType(), E, sizeof(W));
   }
 
@@ -965,6 +972,7 @@ class TraceMmBase {
   virtual Endianness GetEndianness() = 0;
   virtual size_t GetWordSize() = 0;
   virtual MachineType GetMachineType() = 0;
+  virtual std::uint16_t GetRegsSize() = 0;
   virtual boost::python::object Next() = 0;
   virtual void SeekInsn(std::uint32_t index) = 0;
   virtual Stats GatherStats() = 0;
@@ -1050,6 +1058,8 @@ class TraceMm : public TraceMmBase {
         case Tag::MT_MMAP:
           err = (*visitor)(entryIndex_, MmapEntry<E, W>(cur_));
           break;
+        default:
+          return -EINVAL;
       }
       if (err < 0) return err;
     }
@@ -1063,6 +1073,8 @@ class TraceMm : public TraceMmBase {
   size_t GetWordSize() override { return sizeof(W); }
 
   MachineType GetMachineType() override { return header_.GetMachineType(); }
+
+  std::uint16_t GetRegsSize() override { return header_.GetRegsSize(); }
 
   boost::python::object Next() override {
     if (cur_ == end_) boost::python::objects::stop_iteration_error();
@@ -2255,6 +2267,7 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("get_endianness", &TraceMmBase::GetEndianness)
       .def("get_word_size", &TraceMmBase::GetWordSize)
       .def("get_machine_type", &TraceMmBase::GetMachineType)
+      .def("get_regs_size", &TraceMmBase::GetRegsSize)
       .def("__iter__", bp::objects::identity_function())
       .def("__next__", &TraceMmBase::Next)
       .def("seek_insn", &TraceMmBase::SeekInsn)

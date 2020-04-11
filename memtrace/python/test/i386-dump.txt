@@ -2,6 +2,7 @@ Endian            : <
 Word              : I
 Word size         : 4
 Machine           : EM_386
+Regs size         : 352
 [         0] 0x00000001: MT_INSN 0x0000000008049000 e8000000005d call 0x8049005
 [         1] 0x00000001: MT_INSN_EXEC
 [         2] 0x00000001: MT_PUT_REG uint32_t [0x1c] 0x8049005
