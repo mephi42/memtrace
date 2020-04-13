@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 // clang-format off
@@ -962,13 +963,15 @@ struct InsnIndexEntry {
   size_t entryIndex;
 };
 
-class TraceMmBase {
+class TraceBase {
  public:
   template <typename V>
   static int Visit(const char* path, const V& v);
-  static TraceMmBase* Load(const char* path);
+  static TraceBase* Load(const char* path);
+  template <typename V>
+  void Downcast(const V& v);
 
-  virtual ~TraceMmBase() = default;
+  virtual ~TraceBase() = default;
   virtual Endianness GetEndianness() = 0;
   virtual size_t GetWordSize() = 0;
   virtual MachineType GetMachineType() = 0;
@@ -982,22 +985,25 @@ class TraceMmBase {
   virtual boost::python::list GetMmapEntries() = 0;
 };
 
-template <Endianness E, typename W>
-class TraceMm : public TraceMmBase {
+template <Endianness _E, typename _W>
+class Trace : public TraceBase {
  public:
-  TraceMm(void* data, size_t length)
+  static constexpr Endianness E = _E;
+  using W = _W;
+
+  Trace(void* data, size_t length)
       : data_(static_cast<std::uint8_t*>(data)),
         length_(length),
         cur_(data_),
         end_(cur_ + length_),
         entryIndex_(0),
         header_(cur_) {}
-  virtual ~TraceMm() { munmap(data_, length_); }
+  virtual ~Trace() { munmap(data_, length_); }
 
   template <typename V>
   static int CreateAndVisit(std::uint8_t* data, size_t length, const V& v) {
     int err;
-    TraceMm<E, W>* trace = new TraceMm<E, W>(data, length);
+    Trace<E, W>* trace = new Trace<E, W>(data, length);
     if ((err = trace->Init()) < 0) {
       delete trace;
       return err;
@@ -1020,11 +1026,17 @@ class TraceMm : public TraceMmBase {
   template <template <typename> typename V, typename... Args>
   int Visit(size_t start, size_t end, Args&&... args) {
     V<W> visitor(std::forward<Args>(args)...);
+    return Visit(&visitor, start, end);
+  }
+
+  template <typename V>
+  int Visit(V* visitor, size_t start = std::numeric_limits<size_t>::min(),
+            size_t end = std::numeric_limits<size_t>::max()) {
     int err;
-    if ((err = InitVisitor(&visitor)) < 0) return err;
+    if ((err = InitVisitor(visitor)) < 0) return err;
     while (cur_ != end_)
-      if ((err = VisitOne(&visitor, start, end)) < 0) return err;
-    if ((err = visitor.Complete()) < 0) return err;
+      if ((err = VisitOne(visitor, start, end)) < 0) return err;
+    if ((err = visitor->Complete()) < 0) return err;
     return 0;
   }
 
@@ -1147,9 +1159,23 @@ class TraceMm : public TraceMmBase {
       throw std::runtime_error("Failed to load index");
   }
 
+  class ScopedRewind {
+   public:
+    explicit ScopedRewind(Trace* trace)
+        : trace_(trace),
+          saved_({static_cast<size_t>(-1),
+                  static_cast<size_t>(trace->cur_ - trace->data_),
+                  trace->entryIndex_}) {}
+    ScopedRewind(const ScopedRewind&) = delete;
+    ~ScopedRewind() { trace_->Rewind(saved_); }
+
+   private:
+    Trace* trace_;
+    InsnIndexEntry saved_;
+  };
+
   boost::python::list GetMmapEntries() override {
-    InsnIndexEntry saved = {static_cast<size_t>(-1),
-                            static_cast<size_t>(cur_ - data_), entryIndex_};
+    ScopedRewind scopedRewind(this);
     if (insnIndex_.IsInitalized())
       Rewind(insnIndex_[insnIndex_.size() - 1]);
     else
@@ -1158,7 +1184,6 @@ class TraceMm : public TraceMmBase {
     while (cur_ != end_)
       if (VisitOne(&visitor) < 0)
         throw std::runtime_error("Failed to parse the next entry");
-    Rewind(saved);
     return visitor.mmapEntries;
   }
 
@@ -1215,7 +1240,7 @@ int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
 }
 
 template <typename V>
-int TraceMmBase::Visit(const char* path, const V& v) {
+int TraceBase::Visit(const char* path, const V& v) {
   int err;
   std::uint8_t* data;
   size_t length;
@@ -1223,16 +1248,16 @@ int TraceMmBase::Visit(const char* path, const V& v) {
   if (data == MAP_FAILED) return -ENOMEM;
   switch (data[0] << 8 | data[1]) {
     case 'M' << 8 | '4':
-      return TraceMm<Endianness::Big, std::uint32_t>::CreateAndVisit(data,
-                                                                     length, v);
+      return Trace<Endianness::Big, std::uint32_t>::CreateAndVisit(data, length,
+                                                                   v);
     case 'M' << 8 | '8':
-      return TraceMm<Endianness::Big, std::uint64_t>::CreateAndVisit(data,
-                                                                     length, v);
+      return Trace<Endianness::Big, std::uint64_t>::CreateAndVisit(data, length,
+                                                                   v);
     case '4' << 8 | 'M':
-      return TraceMm<Endianness::Little, std::uint32_t>::CreateAndVisit(
+      return Trace<Endianness::Little, std::uint32_t>::CreateAndVisit(
           data, length, v);
     case '8' << 8 | 'M':
-      return TraceMm<Endianness::Little, std::uint64_t>::CreateAndVisit(
+      return Trace<Endianness::Little, std::uint64_t>::CreateAndVisit(
           data, length, v);
     default:
       munmap(data, length);
@@ -1242,21 +1267,53 @@ int TraceMmBase::Visit(const char* path, const V& v) {
 
 template <template <typename> typename V, typename... Args>
 int VisitFile(const char* path, size_t start, size_t end, Args&&... args) {
-  return TraceMmBase::Visit(path, [start, end, &args...](auto trace) {
+  return TraceBase::Visit(path, [start, end, &args...](auto trace) {
     int err = trace->template Visit<V>(start, end, std::forward<Args>(args)...);
     delete trace;
     return err;
   });
 }
 
-TraceMmBase* TraceMmBase::Load(const char* path) {
-  TraceMmBase* result = nullptr;
-  Visit(path, [&result](TraceMmBase* trace) -> int {
+TraceBase* TraceBase::Load(const char* path) {
+  TraceBase* result = nullptr;
+  Visit(path, [&result](TraceBase* trace) -> int {
     result = trace;
     return 0;
   });
   return result;
 }
+
+template <typename V>
+void TraceBase::Downcast(const V& v) {
+  switch (GetEndianness()) {
+    case Endianness::Little:
+      switch (GetWordSize()) {
+        case 4:
+          v(static_cast<Trace<Endianness::Little, std::uint32_t>*>(this));
+          break;
+        case 8:
+          v(static_cast<Trace<Endianness::Little, std::uint64_t>*>(this));
+          break;
+        default:
+          __builtin_unreachable();
+      }
+      break;
+    case Endianness::Big:
+      switch (GetWordSize()) {
+        case 4:
+          v(static_cast<Trace<Endianness::Big, std::uint32_t>*>(this));
+          break;
+        case 8:
+          v(static_cast<Trace<Endianness::Big, std::uint64_t>*>(this));
+          break;
+        default:
+          __builtin_unreachable();
+      }
+      break;
+    default:
+      __builtin_unreachable();
+  }
+}  // namespace
 
 int DumpFile(const char* path, size_t start, size_t end) {
   return VisitFile<Dumper>(path, start, end);
@@ -1515,23 +1572,15 @@ class UdState {
 
   int AddDefs(W startAddr, W size) {
     W endAddr = startAddr + size;
+    affectedEntries_.clear();
     It firstAffected = addressSpace_.lower_bound(startAddr + 1);
     It lastAffected;
-    std::uint32_t affectedCount;
-    for (lastAffected = firstAffected, affectedCount = 0;
-         lastAffected != addressSpace_.end() &&
-         lastAffected->second.startAddr < endAddr;
-         ++lastAffected, affectedCount++) {
-    }
-    // sizeofIRType() maximum return value is 32, so affectedCount <= 32.
-    constexpr std::uint32_t kMaxAffectedCount = 32;
-    if (affectedCount > kMaxAffectedCount) return -EINVAL;
-    std::array<Entry, kMaxAffectedCount> affected;
-    std::copy(firstAffected, lastAffected, affected.begin());
+    for (lastAffected = firstAffected; lastAffected != addressSpace_.end() &&
+                                       lastAffected->second.startAddr < endAddr;
+         lastAffected++)
+      affectedEntries_.push_back(*lastAffected);
     addressSpace_.erase(firstAffected, lastAffected);
-    for (std::uint32_t affectedIndex = 0; affectedIndex < affectedCount;
-         affectedIndex++) {
-      const Entry& entry = affected[affectedIndex];
+    for (const Entry& entry : affectedEntries_) {
       W entryStartAddr = entry.second.startAddr;
       W entryEndAddr = entry.first;
       std::uint32_t entryDefIndex = entry.second.defIndex;
@@ -1667,6 +1716,9 @@ class UdState {
   using Entry = typename std::pair<W, EntryValue>;
   using It = typename AddressSpace::const_iterator;
   AddressSpace addressSpace_;
+  // Avoid allocating memory each time in AddDefs().
+  // There may be up to 64k affected defs.
+  std::vector<Entry> affectedEntries_;
 };
 
 struct BinaryHeader {
@@ -1677,6 +1729,7 @@ struct BinaryHeader {
 
 class UdBase {
  public:
+  static UdBase* Analyze(TraceBase* trace);
   static UdBase* Load(const char* path);
 
   virtual ~UdBase() = default;
@@ -2182,6 +2235,22 @@ UdBase* UdBase::Load(const char* rawPath) {
   return ud;
 }
 
+UdBase* UdBase::Analyze(TraceBase* trace) {
+  UdBase* ud = nullptr;
+  trace->Downcast([&ud](auto trace) {
+    using Trace = typename std::remove_pointer<decltype(trace)>::type;
+    typename Trace::ScopedRewind scopedRewind(trace);
+    Ud<typename Trace::W>* udW =
+        new Ud<typename Trace::W>(nullptr, nullptr, nullptr, nullptr, false);
+    if (trace->Visit(udW) < 0) {
+      delete udW;
+      return;
+    }
+    ud = udW;
+  });
+  return ud;
+}
+
 template <Endianness E, typename W>
 static std::string MangleName(const char* name) {
   return std::string(name) + GetEndiannessStr(E) +
@@ -2254,7 +2323,6 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .value("EM_S390", MachineType::EM_S390)
       .value("EM_MIPS", MachineType::EM_MIPS)
       .value("EM_NANOMIPS", MachineType::EM_NANOMIPS);
-  bp::def("get_machine_type_str", GetMachineTypeStr);
   bp::class_<EntryPy, boost::noncopyable>("Entry", bp::no_init)
       .def_readonly("index", &EntryPy::index)
       .add_property("tag", &EntryPy::GetTag);
@@ -2270,28 +2338,30 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def(bp::map_indexing_suite<std::map<Tag, TagStats>>());
   bp::class_<Stats>("Stats", bp::no_init)
       .def_readonly("tag_stats", &Stats::tagStats);
-  bp::class_<TraceMmBase, boost::noncopyable>("Trace", bp::no_init)
-      .def("load", &TraceMmBase::Load,
+  bp::class_<TraceBase, boost::noncopyable>("Trace", bp::no_init)
+      .def("load", &TraceBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
       .staticmethod("load")
-      .def("get_endianness", &TraceMmBase::GetEndianness)
-      .def("get_word_size", &TraceMmBase::GetWordSize)
-      .def("get_machine_type", &TraceMmBase::GetMachineType)
-      .def("get_regs_size", &TraceMmBase::GetRegsSize)
+      .def("get_endianness", &TraceBase::GetEndianness)
+      .def("get_word_size", &TraceBase::GetWordSize)
+      .def("get_machine_type", &TraceBase::GetMachineType)
+      .def("get_regs_size", &TraceBase::GetRegsSize)
       .def("__iter__", bp::objects::identity_function())
-      .def("__next__", &TraceMmBase::Next)
-      .def("seek_insn", &TraceMmBase::SeekInsn)
-      .def("gather_stats", &TraceMmBase::GatherStats)
-      .def("build_insn_index", &TraceMmBase::BuildInsnIndex)
-      .def("build_insn_index", &TraceMmBase::BuildInsnIndexDefault)
-      .def("load_insn_index", &TraceMmBase::LoadInsnIndex)
-      .def("get_mmap_entries", &TraceMmBase::GetMmapEntries);
+      .def("__next__", &TraceBase::Next)
+      .def("seek_insn", &TraceBase::SeekInsn)
+      .def("gather_stats", &TraceBase::GatherStats)
+      .def("build_insn_index", &TraceBase::BuildInsnIndex)
+      .def("build_insn_index", &TraceBase::BuildInsnIndexDefault)
+      .def("load_insn_index", &TraceBase::LoadInsnIndex)
+      .def("get_mmap_entries", &TraceBase::GetMmapEntries);
   bp::def("ud_file", UdFile);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
   bp::class_<std::vector<std::uint32_t>>("std::vector<std::uint32_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint32_t>>());
   bp::class_<UdBase, boost::noncopyable>("Ud", bp::no_init)
+      .def("analyze", &UdBase::Analyze,
+           bp::return_value_policy<bp::manage_new_object>())
       .def("load", &UdBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
       .staticmethod("load")

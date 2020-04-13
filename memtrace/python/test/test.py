@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from contextlib import contextmanager
 import os
 import platform
 import re
@@ -6,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from typing import List
 import unittest
 
@@ -14,8 +16,7 @@ from memtrace.format import format_entry
 import memtrace.stats as stats
 from memtrace.symbolizer import Symbolizer
 from memtrace.taint import BackwardAnalysis
-from memtrace_ext import Disasm, get_endianness_str, get_machine_type_str, \
-    Tag, Trace
+from memtrace_ext import Disasm, get_endianness_str, Tag, Trace, Ud
 
 
 def diff_files(expected, actual):
@@ -27,6 +28,15 @@ def diff_files(expected, actual):
         expected,
         actual,
     ])
+
+
+@contextmanager
+def timeit(s):
+    t0 = time.time()
+    try:
+        yield
+    finally:
+        print('{} done in {:2f}s'.format(s, time.time() - t0), file=sys.stderr)
 
 
 class CommonTest(unittest.TestCase):
@@ -60,6 +70,7 @@ class CommonTest(unittest.TestCase):
         cls.rootdir = os.path.dirname(memtracedir)
         cls.vg_in_place = os.path.join(cls.rootdir, 'vg-in-place')
         cls.workdir = tempfile.TemporaryDirectory()
+        cls.trace_path = os.path.join(cls.workdir.name, 'memtrace.out')
         cls._compile()
         cls._memtrace()
 
@@ -90,12 +101,18 @@ class CommonTest(unittest.TestCase):
             fp.write(cls.get_input())
             fp.flush()
             fp.seek(0)
-            subprocess.check_call(
-                args,
-                stdin=fp,
-                stdout=subprocess.DEVNULL,
-                cwd=cls.workdir.name,
-            )
+            with timeit('memtrace'):
+                subprocess.check_call(
+                    args,
+                    stdin=fp,
+                    stdout=subprocess.DEVNULL,
+                    cwd=cls.workdir.name,
+                )
+            trace_size = os.stat(cls.trace_path).st_size / (1024 * 1024 * 1024)
+            print('trace size is {:2f}G'.format(trace_size), file=sys.stderr)
+
+    def load_trace(self):
+        return Trace.load(self.trace_path)
 
 
 class MachineTest(CommonTest):
@@ -172,7 +189,7 @@ class MachineTest(CommonTest):
         dump_txt = f'{self.get_target()}-dump.txt'
         actual_dump_txt = os.path.join(self.workdir.name, dump_txt)
         expected_dump_txt = os.path.join(self.basedir, dump_txt)
-        trace = Trace.load(os.path.join(self.workdir.name, 'memtrace.out'))
+        trace = self.load_trace()
         endianness = trace.get_endianness()
         endianness_str = get_endianness_str(endianness)
         disasm = Disasm(
@@ -189,7 +206,7 @@ class MachineTest(CommonTest):
             fp.write('Word size         : {}\n'.format(
                 trace.get_word_size()).encode())
             fp.write('Machine           : {}\n'.format(
-                get_machine_type_str(trace.get_machine_type())).encode())
+                trace.get_machine_type()).encode())
             fp.write('Regs size         : {}\n'.format(
                 trace.get_regs_size()).encode())
             rootdir_bytes = self.rootdir.encode()
@@ -207,7 +224,7 @@ class MachineTest(CommonTest):
         seek_txt = f'{self.get_target()}-seek.txt'
         actual_seek_txt = os.path.join(self.workdir.name, seek_txt)
         expected_seek_txt = os.path.join(self.basedir, seek_txt)
-        trace = Trace.load(os.path.join(self.workdir.name, 'memtrace.out'))
+        trace = self.load_trace()
         if with_index:
             memtrace_idx = os.path.join(self.workdir.name, 'memtrace.idx')
             trace.build_insn_index(memtrace_idx, 2)
@@ -300,11 +317,15 @@ class TestCat(CommonTest):
 
     @staticmethod
     def get_input() -> bytes:
-        return bytes(range(256)) * (128 * 1024 // 256)
+        return bytes(range(256)) * ((64 * 1024 + 256) // 256)
 
     def test(self):
-        trace = Trace.load(os.path.join(self.workdir.name, 'memtrace.out'))
-        cat_buf = bytearray(128 * 1024)
+        trace = self.load_trace()
+        with timeit('ud'):
+            ud = Ud.analyze(trace)
+        self.assertIsNotNone(ud)
+        expected = self.get_input()
+        cat_buf = bytearray(len(expected))
         with Symbolizer(trace.get_mmap_entries()) as symbolizer:
             cat_buf_start = symbolizer.resolve('cat_buf')
         self.assertIsNotNone(cat_buf_start)
@@ -317,7 +338,7 @@ class TestCat(CommonTest):
                 self.assertLessEqual(end, cat_buf_end)
                 offset = entry.addr - cat_buf_start
                 cat_buf[offset:offset + len(value)] = value
-        self.assertEqual(self.get_input(), cat_buf)
+        self.assertEqual(expected, cat_buf)
 
 
 if __name__ == '__main__':
