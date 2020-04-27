@@ -2,11 +2,11 @@
 import argparse
 import sys
 
-import memtrace_ext
+from memtrace.trace import Trace
 
 
 def from_trace_file(path):
-    return memtrace_ext.Trace.load(path).gather_stats()
+    return Trace.load(path).gather_stats()
 
 
 def pp(stats, fp):

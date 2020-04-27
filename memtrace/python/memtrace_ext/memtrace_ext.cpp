@@ -35,6 +35,8 @@
 namespace {
 
 enum class Tag {
+  MT_HEADER32 = 0x4d34,
+  MT_HEADER64 = 0x4d38,
   MT_LOAD = 0x4c4c,
   MT_STORE = 0x5353,
   MT_REG = 0x5252,
@@ -145,6 +147,8 @@ constexpr Endianness kHostEndianness = Endianness::Big;
 #else
 #error Unsupported __BYTE_ORDER__
 #endif
+
+constexpr size_t kHostWordSize = sizeof(void*);
 
 std::uint8_t BSwap(std::uint8_t value) { return value; }
 
@@ -734,12 +738,64 @@ Disasm* CreateDisasm(MachineType type, Endianness endianness, size_t wordSize) {
   return disasm;
 }
 
-template <typename W>
+const char kPlaceholder[] = "{}";
+constexpr size_t kPlaceholderLength = sizeof(kPlaceholder) - 1;
+
+struct PathWithPlaceholder {
+  std::string_view before[2];
+  std::string_view after;
+
+  int Init(const char* path, const char* description) {
+    const char* placeholder = std::strstr(path, kPlaceholder);
+    if (placeholder == nullptr) {
+      std::cerr << description << " path must contain a " << kPlaceholder
+                << " placeholder" << std::endl;
+      return -EINVAL;
+    }
+    before[0] = std::string_view(path, placeholder - path);
+    after = placeholder + kPlaceholderLength;
+    return 0;
+  }
+
+  std::string Get(const char* value) const {
+    std::string path;
+    size_t len = strlen(value);
+    path.reserve(before[0].length() + before[1].length() + len +
+                 after.length());
+    path.append(before[0]);
+    path.append(before[1]);
+    path.append(std::string_view(value, len));
+    path.append(after);
+    return path;
+  }
+};
+
+template <typename Header>
+int ReadHeader(const char* path, Header* header) {
+  FILE* f = fopen(path, "r");
+  if (f == nullptr) return -errno;
+  size_t n_read = fread(header, sizeof(*header), 1, f);
+  fclose(f);
+  return n_read == 1 ? 0 : -EIO;
+}
+
+template <typename Header>
+int WriteHeader(const char* path, const Header& header) {
+  std::FILE* f = std::fopen(path, "wb");
+  if (f == nullptr) return -errno;
+  size_t n_written = fwrite(&header, sizeof(header), 1, f);
+  fclose(f);
+  return n_written == 1 ? 0 : -EIO;
+}
+
+template <Endianness E, typename W>
+class Trace;
+
+template <Endianness E, typename W>
 class Dumper {
  public:
-  Dumper() : insnCount_(0) {}
+  explicit Dumper(Trace<E, W>* /* trace */) : insnCount_(0) {}
 
-  template <Endianness E>
   int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
     std::printf("Endian            : %s\n", GetEndiannessStrPy(E));
     std::printf("Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
@@ -750,7 +806,6 @@ class Dumper {
     return disasmEngine_.Init(entry.GetMachineType(), E, sizeof(W));
   }
 
-  template <Endianness E>
   int operator()(size_t i, LdStEntry<E, W> entry) {
     std::printf("[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "] ", i,
                 entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
@@ -761,7 +816,6 @@ class Dumper {
     return 0;
   }
 
-  template <Endianness E>
   int operator()(size_t i, InsnEntry<E, W> entry) {
     std::printf("[%10zu] 0x%08" PRIx32 ": %s 0x%016" PRIx64 " ", i,
                 entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
@@ -776,7 +830,6 @@ class Dumper {
     return 0;
   }
 
-  template <Endianness E>
   int operator()(size_t i, InsnExecEntry<E, W> entry) {
     std::printf("[%10zu] 0x%08" PRIx32 ": %s\n", i, entry.GetInsnSeq(),
                 GetTagStr(entry.GetTlv().GetTag()));
@@ -784,7 +837,6 @@ class Dumper {
     return 0;
   }
 
-  template <Endianness E>
   int operator()(size_t i, LdStNxEntry<E, W> entry) {
     std::printf("[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "]\n", i,
                 entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
@@ -793,7 +845,6 @@ class Dumper {
     return 0;
   }
 
-  template <Endianness E>
   int operator()(size_t i, MmapEntry<E, W> entry) {
     std::printf("[%10zu] %s %016" PRIx64 "-%016" PRIx64 " %c%c%c %s\n", i,
                 GetTagStr(entry.GetTlv().GetTag()),
@@ -958,7 +1009,6 @@ struct MmapEntryGatherer {
 };
 
 struct InsnIndexEntry {
-  size_t insnIndex;
   size_t fileOffset;
   size_t entryIndex;
 };
@@ -977,12 +1027,71 @@ class TraceBase {
   virtual MachineType GetMachineType() = 0;
   virtual std::uint16_t GetRegsSize() = 0;
   virtual boost::python::object Next() = 0;
-  virtual void SeekInsn(std::uint32_t index) = 0;
+  virtual int SeekInsn(std::uint32_t index) = 0;
   virtual Stats GatherStats() = 0;
-  virtual void BuildInsnIndex(const char* path, size_t stepShift) = 0;
-  void BuildInsnIndexDefault(const char* path) { BuildInsnIndex(path, 8); }
-  virtual void LoadInsnIndex(const char* path) = 0;
+  virtual int BuildInsnIndex(const char* path, size_t stepShift) = 0;
+  virtual int LoadInsnIndex(const char* path) = 0;
   virtual boost::python::list GetMmapEntries() = 0;
+};
+
+template <typename W>
+struct Range {
+  W startAddr;
+  W endAddr;
+};
+
+template <typename W>
+struct DefSeeker {
+  DefSeeker()
+      : defIndex(std::numeric_limits<std::uint32_t>::max()), range({0, 0}) {}
+
+  void HandleDef(W start, W end) {
+    defIndex++;
+    range = {start, end};
+  }
+
+  std::uint32_t defIndex;
+  Range<W> range;
+
+  template <typename Entry>
+  int operator()(size_t /* i */, Entry /* entry */) {
+    return 0;
+  }
+};
+
+template <typename W>
+struct RegDefSeeker : public DefSeeker<W> {
+  template <Endianness E>
+  int operator()(size_t /* i */, LdStEntry<E, W> entry) {
+    if (entry.GetTlv().GetTag() == Tag::MT_PUT_REG)
+      this->HandleDef(entry.GetAddr(), entry.GetAddr() + entry.GetSize());
+    return 0;
+  }
+
+  template <Endianness E>
+  int operator()(size_t /* i */, LdStNxEntry<E, W> entry) {
+    if (entry.GetTlv().GetTag() == Tag::MT_PUT_REG_NX)
+      this->HandleDef(entry.GetAddr(), entry.GetAddr() + entry.GetSize());
+    return 0;
+  }
+
+  using DefSeeker<W>::operator();
+};
+
+template <typename W>
+struct MemDefSeeker : public DefSeeker<W> {
+  template <Endianness E>
+  int operator()(size_t /* i */, LdStEntry<E, W> entry) {
+    if (entry.GetTlv().GetTag() == Tag::MT_STORE)
+      this->HandleDef(entry.GetAddr(), entry.GetAddr() + entry.GetSize());
+    return 0;
+  }
+
+  using DefSeeker<W>::operator();
+};
+
+struct InsnIndexHeader {
+  std::uint8_t stepShift;
 };
 
 template <Endianness _E, typename _W>
@@ -997,7 +1106,8 @@ class Trace : public TraceBase {
         cur_(data_),
         end_(cur_ + length_),
         entryIndex_(0),
-        header_(cur_) {}
+        header_(cur_),
+        insnIndexStepShift_(static_cast<size_t>(-1)) {}
   virtual ~Trace() { munmap(data_, length_); }
 
   template <typename V>
@@ -1023,9 +1133,9 @@ class Trace : public TraceBase {
     return visitor->Init(header_, length_ / 128);
   }
 
-  template <template <typename> typename V, typename... Args>
+  template <template <Endianness, typename> typename V, typename... Args>
   int Visit(size_t start, size_t end, Args&&... args) {
-    V<W> visitor(std::forward<Args>(args)...);
+    V<E, W> visitor(this, std::forward<Args>(args)...);
     return Visit(&visitor, start, end);
   }
 
@@ -1096,31 +1206,49 @@ class Trace : public TraceBase {
     return boost::python::object(boost::python::ptr(visitor.py));
   }
 
-  void SeekInsn(std::uint32_t index) override {
+  [[nodiscard]] int SeekInsn(std::uint32_t index) override {
     Seeker visitor;
-    if (insnIndex_.IsInitalized()) {
-      MmVector<InsnIndexEntry>::const_iterator it = std::upper_bound(
-          insnIndex_.begin(), insnIndex_.end(), index,
-          [](std::uint32_t insnIndex, const InsnIndexEntry& entry) {
-            return insnIndex < entry.insnIndex;
-          });
-      --it;
-      Rewind(*it);
-      visitor.insnIndex = it->insnIndex - 1;
+    if (insnIndexStepShift_ != static_cast<size_t>(-1)) {
+      InsnIndexEntry* entry = &insnIndex_[index >> insnIndexStepShift_];
+      Rewind(*entry);
+      visitor.insnIndex = (index >> insnIndexStepShift_) << insnIndexStepShift_;
+      if (visitor.insnIndex == index) return 0;
+      visitor.insnIndex--;
     } else {
       Rewind();
     }
     while (true) {
-      if (cur_ == end_) throw std::invalid_argument("No such insn");
+      if (cur_ == end_) return -EINVAL;
       std::uint8_t* prev = cur_;
-      int err = VisitOne(&visitor);
-      if (err < 0) throw std::runtime_error("Failed to parse the next entry");
+      int err;
+      if ((err = VisitOne(&visitor)) < 0) return err;
       if (visitor.insnIndex == index) {
         cur_ = prev;
         entryIndex_--;
         break;
       }
     }
+    return 0;
+  }
+
+  template <typename DefSeeker>
+  [[nodiscard]] int SeekDef(std::uint32_t insnIndex, std::uint32_t defIndex,
+                            Range<W>* range) {
+    int err;
+    if ((err = SeekInsn(insnIndex)) < 0) return err;
+    DefSeeker visitor;
+    while (true) {
+      if (cur_ == end_) return -EINVAL;
+      std::uint8_t* prev = cur_;
+      if ((err = VisitOne(&visitor)) < 0) return err;
+      if (visitor.defIndex == defIndex) {
+        cur_ = prev;
+        entryIndex_--;
+        break;
+      }
+    }
+    *range = visitor.range;
+    return 0;
   }
 
   Stats GatherStats() override {
@@ -1133,38 +1261,57 @@ class Trace : public TraceBase {
     return visitor.stats;
   }
 
-  void BuildInsnIndex(const char* path, size_t stepShift) override {
-    if (insnIndex_.Init(path, InitMode::CreatePersistent) < 0)
-      throw std::runtime_error("Failed to create index");
+  int BuildInsnIndex(const char* path, size_t stepShift) override {
+    if (insnIndexStepShift_ != static_cast<size_t>(-1)) return -EINVAL;
+    int err;
+    PathWithPlaceholder indexPath;
+    if ((err = indexPath.Init(path, "index")) < 0) return err;
+    if ((err = insnIndex_.Init(indexPath.Get("data").c_str(),
+                               InitMode::CreatePersistent)) < 0)
+      return err;
     size_t stepMask = (1 << stepShift) - 1;
+    ScopedRewind scopedRewind(this);
     Rewind();
     Seeker visitor;
     size_t prevInsnIndex = visitor.insnIndex;
     while (cur_ != end_) {
       std::uint8_t* prev = cur_;
-      if (VisitOne(&visitor) < 0)
-        throw std::runtime_error("Failed to parse the next entry");
+      if ((err = VisitOne(&visitor)) < 0) return err;
       if (visitor.insnIndex != prevInsnIndex) {
         if ((visitor.insnIndex & stepMask) == 0)
-          insnIndex_.push_back(InsnIndexEntry{visitor.insnIndex,
-                                              static_cast<size_t>(prev - data_),
+          insnIndex_.push_back(InsnIndexEntry{static_cast<size_t>(prev - data_),
                                               entryIndex_ - 1});
         prevInsnIndex = visitor.insnIndex;
       }
     }
+    InsnIndexHeader header;
+    header.stepShift = static_cast<std::uint8_t>(stepShift);
+    if ((err = WriteHeader(indexPath.Get("header").c_str(), header)) < 0)
+      return err;
+    insnIndexStepShift_ = stepShift;
+    return 0;
   }
 
-  void LoadInsnIndex(const char* path) override {
-    if (insnIndex_.Init(path, InitMode::OpenExisting) < 0)
+  [[nodiscard]] int LoadInsnIndex(const char* path) override {
+    int err;
+    if (insnIndexStepShift_ != static_cast<size_t>(-1)) return -EINVAL;
+    PathWithPlaceholder indexPath;
+    if ((err = indexPath.Init(path, "index")) < 0) return err;
+    InsnIndexHeader header;
+    if ((err = ReadHeader(indexPath.Get("header").c_str(), &header)) < 0)
+      return err;
+    if (insnIndex_.Init(indexPath.Get("data").c_str(), InitMode::OpenExisting) <
+        0)
       throw std::runtime_error("Failed to load index");
+    insnIndexStepShift_ = header.stepShift;
+    return 0;
   }
 
   class ScopedRewind {
    public:
     explicit ScopedRewind(Trace* trace)
         : trace_(trace),
-          saved_({static_cast<size_t>(-1),
-                  static_cast<size_t>(trace->cur_ - trace->data_),
+          saved_({static_cast<size_t>(trace->cur_ - trace->data_),
                   trace->entryIndex_}) {}
     ScopedRewind(const ScopedRewind&) = delete;
     ~ScopedRewind() { trace_->Rewind(saved_); }
@@ -1214,6 +1361,7 @@ class Trace : public TraceBase {
   size_t entryIndex_;
   HeaderEntry<E, W> header_;
   MmVector<InsnIndexEntry> insnIndex_;
+  size_t insnIndexStepShift_;
 };
 
 int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
@@ -1265,7 +1413,7 @@ int TraceBase::Visit(const char* path, const V& v) {
   }
 }
 
-template <template <typename> typename V, typename... Args>
+template <template <Endianness, typename> typename V, typename... Args>
 int VisitFile(const char* path, size_t start, size_t end, Args&&... args) {
   return TraceBase::Visit(path, [start, end, &args...](auto trace) {
     int err = trace->template Visit<V>(start, end, std::forward<Args>(args)...);
@@ -1320,15 +1468,7 @@ int DumpFile(const char* path, size_t start, size_t end) {
 }
 
 template <typename W>
-struct Range {
-  W startAddr;
-  W endAddr;
-};
-
-template <typename W>
-struct Def {
-  Range<W> range;
-};
+struct Def {};
 
 template <typename W>
 struct InsnInCode {
@@ -1340,13 +1480,13 @@ struct InsnInCode {
 struct InsnInTrace {
   std::uint32_t codeIndex;
   std::uint32_t regUseStartIndex;
-  std::uint32_t regUseEndIndex;
   std::uint32_t memUseStartIndex;
-  std::uint32_t memUseEndIndex;
   std::uint32_t regDefStartIndex;
-  std::uint32_t regDefEndIndex;
   std::uint32_t memDefStartIndex;
-  std::uint32_t memDefEndIndex;
+  std::uint8_t regUseCount;
+  std::uint8_t memUseCount;
+  std::uint8_t regDefCount;
+  std::uint8_t memDefCount;
 };
 
 size_t GetFirstPrimeGreaterThanOrEqualTo(size_t value) {
@@ -1471,69 +1611,8 @@ class PartialUses {
 
 template <typename W>
 struct ResolvedUse {
-  const Range<W>* range;
+  Range<W> range;
   std::uint32_t traceIndex;
-};
-
-template <typename W, typename UseIterator, typename DefIterator,
-          typename PartialUseIterator, typename InsnInTraceIterator>
-ResolvedUse<W> ResolveUse(std::uint32_t useIndex, UseIterator uses,
-                          DefIterator defs, PartialUseIterator partialUses,
-                          size_t partialUseCount,
-                          InsnInTraceIterator traceBegin,
-                          InsnInTraceIterator traceEnd,
-                          std::uint32_t InsnInTrace::*startDefIndex) {
-  std::uint32_t defIndex = uses[useIndex];
-  const Range<W>* range;
-  const PartialUse<W>& partialUse =
-      FindPartialUse(partialUses, partialUseCount, useIndex);
-  if (partialUse.first == static_cast<std::uint32_t>(-1))
-    range = &(defs + defIndex)->range;
-  else
-    range = &partialUse.second;
-
-  InsnInTraceIterator it =
-      std::upper_bound(traceBegin, traceEnd, defIndex,
-                       [startDefIndex](std::uint32_t defIndex,
-                                       const InsnInTrace& trace) -> bool {
-                         return defIndex < trace.*startDefIndex;
-                       });
-  --it;
-  std::uint32_t traceIndex = static_cast<std::uint32_t>(it - traceBegin);
-
-  return ResolvedUse<W>{range, traceIndex};
-}
-
-const char kPlaceholder[] = "{}";
-constexpr size_t kPlaceholderLength = sizeof(kPlaceholder) - 1;
-
-struct PathWithPlaceholder {
-  std::string_view before[2];
-  std::string_view after;
-
-  int Init(const char* path, const char* description) {
-    const char* placeholder = std::strstr(path, kPlaceholder);
-    if (placeholder == nullptr) {
-      std::cerr << description << " path must contain a " << kPlaceholder
-                << " placeholder" << std::endl;
-      return -EINVAL;
-    }
-    before[0] = std::string_view(path, placeholder - path);
-    after = placeholder + kPlaceholderLength;
-    return 0;
-  }
-
-  std::string Get(const char* value) const {
-    std::string path;
-    size_t len = strlen(value);
-    path.reserve(before[0].length() + before[1].length() + len +
-                 after.length());
-    path.append(before[0]);
-    path.append(before[1]);
-    path.append(std::string_view(value, len));
-    path.append(after);
-    return path;
-  }
 };
 
 template <typename W>
@@ -1561,11 +1640,10 @@ class UdState {
          it != addressSpace_.end() && it->second.startAddr < endAddr; ++it) {
       std::uint32_t useIndex = static_cast<std::uint32_t>(uses_.size());
       uses_.push_back(it->second.defIndex);
-      const Def<W>& def = defs_[it->second.defIndex];
       W maxStartAddr = std::max(startAddr, it->second.startAddr);
       W minEndAddr = std::min(endAddr, it->first);
-      if (def.range.startAddr != maxStartAddr ||
-          def.range.endAddr != minEndAddr)
+      if (it->second.defRange.startAddr != maxStartAddr ||
+          it->second.defRange.endAddr != minEndAddr)
         partialUses_[useIndex] = Range<W>{maxStartAddr, minEndAddr};
     }
   }
@@ -1581,24 +1659,22 @@ class UdState {
       affectedEntries_.push_back(*lastAffected);
     addressSpace_.erase(firstAffected, lastAffected);
     for (const Entry& entry : affectedEntries_) {
-      W entryStartAddr = entry.second.startAddr;
       W entryEndAddr = entry.first;
-      std::uint32_t entryDefIndex = entry.second.defIndex;
-      if (startAddr <= entryStartAddr) {
+      if (startAddr <= entry.second.startAddr) {
         if (endAddr < entryEndAddr) {
           // Left overlap.
-          addressSpace_[entryEndAddr] = EntryValue{endAddr, entryDefIndex};
+          addressSpace_[entryEndAddr] = entry.second.WithStartAddr(endAddr);
         } else {
           // Outer overlap.
         }
       } else {
         if (endAddr < entryEndAddr) {
           // Inner overlap.
-          addressSpace_[startAddr] = EntryValue{entryStartAddr, entryDefIndex};
-          addressSpace_[entryEndAddr] = EntryValue{endAddr, entryDefIndex};
+          addressSpace_[startAddr] = entry.second;
+          addressSpace_[entryEndAddr] = entry.second.WithStartAddr(endAddr);
         } else {
           // Right overlap.
-          addressSpace_[startAddr] = EntryValue{entryStartAddr, entryDefIndex};
+          addressSpace_[startAddr] = entry.second;
         }
       }
     }
@@ -1610,96 +1686,187 @@ class UdState {
   size_t GetDefCount() const { return defs_.size(); }
   size_t GetPartialUseCount() const { return partialUses_.GetData().size(); }
 
-  void DumpUses(std::uint32_t startIndex, std::uint32_t endIndex,
-                const MmVector<InsnInTrace>& trace,
-                std::uint32_t InsnInTrace::*startDefIndex) const {
+  template <Endianness E, std::uint32_t InsnInTrace::*StartDefIndex>
+  [[nodiscard]] int DumpUses(std::uint32_t startIndex, std::uint32_t endIndex,
+                             const MmVector<InsnInTrace>& trace,
+                             Trace<E, W>* fullTrace) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
-      ResolvedUse<W> use = ResolveUse(useIndex, trace, startDefIndex);
+      ResolvedUse<W> use;
+      int err;
+      if ((err = ResolveUse<E, StartDefIndex>(&use, useIndex, trace,
+                                              fullTrace)) < 0)
+        return err;
       std::printf(useIndex == startIndex
                       ? "0x%" PRIx64 "-0x%" PRIx64 "@[%" PRIu32 "]"
                       : ", 0x%" PRIx64 "-0x%" PRIx64 "@[%" PRIu32 "]",
-                  static_cast<std::uint64_t>(use.range->startAddr),
-                  static_cast<std::uint64_t>(use.range->endAddr),
+                  static_cast<std::uint64_t>(use.range.startAddr),
+                  static_cast<std::uint64_t>(use.range.endAddr),
                   use.traceIndex);
     }
+    return 0;
   }
 
-  void DumpDefs(std::uint32_t startIndex, std::uint32_t endIndex) const {
-    for (std::uint32_t defIndex = startIndex; defIndex < endIndex; defIndex++)
+  template <Endianness E, std::uint32_t InsnInTrace::*StartDefIndex>
+  [[nodiscard]] int DumpDefs(std::uint32_t startIndex, std::uint32_t endIndex,
+                             const MmVector<InsnInTrace>& trace,
+                             Trace<E, W>* fullTrace) const {
+    for (std::uint32_t defIndex = startIndex; defIndex < endIndex; defIndex++) {
+      Range<W> defRange;
+      int err;
+      if ((err = GetDefRange<E, StartDefIndex>(&defRange, defIndex, trace,
+                                               fullTrace)) < 0)
+        return err;
       std::printf(defIndex == startIndex ? "0x%" PRIx64 "-0x%" PRIx64
                                          : ", 0x%" PRIx64 "-0x%" PRIx64,
-                  static_cast<std::uint64_t>(defs_[defIndex].range.startAddr),
-                  static_cast<std::uint64_t>(defs_[defIndex].range.endAddr));
+                  static_cast<std::uint64_t>(defRange.startAddr),
+                  static_cast<std::uint64_t>(defRange.endAddr));
+    }
+    return 0;
   }
 
-  void DumpUsesDot(std::FILE* f, std::uint32_t traceIndex,
-                   std::uint32_t startIndex, std::uint32_t endIndex,
-                   const MmVector<InsnInTrace>& trace,
-                   std::uint32_t InsnInTrace::*startDefIndex,
-                   const char* prefix) const {
+  template <Endianness E, std::uint32_t InsnInTrace::*StartDefIndex>
+  [[nodiscard]] int DumpUsesDot(std::FILE* f, std::uint32_t traceIndex,
+                                std::uint32_t startIndex,
+                                std::uint32_t endIndex,
+                                const MmVector<InsnInTrace>& trace,
+                                Trace<E, W>* fullTrace,
+                                const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
-      ResolvedUse<W> use = ResolveUse(useIndex, trace, startDefIndex);
+      ResolvedUse<W> use;
+      int err;
+      if ((err = ResolveUse<E, StartDefIndex>(&use, useIndex, trace,
+                                              fullTrace)) < 0)
+        return err;
       std::fprintf(f,
                    "    %" PRIu32 " -> %" PRIu32 " [label=\"%s0x%" PRIx64
                    "-0x%" PRIx64 "\"]\n",
                    traceIndex, use.traceIndex, prefix,
-                   static_cast<std::uint64_t>(use.range->startAddr),
-                   static_cast<std::uint64_t>(use.range->endAddr));
+                   static_cast<std::uint64_t>(use.range.startAddr),
+                   static_cast<std::uint64_t>(use.range.endAddr));
     }
+    return 0;
   }
 
-  void DumpUsesHtml(std::FILE* f, std::uint32_t startIndex,
-                    std::uint32_t endIndex, const MmVector<InsnInTrace>& trace,
-                    std::uint32_t InsnInTrace::*startDefIndex,
-                    const char* prefix) const {
+  template <Endianness E, std::uint32_t InsnInTrace::*StartDefIndex>
+  [[nodiscard]] int DumpUsesHtml(std::FILE* f, std::uint32_t startIndex,
+                                 std::uint32_t endIndex,
+                                 const MmVector<InsnInTrace>& trace,
+                                 Trace<E, W>* fullTrace,
+                                 const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
-      ResolvedUse<W> use = ResolveUse(useIndex, trace, startDefIndex);
+      ResolvedUse<W> use;
+      int err;
+      if ((err = ResolveUse<E, StartDefIndex>(&use, useIndex, trace,
+                                              fullTrace)) < 0)
+        return err;
       std::fprintf(f,
                    "            <a href=\"#%" PRIu32 "\">%s0x%" PRIx64
                    "-0x%" PRIx64 "</a>\n",
                    use.traceIndex, prefix,
-                   static_cast<std::uint64_t>(use.range->startAddr),
-                   static_cast<std::uint64_t>(use.range->endAddr));
+                   static_cast<std::uint64_t>(use.range.startAddr),
+                   static_cast<std::uint64_t>(use.range.endAddr));
     }
+    return 0;
   }
 
-  void DumpDefsHtml(std::FILE* f, std::uint32_t startIndex,
-                    std::uint32_t endIndex, const char* prefix) const {
-    for (std::uint32_t i = startIndex; i < endIndex; i++)
+  template <Endianness E, std::uint32_t InsnInTrace::*StartDefIndex>
+  [[nodiscard]] int DumpDefsHtml(std::FILE* f, std::uint32_t startIndex,
+                                 std::uint32_t endIndex,
+                                 const MmVector<InsnInTrace>& trace,
+                                 Trace<E, W>* fullTrace,
+                                 const char* prefix) const {
+    for (std::uint32_t defIndex = startIndex; defIndex < endIndex; defIndex++) {
+      Range<W> defRange;
+      int err;
+      if ((err = GetDefRange<E, StartDefIndex>(&defRange, defIndex, trace,
+                                               fullTrace)) < 0)
+        return err;
       std::fprintf(f, "            %s0x%" PRIx64 "-0x%" PRIx64 "\n", prefix,
-                   static_cast<std::uint64_t>(defs_[i].range.startAddr),
-                   static_cast<std::uint64_t>(defs_[i].range.endAddr));
+                   static_cast<std::uint64_t>(defRange.startAddr),
+                   static_cast<std::uint64_t>(defRange.endAddr));
+    }
+    return 0;
   }
 
-  void DumpUsesCsv(std::FILE* f, std::uint32_t traceIndex,
-                   std::uint32_t startIndex, std::uint32_t endIndex,
-                   const MmVector<InsnInTrace>& trace,
-                   std::uint32_t InsnInTrace::*startDefIndex,
-                   const char* prefix) const {
+  template <Endianness E, std::uint32_t InsnInTrace::*StartDefIndex>
+  [[nodiscard]] int DumpUsesCsv(std::FILE* f, std::uint32_t traceIndex,
+                                std::uint32_t startIndex,
+                                std::uint32_t endIndex,
+                                const MmVector<InsnInTrace>& trace,
+                                Trace<E, W>* fullTrace,
+                                const char* prefix) const {
     for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
-      ResolvedUse<W> use = ResolveUse(useIndex, trace, startDefIndex);
+      ResolvedUse<W> use;
+      int err;
+      if ((err = ResolveUse<E, StartDefIndex>(&use, useIndex, trace,
+                                              fullTrace)) < 0)
+        return err;
       std::fprintf(f, "%" PRIu32 ",%" PRIu32 ",%s,%" PRIu64 ",%" PRIu64 "\n",
                    traceIndex, use.traceIndex, prefix,
-                   static_cast<std::uint64_t>(use.range->startAddr),
-                   static_cast<std::uint64_t>(use.range->endAddr));
+                   static_cast<std::uint64_t>(use.range.startAddr),
+                   static_cast<std::uint64_t>(use.range.endAddr));
     }
+    return 0;
   }
 
   void AddDef(W startAddr, W endAddr) {
     std::uint32_t defIndex = static_cast<std::uint32_t>(defs_.size());
-    Def<W>& def = defs_.emplace_back();
-    def.range.startAddr = startAddr;
-    def.range.endAddr = endAddr;
-    addressSpace_[endAddr] = EntryValue{startAddr, defIndex};
+    defs_.emplace_back();
+    addressSpace_[endAddr] = EntryValue{
+        startAddr,
+        defIndex,
+        {startAddr, endAddr},
+    };
   }
 
-  ResolvedUse<W> ResolveUse(std::uint32_t useIndex,
-                            const MmVector<InsnInTrace>& trace,
-                            std::uint32_t InsnInTrace::*startDefIndex) const {
-    return ::ResolveUse<W>(useIndex, uses_.begin(), defs_.begin(),
-                           partialUses_.GetData().data(),
-                           partialUses_.GetData().size(), trace.begin(),
-                           trace.end(), startDefIndex);
+  template <std::uint32_t InsnInTrace::*StartDefIndex>
+  std::uint32_t GetTraceForDef(std::uint32_t defIndex,
+                               const MmVector<InsnInTrace>& trace) const {
+    MmVector<InsnInTrace>::const_iterator it = std::upper_bound(
+        trace.begin(), trace.end(), defIndex,
+        [](std::uint32_t defIndex, const InsnInTrace& trace) -> bool {
+          return defIndex < trace.*StartDefIndex;
+        });
+    --it;
+    return static_cast<std::uint32_t>(it - trace.begin());
+  }
+
+  template <Endianness E, std::uint32_t InsnInTrace::*StartDefIndex>
+  [[nodiscard]] int ResolveUse(ResolvedUse<W>* use, std::uint32_t useIndex,
+                               const MmVector<InsnInTrace>& trace,
+                               Trace<E, W>* fullTrace) const {
+    std::uint32_t defIndex = uses_[useIndex];
+    Range<W> defRange;
+    const PartialUse<W>& partialUse = FindPartialUse(
+        partialUses_.GetData().data(), partialUses_.GetData().size(), useIndex);
+    if (partialUse.first == static_cast<std::uint32_t>(-1)) {
+      int err;
+      if ((err = GetDefRange<E, StartDefIndex>(&defRange, defIndex, trace,
+                                               fullTrace)) < 0)
+        return err;
+    } else {
+      defRange = partialUse.second;
+    }
+    std::uint32_t traceIndex = GetTraceForDef<StartDefIndex>(defIndex, trace);
+    *use = ResolvedUse<W>{defRange, traceIndex};
+    return 0;
+  }
+
+  template <Endianness E, std::uint32_t InsnInTrace::*StartDefIndex>
+  [[nodiscard]] int GetDefRange(Range<W>* range, std::uint32_t defIndex,
+                                const MmVector<InsnInTrace>& trace,
+                                Trace<E, W>* fullTrace) const {
+    if (defIndex == 0) {
+      *range = Range<W>{0, std::numeric_limits<W>::max()};
+      return 0;
+    }
+    std::uint32_t traceIndex = GetTraceForDef<StartDefIndex>(defIndex, trace);
+    typename Trace<E, W>::ScopedRewind scopedRewind(fullTrace);
+    return fullTrace->template SeekDef<std::conditional_t<
+        StartDefIndex == &InsnInTrace::regDefStartIndex, RegDefSeeker<W>,
+        std::conditional_t<StartDefIndex == &InsnInTrace::memDefStartIndex,
+                           MemDefSeeker<W>, void>>>(
+        traceIndex - 1, defIndex - trace[traceIndex].*StartDefIndex, range);
   }
 
  private:
@@ -1710,6 +1877,11 @@ class UdState {
   struct EntryValue {
     W startAddr;
     std::uint32_t defIndex;
+    Range<W> defRange;
+
+    EntryValue WithStartAddr(W newStartAddr) const {
+      return EntryValue{newStartAddr, defIndex, defRange};
+    }
   };
   // endAddr -> EntryValue.
   using AddressSpace = typename std::map<W, EntryValue>;
@@ -1722,15 +1894,15 @@ class UdState {
 };
 
 struct BinaryHeader {
-  std::uint8_t magic[2];    // Analyzer endianness and traced program word size.
+  std::uint8_t hostEndianness;
+  std::uint8_t hostWordSize;
   MachineType machineType;  // Traced program machine type.
-  Endianness endianness;    // Traced program endianness.
 };
 
 class UdBase {
  public:
-  static UdBase* Analyze(TraceBase* trace);
-  static UdBase* Load(const char* path);
+  static UdBase* Analyze(const char* path, TraceBase* trace, bool verbose);
+  static UdBase* Load(const char* path, TraceBase* trace);
 
   virtual ~UdBase() = default;
   [[nodiscard]] virtual int Init(const BinaryHeader& header) = 0;
@@ -1746,23 +1918,22 @@ class UdBase {
       std::uint32_t trace) const = 0;
   virtual std::uint32_t GetTraceForRegUse(std::uint32_t regUse) const = 0;
   virtual std::uint32_t GetTraceForMemUse(std::uint32_t memUse) const = 0;
+  virtual int DumpDot(const char* dot) const = 0;
+  virtual int DumpHtml(const char* html) const = 0;
+  virtual int DumpCsv(const char* csv) const = 0;
 };
 
-template <typename W>
+template <Endianness E, typename W>
 class Ud : public UdBase {
  public:
-  Ud(const char* dot, const char* html, const char* csv, const char* binary,
-     bool verbose)
-      : dot_(dot), html_(html), csv_(csv), binary_(binary), verbose_(verbose) {}
+  Ud(const char* binary, Trace<E, W>* fullTrace, bool verbose)
+      : binary_(binary), fullTrace_(fullTrace), verbose_(verbose) {}
 
   [[nodiscard]] int Init(InitMode mode, MachineType machineType,
-                         Endianness endianness, size_t expectedInsnCount) {
+                         size_t expectedInsnCount) {
     machineType_ = machineType;
-    endianness_ = endianness;
 
     int err;
-    if (csv_ != nullptr && (err = csvPath_.Init(csv_, "csv")) < 0) return err;
-
     if (mode == InitMode::CreateTemporary)
       binaryPath_.before[0] = "./";
     else if ((err = binaryPath_.Init(binary_, "binary")) < 0)
@@ -1802,25 +1973,21 @@ class Ud : public UdBase {
       memState_.AddDef(0, std::numeric_limits<W>::max());
     }
 
-    if ((err = disasmEngine_.Init(machineType, endianness, sizeof(W))) < 0)
-      return err;
+    if ((err = disasmEngine_.Init(machineType, E, sizeof(W))) < 0) return err;
 
     return 0;
   }
 
   [[nodiscard]] int Init(const BinaryHeader& header) override {
-    return Init(InitMode::OpenExisting, header.machineType, header.endianness,
-                0);
+    return Init(InitMode::OpenExisting, header.machineType, 0);
   }
 
-  template <Endianness E>
   [[nodiscard]] int Init(HeaderEntry<E, W> entry, size_t expectedInsnCount) {
     return Init(binary_ == nullptr ? InitMode::CreateTemporary
                                    : InitMode::CreatePersistent,
-                entry.GetMachineType(), E, expectedInsnCount);
+                entry.GetMachineType(), expectedInsnCount);
   }
 
-  template <Endianness E>
   int operator()(size_t /* i */, LdStEntry<E, W> entry) {
     int ret;
     if ((ret = HandleInsnSeq(entry.GetInsnSeq())) < 0) return ret;
@@ -1842,7 +2009,6 @@ class Ud : public UdBase {
     }
   }
 
-  template <Endianness E>
   int operator()(size_t /* i */, InsnEntry<E, W> entry) {
     if (entry.GetInsnSeq() != static_cast<std::uint32_t>(code_.size()))
       return -EINVAL;
@@ -1864,14 +2030,12 @@ class Ud : public UdBase {
     return 0;
   }
 
-  template <Endianness E>
   int operator()(size_t /* i */, InsnExecEntry<E, W> entry) {
     int ret;
     if ((ret = HandleInsnSeq(entry.GetInsnSeq())) < 0) return ret;
     return 0;
   }
 
-  template <Endianness E>
   int operator()(size_t /* i */, LdStNxEntry<E, W> entry) {
     int ret;
     if ((ret = HandleInsnSeq(entry.GetInsnSeq())) < 0) return ret;
@@ -1886,17 +2050,11 @@ class Ud : public UdBase {
     }
   }
 
-  template <Endianness E>
-  int operator()(size_t /* i */, MmapEntry<E, W> /* entry */) {
-    return 0;
-  }
+  int operator()(size_t /* i */, MmapEntry<E, W> /* entry */) { return 0; }
 
   int Complete() {
     int ret;
     if ((ret = Flush()) < 0) return ret;
-    if ((ret = DumpDot()) < 0) return ret;
-    if ((ret = DumpHtml()) < 0) return ret;
-    if ((ret = DumpCsv()) < 0) return ret;
     if ((ret = DumpBinary()) < 0) return ret;
     return 0;
   }
@@ -1945,8 +2103,9 @@ class Ud : public UdBase {
   std::vector<std::uint32_t> GetRegUsesForTrace(
       std::uint32_t trace) const override {
     std::vector<std::uint32_t> regUses;
-    for (std::uint32_t regUse = trace_[trace].regUseStartIndex;
-         regUse < trace_[trace].regUseEndIndex; regUse++)
+    for (std::uint32_t regUse = trace_[trace].regUseStartIndex,
+                       regUseEndIndex = regUse + trace_[trace].regUseCount;
+         regUse < regUseEndIndex; regUse++)
       regUses.push_back(regUse);
     return regUses;
   }
@@ -1954,29 +2113,47 @@ class Ud : public UdBase {
   std::vector<std::uint32_t> GetMemUsesForTrace(
       std::uint32_t trace) const override {
     std::vector<std::uint32_t> memUses;
-    for (std::uint32_t memUse = trace_[trace].memUseStartIndex;
-         memUse < trace_[trace].memUseEndIndex; memUse++)
+    for (std::uint32_t memUse = trace_[trace].memUseStartIndex,
+                       memUseEndIndex = memUse + trace_[trace].memUseCount;
+         memUse < memUseEndIndex; memUse++)
       memUses.push_back(memUse);
     return memUses;
   }
 
   std::uint32_t GetTraceForRegUse(std::uint32_t regUse) const override {
-    return regState_.ResolveUse(regUse, trace_, &InsnInTrace::regDefStartIndex)
-        .traceIndex;
+    ResolvedUse<W> use;
+    int err;
+    if ((err = regState_.template ResolveUse<E, &InsnInTrace::regDefStartIndex>(
+             &use, regUse, trace_, fullTrace_)) < 0)
+      throw std::runtime_error("ResolveUse() failed");
+    return use.traceIndex;
   }
 
   std::uint32_t GetTraceForMemUse(std::uint32_t memUse) const override {
-    return memState_.ResolveUse(memUse, trace_, &InsnInTrace::memDefStartIndex)
-        .traceIndex;
+    ResolvedUse<W> use;
+    int err;
+    if ((err = memState_.template ResolveUse<E, &InsnInTrace::memDefStartIndex>(
+             &use, memUse, trace_, fullTrace_)) < 0)
+      throw std::runtime_error("ResolveUse() failed");
+    return use.traceIndex;
   }
 
  private:
-  int Flush() {
+  [[nodiscard]] int Flush() {
     InsnInTrace& trace = trace_.back();
-    trace.regUseEndIndex = static_cast<std::uint32_t>(regState_.GetUseCount());
-    trace.memUseEndIndex = static_cast<std::uint32_t>(memState_.GetUseCount());
-    trace.regDefEndIndex = static_cast<std::uint32_t>(regState_.GetDefCount());
-    trace.memDefEndIndex = static_cast<std::uint32_t>(memState_.GetDefCount());
+    size_t regUseCount = regState_.GetUseCount() - trace.regUseStartIndex;
+    size_t memUseCount = memState_.GetUseCount() - trace.memUseStartIndex;
+    size_t regDefCount = regState_.GetDefCount() - trace.regDefStartIndex;
+    size_t memDefCount = memState_.GetDefCount() - trace.memDefStartIndex;
+    if (regUseCount > std::numeric_limits<std::uint8_t>::max() ||
+        memUseCount > std::numeric_limits<std::uint8_t>::max() ||
+        regDefCount > std::numeric_limits<std::uint8_t>::max() ||
+        memDefCount > std::numeric_limits<std::uint8_t>::max())
+      return -EINVAL;
+    trace.regUseCount = static_cast<std::uint8_t>(regUseCount);
+    trace.memUseCount = static_cast<std::uint8_t>(memUseCount);
+    trace.regDefCount = static_cast<std::uint8_t>(regDefCount);
+    trace.memDefCount = static_cast<std::uint8_t>(memDefCount);
 
     if (verbose_) {
       InsnInCode<W>& code = code_[trace.codeIndex];
@@ -1984,15 +2161,30 @@ class Ud : public UdBase {
                   static_cast<std::uint64_t>(code.pc));
       HexDump(stdout, &text_[code.textIndex], code.textSize);
       std::printf(" %s reg_uses=[", disasm_[trace.codeIndex].c_str());
-      regState_.DumpUses(trace.regUseStartIndex, trace.regUseEndIndex, trace_,
-                         &InsnInTrace::regDefStartIndex);
+      int err;
+      if ((err = regState_.template DumpUses<E, &InsnInTrace::regDefStartIndex>(
+               trace.regUseStartIndex,
+               trace.regUseStartIndex + trace.regUseCount, trace_,
+               fullTrace_)) < 0)
+        return err;
       std::printf("] reg_defs=[");
-      regState_.DumpDefs(trace.regDefStartIndex, trace.regDefEndIndex);
+      if ((err = regState_.template DumpDefs<E, &InsnInTrace::regDefStartIndex>(
+               trace.regDefStartIndex,
+               trace.regDefStartIndex + trace.regDefCount, trace_,
+               fullTrace_)) < 0)
+        return err;
       std::printf("] mem_uses=[");
-      memState_.DumpUses(trace.memUseStartIndex, trace.memUseEndIndex, trace_,
-                         &InsnInTrace::memDefStartIndex);
+      if ((err = memState_.template DumpUses<E, &InsnInTrace::memDefStartIndex>(
+               trace.memUseStartIndex,
+               trace.memUseStartIndex + trace.memUseCount, trace_,
+               fullTrace_)) < 0)
+        return err;
       std::printf("] mem_defs=[");
-      memState_.DumpDefs(trace.memDefStartIndex, trace.memDefEndIndex);
+      if ((err = memState_.template DumpDefs<E, &InsnInTrace::memDefStartIndex>(
+               trace.memDefStartIndex,
+               trace.memDefStartIndex + trace.memDefCount, trace_,
+               fullTrace_)) < 0)
+        return err;
       std::printf("]\n");
     }
 
@@ -2021,9 +2213,8 @@ class Ud : public UdBase {
     return 0;
   }
 
-  int DumpDot() const {
-    if (dot_ == nullptr) return 0;
-    std::FILE* f = std::fopen(dot_, "w");
+  int DumpDot(const char* dot) const override {
+    std::FILE* f = std::fopen(dot, "w");
     if (f == nullptr) return -errno;
     std::fprintf(f, "digraph ud {\n");
     for (std::uint32_t traceIndex = 0; traceIndex < trace_.size();
@@ -2034,21 +2225,27 @@ class Ud : public UdBase {
           f, "    %" PRIu32 " [label=\"[%" PRIu32 "] 0x%" PRIx64 ": %s\"]\n",
           traceIndex, traceIndex, static_cast<std::uint64_t>(code.pc),
           disasm_[trace.codeIndex].c_str());
-      regState_.DumpUsesDot(f, traceIndex, trace.regUseStartIndex,
-                            trace.regUseEndIndex, trace_,
-                            &InsnInTrace::regDefStartIndex, "r");
-      memState_.DumpUsesDot(f, traceIndex, trace.memUseStartIndex,
-                            trace.memUseEndIndex, trace_,
-                            &InsnInTrace::memDefStartIndex, "m");
+      int err;
+      if ((err = regState_
+                     .template DumpUsesDot<E, &InsnInTrace::regDefStartIndex>(
+                         f, traceIndex, trace.regUseStartIndex,
+                         trace.regUseStartIndex + trace.regUseCount, trace_,
+                         fullTrace_, "r")) < 0)
+        return err;
+      if ((err = memState_
+                     .template DumpUsesDot<E, &InsnInTrace::memDefStartIndex>(
+                         f, traceIndex, trace.memUseStartIndex,
+                         trace.memUseStartIndex + trace.memUseCount, trace_,
+                         fullTrace_, "m")) < 0)
+        return err;
     }
     std::fprintf(f, "}\n");
     std::fclose(f);
     return 0;
   }
 
-  int DumpHtml() const {
-    if (html_ == nullptr) return 0;
-    std::FILE* f = std::fopen(html_, "w");
+  int DumpHtml(const char* html) const override {
+    std::FILE* f = std::fopen(html, "w");
     if (f == nullptr) return -errno;
     std::fprintf(f,
                  "<!DOCTYPE html>\n"
@@ -2087,17 +2284,34 @@ class Ud : public UdBase {
       std::fprintf(f,
                    "</td>\n"
                    "        <td>\n");
-      regState_.DumpUsesHtml(f, trace.regUseStartIndex, trace.regUseEndIndex,
-                             trace_, &InsnInTrace::regDefStartIndex, "r");
-      memState_.DumpUsesHtml(f, trace.memUseStartIndex, trace.memUseEndIndex,
-                             trace_, &InsnInTrace::memDefStartIndex, "m");
+      int err;
+      if ((err = regState_
+                     .template DumpUsesHtml<E, &InsnInTrace::regDefStartIndex>(
+                         f, trace.regUseStartIndex,
+                         trace.regUseStartIndex + trace.regUseCount, trace_,
+                         fullTrace_, "r")) < 0)
+        return err;
+      if ((err = memState_
+                     .template DumpUsesHtml<E, &InsnInTrace::memDefStartIndex>(
+                         f, trace.memUseStartIndex,
+                         trace.memUseStartIndex + trace.memUseCount, trace_,
+                         fullTrace_, "m")) < 0)
+        return err;
       std::fprintf(f,
                    "        </td>\n"
                    "        <td>\n");
-      regState_.DumpDefsHtml(f, trace.regDefStartIndex, trace.regDefEndIndex,
-                             "r");
-      memState_.DumpDefsHtml(f, trace.memDefStartIndex, trace.memDefEndIndex,
-                             "m");
+      if ((err = regState_
+                     .template DumpDefsHtml<E, &InsnInTrace::regDefStartIndex>(
+                         f, trace.regDefStartIndex,
+                         trace.regDefStartIndex + trace.regDefCount, trace_,
+                         fullTrace_, "r")) < 0)
+        return err;
+      if ((err = memState_
+                     .template DumpDefsHtml<E, &InsnInTrace::memDefStartIndex>(
+                         f, trace.memDefStartIndex,
+                         trace.memDefStartIndex + trace.memDefCount, trace_,
+                         fullTrace_, "m")) < 0)
+        return err;
       std::fprintf(f,
                    "        </td>\n"
                    "    </tr>\n");
@@ -2140,47 +2354,47 @@ class Ud : public UdBase {
     for (std::uint32_t traceIndex = 0; traceIndex < trace_.size();
          traceIndex++) {
       const InsnInTrace& trace = trace_[traceIndex];
-      regState_.DumpUsesCsv(f, traceIndex, trace.regUseStartIndex,
-                            trace.regUseEndIndex, trace_,
-                            &InsnInTrace::regDefStartIndex, "r");
-      memState_.DumpUsesCsv(f, traceIndex, trace.memUseStartIndex,
-                            trace.memUseEndIndex, trace_,
-                            &InsnInTrace::memDefStartIndex, "m");
+      int err;
+      if ((err = regState_
+                     .template DumpUsesCsv<E, &InsnInTrace::regDefStartIndex>(
+                         f, traceIndex, trace.regUseStartIndex,
+                         trace.regUseStartIndex + trace.regUseCount, trace_,
+                         fullTrace_, "r")) < 0)
+        return err;
+      if ((err = memState_
+                     .template DumpUsesCsv<E, &InsnInTrace::memDefStartIndex>(
+                         f, traceIndex, trace.memUseStartIndex,
+                         trace.memUseStartIndex + trace.memUseCount, trace_,
+                         fullTrace_, "m")) < 0)
+        return err;
     }
     std::fclose(f);
     return 0;
   }
 
-  int DumpCsv() const {
-    if (csv_ == nullptr) return 0;
-    int ret;
-    if ((ret = DumpCodeCsv(csvPath_.Get("code").c_str())) < 0) return ret;
-    if ((ret = DumpTraceCsv(csvPath_.Get("trace").c_str())) < 0) return ret;
-    if ((ret = DumpUsesCsv(csvPath_.Get("uses").c_str())) < 0) return ret;
+  int DumpCsv(const char* csv) const override {
+    PathWithPlaceholder csvPath;
+    int err;
+    if ((err = csvPath.Init(csv, "csv")) < 0) return err;
+    if ((err = DumpCodeCsv(csvPath.Get("code").c_str())) < 0) return err;
+    if ((err = DumpTraceCsv(csvPath.Get("trace").c_str())) < 0) return err;
+    if ((err = DumpUsesCsv(csvPath.Get("uses").c_str())) < 0) return err;
     return 0;
   }
 
   int DumpBinary() const {
     if (binary_ == nullptr) return 0;
-    std::FILE* f = std::fopen(binaryPath_.Get("header").c_str(), "wb");
-    if (f == nullptr) return -errno;
     BinaryHeader header;
-    *reinterpret_cast<std::uint16_t*>(header.magic) =
-        ('M' << 8) | ('0' + sizeof(W));
+    header.hostEndianness = static_cast<std::uint8_t>(kHostEndianness);
+    header.hostWordSize = static_cast<std::uint8_t>(kHostWordSize);
     header.machineType = machineType_;
-    header.endianness = endianness_;
-    fwrite(&header, sizeof(header), 1, f);
-    fclose(f);
-    return 0;
+    return WriteHeader(binaryPath_.Get("header").c_str(), header);
   }
 
-  const char* const dot_;
-  const char* const html_;
-  const char* const csv_;
   const char* const binary_;
+  Trace<E, W>* fullTrace_;
   const bool verbose_;
   MachineType machineType_;
-  Endianness endianness_;
   Disasm disasmEngine_;
   MmVector<InsnInCode<W>> code_;
   MmVector<std::uint8_t> text_;
@@ -2188,60 +2402,44 @@ class Ud : public UdBase {
   MmVector<InsnInTrace> trace_;
   UdState<W> regState_;
   UdState<W> memState_;
-  PathWithPlaceholder csvPath_;
   PathWithPlaceholder binaryPath_;
 };
 
-int UdFile(const char* path, size_t start, size_t end, const char* dot,
-           const char* html, const char* csv, const char* binary,
-           bool verbose) {
-  return VisitFile<Ud>(path, start, end, dot, html, csv, binary, verbose);
-}
-
-UdBase* UdBase::Load(const char* rawPath) {
+int ReadUdHeader(const char* rawPath, BinaryHeader* header) {
   int err;
   PathWithPlaceholder path;
-  if ((err = path.Init(rawPath, "binary")) < 0) return nullptr;
+  if ((err = path.Init(rawPath, "binary")) < 0) return err;
+  return ReadHeader(path.Get("header").c_str(), header);
+}
+
+UdBase* UdBase::Load(const char* rawPath, TraceBase* trace) {
   BinaryHeader header;
-  FILE* h = fopen(path.Get("header").c_str(), "r");
-  if (h == nullptr) return nullptr;
-  size_t n_read = fread(&header, sizeof(header), 1, h);
-  fclose(h);
-  if (n_read != 1) return nullptr;
-  UdBase* ud = nullptr;
-  switch (header.magic[0] << 8 | header.magic[1]) {
-    case 'M' << 8 | '4':
-      if (kHostEndianness == Endianness::Big)
-        ud = new Ud<std::uint32_t>(nullptr, nullptr, nullptr, rawPath, false);
-      break;
-    case 'M' << 8 | '8':
-      if (kHostEndianness == Endianness::Big)
-        ud = new Ud<std::uint64_t>(nullptr, nullptr, nullptr, rawPath, false);
-      break;
-    case '4' << 8 | 'M':
-      if (kHostEndianness == Endianness::Little)
-        ud = new Ud<std::uint32_t>(nullptr, nullptr, nullptr, rawPath, false);
-      break;
-    case '8' << 8 | 'M':
-      if (kHostEndianness == Endianness::Little)
-        ud = new Ud<std::uint64_t>(nullptr, nullptr, nullptr, rawPath, false);
-      break;
-  }
-  if (ud == nullptr) return nullptr;
-  if (ud->Init(header) < 0) {
-    delete ud;
+  if (ReadUdHeader(rawPath, &header) < 0) return nullptr;
+  if (static_cast<Endianness>(header.hostEndianness) != kHostEndianness ||
+      static_cast<size_t>(header.hostWordSize) != kHostWordSize)
     return nullptr;
-  }
+  UdBase* ud = nullptr;
+  trace->Downcast([rawPath, header, &ud](auto trace) {
+    using Trace = typename std::remove_pointer<decltype(trace)>::type;
+    typename Trace::ScopedRewind scopedRewind(trace);
+    Ud<Trace::E, typename Trace::W>* udW =
+        new Ud<Trace::E, typename Trace::W>(rawPath, trace, false);
+    if (udW->Init(header) < 0) {
+      delete udW;
+      return;
+    }
+    ud = udW;
+  });
   return ud;
 }
 
-UdBase* UdBase::Analyze(TraceBase* trace) {
+UdBase* UdBase::Analyze(const char* path, TraceBase* trace, bool verbose) {
   UdBase* ud = nullptr;
-  trace->Downcast([&ud](auto trace) {
+  trace->Downcast([&ud, path, verbose](auto trace) {
     using Trace = typename std::remove_pointer<decltype(trace)>::type;
     typename Trace::ScopedRewind scopedRewind(trace);
-    Ud<typename Trace::W>* udW =
-        new Ud<typename Trace::W>(nullptr, nullptr, nullptr, nullptr, false);
+    Ud<Trace::E, typename Trace::W>* udW =
+        new Ud<Trace::E, typename Trace::W>(path, trace, verbose);
     if (trace->Visit(udW) < 0) {
       delete udW;
       return;
@@ -2303,6 +2501,8 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .value("Big", Endianness::Big);
   bp::def("get_endianness_str", GetEndiannessStrPy);
   bp::enum_<Tag>("Tag")
+      .value("MT_HEADER32", Tag::MT_HEADER32)
+      .value("MT_HEADER64", Tag::MT_HEADER64)
       .value("MT_LOAD", Tag::MT_LOAD)
       .value("MT_STORE", Tag::MT_STORE)
       .value("MT_REG", Tag::MT_REG)
@@ -2338,7 +2538,7 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def(bp::map_indexing_suite<std::map<Tag, TagStats>>());
   bp::class_<Stats>("Stats", bp::no_init)
       .def_readonly("tag_stats", &Stats::tagStats);
-  bp::class_<TraceBase, boost::noncopyable>("Trace", bp::no_init)
+  bp::class_<TraceBase, boost::noncopyable>("_Trace", bp::no_init)
       .def("load", &TraceBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
       .staticmethod("load")
@@ -2351,15 +2551,13 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("seek_insn", &TraceBase::SeekInsn)
       .def("gather_stats", &TraceBase::GatherStats)
       .def("build_insn_index", &TraceBase::BuildInsnIndex)
-      .def("build_insn_index", &TraceBase::BuildInsnIndexDefault)
       .def("load_insn_index", &TraceBase::LoadInsnIndex)
       .def("get_mmap_entries", &TraceBase::GetMmapEntries);
-  bp::def("ud_file", UdFile);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
   bp::class_<std::vector<std::uint32_t>>("std::vector<std::uint32_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint32_t>>());
-  bp::class_<UdBase, boost::noncopyable>("Ud", bp::no_init)
+  bp::class_<UdBase, boost::noncopyable>("_Ud", bp::no_init)
       .def("analyze", &UdBase::Analyze,
            bp::return_value_policy<bp::manage_new_object>())
       .def("load", &UdBase::Load,
@@ -2373,7 +2571,10 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("get_reg_uses_for_trace", &UdBase::GetRegUsesForTrace)
       .def("get_mem_uses_for_trace", &UdBase::GetMemUsesForTrace)
       .def("get_trace_for_reg_use", &UdBase::GetTraceForRegUse)
-      .def("get_trace_for_mem_use", &UdBase::GetTraceForMemUse);
+      .def("get_trace_for_mem_use", &UdBase::GetTraceForMemUse)
+      .def("dump_dot", &UdBase::DumpDot)
+      .def("dump_html", &UdBase::DumpHtml)
+      .def("dump_csv", &UdBase::DumpCsv);
   bp::class_<Disasm, boost::noncopyable>("Disasm", bp::no_init)
       .def("__init__", bp::make_constructor(CreateDisasm))
       .def("disasm_str", &Disasm::DisasmStr);

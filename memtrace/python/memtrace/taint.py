@@ -5,7 +5,9 @@ import sys
 
 from memtrace.analysis import Analysis
 from memtrace.format import format_entry
-from memtrace_ext import Entry, Tag, Trace, Ud
+from memtrace.trace import Trace
+from memtrace.ud import Ud
+from memtrace_ext import Entry, Tag
 
 
 @dataclass

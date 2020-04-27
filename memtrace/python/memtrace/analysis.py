@@ -3,39 +3,37 @@ import argparse
 import os
 import sys
 import tempfile
+from typing import Optional
 
 from memtrace.format import format_entry
 from memtrace.symbolizer import Symbolizer
-from memtrace_ext import Disasm, get_endianness_str, Tag, Trace, Ud, ud_file
+from memtrace.trace import Trace
+from memtrace.ud import Ud
+from memtrace_ext import Disasm, get_endianness_str, Tag
 
 
 class Analysis:
-    def __init__(self, trace_path, index_path=None, ud_path=None):
+    def __init__(
+            self,
+            trace_path: str,
+            index_path: Optional[str] = None,
+            ud_path: Optional[str] = None,
+            ud_verbose: bool = False,
+    ):
         trace = Trace.load(trace_path)
         if index_path is None:
             with tempfile.TemporaryDirectory() as tmpdir:
-                index_path = os.path.join(tmpdir, 'memtrace.idx')
+                index_path = os.path.join(tmpdir, '{}.bin')
                 trace.build_insn_index(index_path)
+        elif not os.path.exists(index_path.replace('{}', 'header')):
+            trace.build_insn_index(index_path)
         else:
             trace.load_insn_index(index_path)
-        if ud_path is None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                ud_path = os.path.join(tmpdir, '{}.bin')
-                err = ud_file(
-                    trace_path,
-                    0,  # start
-                    9999999999,  # end
-                    None,  # dot
-                    None,  # html
-                    None,  # csv
-                    ud_path,  # binary
-                    None,  # verbose
-                )
-                if err < 0:
-                    raise Exception(f'use-def analysis failed: {err}')
-                ud = Ud.load(ud_path)
+        if (ud_path is None or
+                not os.path.exists(ud_path.replace('{}', 'header'))):
+            ud = Ud.analyze(ud_path, trace, ud_verbose)
         else:
-            ud = Ud.load(ud_path)
+            ud = Ud.load(ud_path, trace)
         self.trace = trace
         self.ud = ud
         endianness = self.trace.get_endianness()

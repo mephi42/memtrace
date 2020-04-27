@@ -16,7 +16,9 @@ from memtrace.format import format_entry
 import memtrace.stats as stats
 from memtrace.symbolizer import Symbolizer
 from memtrace.taint import BackwardAnalysis
-from memtrace_ext import Disasm, get_endianness_str, Tag, Trace, Ud
+from memtrace.trace import Trace
+from memtrace.ud import Ud
+from memtrace_ext import Disasm, get_endianness_str, Tag
 
 
 def diff_files(expected, actual):
@@ -226,8 +228,8 @@ class MachineTest(CommonTest):
         expected_seek_txt = os.path.join(self.basedir, seek_txt)
         trace = self.load_trace()
         if with_index:
-            memtrace_idx = os.path.join(self.workdir.name, 'memtrace.idx')
-            trace.build_insn_index(memtrace_idx, 2)
+            memtrace_idx = os.path.join(self.workdir.name, 'index-{}.bin')
+            trace.build_insn_index(memtrace_idx)
         endianness = trace.get_endianness()
         endianness_str = get_endianness_str(endianness)
         disasm = Disasm(
@@ -240,7 +242,7 @@ class MachineTest(CommonTest):
             while True:
                 try:
                     trace.seek_insn(i)
-                except ValueError:
+                except:  # noqa: E722
                     break
                 entry = next(trace)
                 entry_str = format_entry(entry, endianness_str, disasm)
@@ -322,7 +324,7 @@ class TestCat(CommonTest):
     def test(self):
         trace = self.load_trace()
         with timeit('ud'):
-            ud = Ud.analyze(trace)
+            ud = Ud.analyze(None, trace)
         self.assertIsNotNone(ud)
         expected = self.get_input()
         cat_buf = bytearray(len(expected))
