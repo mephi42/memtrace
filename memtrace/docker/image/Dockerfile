@@ -1,8 +1,11 @@
+# https://github.com/pypa/manylinux/issues/561
+# ARG repo=quay.io/pypa
+ARG repo=mephi42
 ARG arch=x86_64
-ARG tag=2020-04-25-183680f
+ARG version=2020-05-01-1dc251d
 ARG capstone_version=4.0.1
 ARG boost_version=1_73_0
-FROM quay.io/pypa/manylinux2010_${arch}:${tag} AS base
+FROM ${repo}/manylinux2010_${arch}:${version} AS base
 
 FROM base AS boost
 ARG boost_version
@@ -24,5 +27,6 @@ RUN make
 RUN make install DESTDIR=/opt/capstone
 
 FROM base
+RUN yum install -y elfutils libgcc.i686
 COPY --from=capstone /opt/capstone/ /
 COPY --from=boost /opt/boost/ /
