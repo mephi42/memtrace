@@ -12,6 +12,7 @@ from typing import List
 import unittest
 
 from memtrace.analysis import Analysis
+import memtrace.dump
 from memtrace.format import format_entry
 import memtrace.stats as stats
 from memtrace.symbolizer import Symbolizer
@@ -155,6 +156,22 @@ class MachineTest(CommonTest):
         line = re.sub(b'(lea [^,]+, )[^ ]+ ptr ', b'\\g<1>', line)
         fp.write(line)
 
+    def filter_file(self, path):
+        rootdir_bytes = self.rootdir.encode()
+        workdir_bytes = self.workdir.name.encode()
+        done = False
+        with tempfile.NamedTemporaryFile(prefix=path, delete=False) as tmpfp:
+            try:
+                with open(path, 'rb') as fp:
+                    for line in fp:
+                        self._filter_line(
+                            tmpfp, line, rootdir_bytes, workdir_bytes)
+                os.rename(tmpfp.name, path)
+                done = True
+            finally:
+                if not done:
+                    os.unlink(tmpfp.name)
+
     def check_call_filtered(self, args, workdir, output_path):
         p = subprocess.Popen(args, stdout=subprocess.PIPE, cwd=workdir)
         try:
@@ -173,9 +190,11 @@ class MachineTest(CommonTest):
         dump_txt = f'{self.get_target()}-dump.txt'
         actual_dump_txt = os.path.join(self.workdir.name, dump_txt)
         expected_dump_txt = os.path.join(self.basedir, dump_txt)
-        args = ['python3', '-m', 'memtrace.dump']
-        sys.stderr.write('{}\n'.format(' '.join(args)))
-        self.check_call_filtered(args, self.workdir.name, actual_dump_txt)
+        memtrace.dump.main([
+            os.path.join(self.workdir.name, 'memtrace.out'),
+            f'--output={actual_dump_txt}',
+        ])
+        self.filter_file(actual_dump_txt)
         diff_files(expected_dump_txt, actual_dump_txt)
 
     def test_ud(self) -> None:

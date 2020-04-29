@@ -378,29 +378,29 @@ void HexDump(std::FILE* f, const std::uint8_t* buf, size_t n) {
   for (size_t i = 0; i < n; i++) std::fprintf(f, "%02x", buf[i]);
 }
 
-void ReprDump(const std::uint8_t* buf, size_t n) {
-  std::printf("b'");
-  for (size_t i = 0; i < n; i++) std::printf("\\x%02x", buf[i]);
-  std::printf("'");
+void ReprDump(std::FILE* f, const std::uint8_t* buf, size_t n) {
+  std::fprintf(f, "b'");
+  for (size_t i = 0; i < n; i++) std::fprintf(f, "\\x%02x", buf[i]);
+  std::fprintf(f, "'");
 }
 
 template <Endianness E>
-void ValueDump(const std::uint8_t* buf, size_t n) {
+void ValueDump(FILE* f, const std::uint8_t* buf, size_t n) {
   switch (n) {
     case 1:
-      std::printf("0x%" PRIx8, RawInt<E, std::uint8_t>(buf).GetValue());
+      std::fprintf(f, "0x%" PRIx8, RawInt<E, std::uint8_t>(buf).GetValue());
       break;
     case 2:
-      std::printf("0x%" PRIx16, RawInt<E, std::uint16_t>(buf).GetValue());
+      std::fprintf(f, "0x%" PRIx16, RawInt<E, std::uint16_t>(buf).GetValue());
       break;
     case 4:
-      std::printf("0x%" PRIx32, RawInt<E, std::uint32_t>(buf).GetValue());
+      std::fprintf(f, "0x%" PRIx32, RawInt<E, std::uint32_t>(buf).GetValue());
       break;
     case 8:
-      std::printf("0x%" PRIx64, RawInt<E, std::uint64_t>(buf).GetValue());
+      std::fprintf(f, "0x%" PRIx64, RawInt<E, std::uint64_t>(buf).GetValue());
       break;
     default:
-      ReprDump(buf, n);
+      ReprDump(f, buf, n);
       break;
   }
 }
@@ -794,74 +794,75 @@ class Trace;
 template <Endianness E, typename W>
 class Dumper {
  public:
-  explicit Dumper(Trace<E, W>* /* trace */) : insnCount_(0) {}
+  explicit Dumper(std::FILE* f) : f_(f), insnCount_(0) {}
 
   int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
-    std::printf("Endian            : %s\n", GetEndiannessStrPy(E));
-    std::printf("Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
-    std::printf("Word size         : %zu\n", sizeof(W));
-    std::printf("Machine           : %s\n",
-                GetMachineTypeStr(entry.GetMachineType()));
-    std::printf("Regs size         : %d\n", entry.GetRegsSize());
+    std::fprintf(f_, "Endian            : %s\n", GetEndiannessStrPy(E));
+    std::fprintf(f_, "Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
+    std::fprintf(f_, "Word size         : %zu\n", sizeof(W));
+    std::fprintf(f_, "Machine           : %s\n",
+                 GetMachineTypeStr(entry.GetMachineType()));
+    std::fprintf(f_, "Regs size         : %d\n", entry.GetRegsSize());
     return disasmEngine_.Init(entry.GetMachineType(), E, sizeof(W));
   }
 
   int operator()(size_t i, LdStEntry<E, W> entry) {
-    std::printf("[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "] ", i,
-                entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
-                static_cast<size_t>(entry.GetSize() * 8),
-                static_cast<std::uint64_t>(entry.GetAddr()));
-    ValueDump<E>(entry.GetValue(), entry.GetSize());
-    std::printf("\n");
+    std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "] ",
+                 i, entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
+                 static_cast<size_t>(entry.GetSize() * 8),
+                 static_cast<std::uint64_t>(entry.GetAddr()));
+    ValueDump<E>(f_, entry.GetValue(), entry.GetSize());
+    std::fprintf(f_, "\n");
     return 0;
   }
 
   int operator()(size_t i, InsnEntry<E, W> entry) {
-    std::printf("[%10zu] 0x%08" PRIx32 ": %s 0x%016" PRIx64 " ", i,
-                entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
-                static_cast<std::uint64_t>(entry.GetPc()));
-    HexDump(stdout, entry.GetValue(), entry.GetSize());
+    std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s 0x%016" PRIx64 " ", i,
+                 entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
+                 static_cast<std::uint64_t>(entry.GetPc()));
+    HexDump(f_, entry.GetValue(), entry.GetSize());
     std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
         entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
     if (insn)
-      std::printf(" %s %s\n", insn->mnemonic, insn->op_str);
+      std::fprintf(f_, " %s %s\n", insn->mnemonic, insn->op_str);
     else
-      std::printf(" <unknown>\n");
+      std::fprintf(f_, " <unknown>\n");
     return 0;
   }
 
   int operator()(size_t i, InsnExecEntry<E, W> entry) {
-    std::printf("[%10zu] 0x%08" PRIx32 ": %s\n", i, entry.GetInsnSeq(),
-                GetTagStr(entry.GetTlv().GetTag()));
+    std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s\n", i, entry.GetInsnSeq(),
+                 GetTagStr(entry.GetTlv().GetTag()));
     insnCount_++;
     return 0;
   }
 
   int operator()(size_t i, LdStNxEntry<E, W> entry) {
-    std::printf("[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "]\n", i,
-                entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
-                static_cast<size_t>(entry.GetSize() * 8),
-                static_cast<std::uint64_t>(entry.GetAddr()));
+    std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "]\n",
+                 i, entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
+                 static_cast<size_t>(entry.GetSize() * 8),
+                 static_cast<std::uint64_t>(entry.GetAddr()));
     return 0;
   }
 
   int operator()(size_t i, MmapEntry<E, W> entry) {
-    std::printf("[%10zu] %s %016" PRIx64 "-%016" PRIx64 " %c%c%c %s\n", i,
-                GetTagStr(entry.GetTlv().GetTag()),
-                static_cast<std::uint64_t>(entry.GetStart()),
-                static_cast<std::uint64_t>(entry.GetEnd() + 1),
-                entry.GetFlags() & 1 ? 'r' : '-',
-                entry.GetFlags() & 2 ? 'w' : '-',
-                entry.GetFlags() & 4 ? 'x' : '-', entry.GetValue());
+    std::fprintf(f_, "[%10zu] %s %016" PRIx64 "-%016" PRIx64 " %c%c%c %s\n", i,
+                 GetTagStr(entry.GetTlv().GetTag()),
+                 static_cast<std::uint64_t>(entry.GetStart()),
+                 static_cast<std::uint64_t>(entry.GetEnd() + 1),
+                 entry.GetFlags() & 1 ? 'r' : '-',
+                 entry.GetFlags() & 2 ? 'w' : '-',
+                 entry.GetFlags() & 4 ? 'x' : '-', entry.GetValue());
     return 0;
   }
 
   int Complete() {
-    std::printf("Insns             : %zu\n", insnCount_);
+    std::fprintf(f_, "Insns             : %zu\n", insnCount_);
     return 0;
   }
 
  private:
+  FILE* f_;
   size_t insnCount_;
   Disasm disasmEngine_;
 };
@@ -1032,6 +1033,7 @@ class TraceBase {
   virtual int BuildInsnIndex(const char* path, size_t stepShift) = 0;
   virtual int LoadInsnIndex(const char* path) = 0;
   virtual boost::python::list GetMmapEntries() = 0;
+  virtual int Dump(const char* path, size_t start, size_t end) = 0;
 };
 
 template <typename W>
@@ -1131,12 +1133,6 @@ class Trace : public TraceBase {
   int InitVisitor(V* visitor) {
     // On average, one executed instruction takes 132.7 bytes in the trace file.
     return visitor->Init(header_, length_ / 128);
-  }
-
-  template <template <Endianness, typename> typename V, typename... Args>
-  int Visit(size_t start, size_t end, Args&&... args) {
-    V<E, W> visitor(this, std::forward<Args>(args)...);
-    return Visit(&visitor, start, end);
   }
 
   template <typename V>
@@ -1334,6 +1330,20 @@ class Trace : public TraceBase {
     return visitor.mmapEntries;
   }
 
+  int Dump(const char* path, size_t start, size_t end) override {
+    FILE* f;
+    if (path == nullptr) {
+      f = stdout;
+    } else {
+      f = fopen(path, "w");
+      if (f == nullptr) return -errno;
+    }
+    Dumper<E, W> dumper(f);
+    int err = Visit(&dumper, start, end);
+    if (path != nullptr) fclose(f);
+    return err;
+  }
+
  private:
   bool Have(size_t n) const { return cur_ + n <= end_; }
 
@@ -1390,8 +1400,8 @@ int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
 template <typename V>
 int TraceBase::Visit(const char* path, const V& v) {
   int err;
-  std::uint8_t* data;
-  size_t length;
+  std::uint8_t* data = nullptr;
+  size_t length = 0;
   if ((err = MmapFile(path, 2, &data, &length)) < 0) return err;
   if (data == MAP_FAILED) return -ENOMEM;
   switch (data[0] << 8 | data[1]) {
@@ -1411,15 +1421,6 @@ int TraceBase::Visit(const char* path, const V& v) {
       munmap(data, length);
       return -EINVAL;
   }
-}
-
-template <template <Endianness, typename> typename V, typename... Args>
-int VisitFile(const char* path, size_t start, size_t end, Args&&... args) {
-  return TraceBase::Visit(path, [start, end, &args...](auto trace) {
-    int err = trace->template Visit<V>(start, end, std::forward<Args>(args)...);
-    delete trace;
-    return err;
-  });
 }
 
 TraceBase* TraceBase::Load(const char* path) {
@@ -1462,10 +1463,6 @@ void TraceBase::Downcast(const V& v) {
       __builtin_unreachable();
   }
 }  // namespace
-
-int DumpFile(const char* path, size_t start, size_t end) {
-  return VisitFile<Dumper>(path, start, end);
-}
 
 template <typename W>
 struct Def {};
@@ -2530,7 +2527,6 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
   RegisterEntries<Endianness::Little, std::uint64_t>();
   RegisterEntries<Endianness::Big, std::uint32_t>();
   RegisterEntries<Endianness::Big, std::uint64_t>();
-  bp::def("dump_file", DumpFile);
   bp::class_<TagStats>("TagStats", bp::no_init)
       .def_readonly("count", &TagStats::count)
       .def_readonly("size", &TagStats::size);
@@ -2552,7 +2548,8 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("gather_stats", &TraceBase::GatherStats)
       .def("build_insn_index", &TraceBase::BuildInsnIndex)
       .def("load_insn_index", &TraceBase::LoadInsnIndex)
-      .def("get_mmap_entries", &TraceBase::GetMmapEntries);
+      .def("get_mmap_entries", &TraceBase::GetMmapEntries)
+      .def("dump", &TraceBase::Dump);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
   bp::class_<std::vector<std::uint32_t>>("std::vector<std::uint32_t>")
