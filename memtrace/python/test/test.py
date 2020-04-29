@@ -18,6 +18,7 @@ import memtrace.stats as stats
 from memtrace.symbolizer import Symbolizer
 from memtrace.taint import BackwardAnalysis
 from memtrace.trace import Trace
+import memtrace.ud
 from memtrace.ud import Ud
 from memtrace_ext import Disasm, get_endianness_str, Tag
 
@@ -172,20 +173,6 @@ class MachineTest(CommonTest):
                 if not done:
                     os.unlink(tmpfp.name)
 
-    def check_call_filtered(self, args, workdir, output_path):
-        p = subprocess.Popen(args, stdout=subprocess.PIPE, cwd=workdir)
-        try:
-            with open(output_path, 'wb') as fp:
-                rootdir_bytes = self.rootdir.encode()
-                workdir_bytes = workdir.encode()
-                for line in p.stdout:
-                    self._filter_line(fp, line, rootdir_bytes, workdir_bytes)
-        finally:
-            p.stdout.close()
-            returncode = p.wait()
-            if returncode != 0:
-                raise subprocess.CalledProcessError(returncode, args)
-
     def test_dump(self) -> None:
         dump_txt = f'{self.get_target()}-dump.txt'
         actual_dump_txt = os.path.join(self.workdir.name, dump_txt)
@@ -201,9 +188,11 @@ class MachineTest(CommonTest):
         ud_txt = f'{self.get_target()}-ud.txt'
         actual_ud_txt = os.path.join(self.workdir.name, ud_txt)
         expected_ud_txt = os.path.join(self.basedir, ud_txt)
-        args = ['python3', '-m', 'memtrace.ud', '--verbose']
-        sys.stderr.write('{}\n'.format(' '.join(args)))
-        self.check_call_filtered(args, self.workdir.name, actual_ud_txt)
+        memtrace.ud.main([
+            os.path.join(self.workdir.name, 'memtrace.out'),
+            f'--log={actual_ud_txt}',
+        ])
+        self.filter_file(actual_ud_txt)
         diff_files(expected_ud_txt, actual_ud_txt)
 
     def test_trace(self) -> None:

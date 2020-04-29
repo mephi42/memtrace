@@ -18,7 +18,7 @@ class Analysis:
             trace_path: str,
             index_path: Optional[str] = None,
             ud_path: Optional[str] = None,
-            ud_verbose: bool = False,
+            ud_log: Optional[str] = None,
     ):
         trace = Trace.load(trace_path)
         if index_path is None:
@@ -31,7 +31,7 @@ class Analysis:
             trace.load_insn_index(index_path)
         if (ud_path is None or
                 not os.path.exists(ud_path.replace('{}', 'header'))):
-            ud = Ud.analyze(ud_path, trace, ud_verbose)
+            ud = Ud.analyze(ud_path, trace, ud_log)
         else:
             ud = Ud.load(ud_path, trace)
         self.trace = trace
