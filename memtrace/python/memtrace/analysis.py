@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import argparse
+from collections import defaultdict
 import os
 import sys
 import tempfile
 from typing import Iterable, Optional
 
 from memtrace.format import format_entry
+from memtrace.interval_tree import IntervalTree
 from memtrace.symbolizer import Symbolizer
 from memtrace.trace import Trace, TraceFilter
 from memtrace.ud import Ud
@@ -30,7 +32,8 @@ class Analysis:
         self.trace = Trace.load(trace_path)
         if (first_entry_index is not None or
                 last_entry_index is not None or
-                tags is not None):
+                tags is not None or
+                insn_seqs is not None):
             filter = TraceFilter()
             if first_entry_index is not None:
                 filter.first_entry_index = first_entry_index
@@ -101,6 +104,12 @@ class Analysis:
     def get_last_trace_for_pc(self, pc):
         return max(self.get_traces_for_pc(pc))
 
+    def pp_code(self, code_index: int) -> str:
+        pc = self.ud.get_pc_for_code(code_index)
+        disasm_str = self.ud.get_disasm_for_code(code_index)
+        symbolized_pc = self.symbolizer.symbolize(pc)
+        return f'0x{pc:016x} {disasm_str} {symbolized_pc}'
+
 
 def int_any_base(x):
     return int(x, 0)
@@ -132,6 +141,9 @@ if __name__ == '__main__':
     subparser = subparsers.add_parser('dump-entries')
     subparser.add_argument('--start-trace', type=int_any_base, default=0)
     subparser.add_argument('--count', type=int_any_base, default=10)
+
+    subparser = subparsers.add_parser('ldst')
+    subparser.add_argument('pc_range', nargs='+')
 
     args = parser.parse_args()
     with Analysis(
@@ -176,3 +188,39 @@ if __name__ == '__main__':
                         entry.insn_seq)
                     entry_str = f'{entry_str} 0x{pc:016x}: {disasm_str}'
                 print(entry_str)
+        if args.subparser_name == 'ldst':
+            pc_ranges = [
+                (analysis.symbolizer.resolve(start_addr),
+                 analysis.symbolizer.resolve(end_addr))
+                for pc_range in args.pc_range
+                for start_addr, end_addr in (pc_range.split('-'),)
+            ]
+            filter = TraceFilter()
+            filter.tags = (Tag.MT_LOAD, Tag.MT_STORE)
+            filter.insn_seqs = analysis.ud.get_codes_for_pc_ranges(pc_ranges)
+            analysis.trace.set_filter(filter)
+
+            def merge(list_of_insn_seq2index2entry):
+                result = defaultdict(dict)
+                for insn_seq2index2entry in list_of_insn_seq2index2entry:
+                    for insn_seq, index2entry in insn_seq2index2entry.items():
+                        for index, entry in index2entry.items():
+                            result[insn_seq][index] = entry
+                return result
+
+            mem = IntervalTree(merge=merge)
+            for entry in analysis.trace:
+                start = entry.addr
+                end = entry.addr + len(entry.value)
+                entries = mem[start:end]
+                entries[entry.insn_seq][entry.index] = entry
+                mem[start:end] = entries
+            for node in mem:
+                print(f'* 0x{node.start:x}-0x{node.end:x}')
+                for insn_seq, index2entry in node.value.items():
+                    disasm_str = analysis.pp_code(insn_seq)
+                    print(f'*** {disasm_str}')
+                    for entry in index2entry.values():
+                        entry_str = format_entry(
+                            entry, analysis.endianness_str, analysis.disasm)
+                        print(f'***** {entry_str}')

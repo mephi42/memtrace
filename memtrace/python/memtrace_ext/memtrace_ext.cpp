@@ -928,6 +928,8 @@ Entry<E, W, EntryPyEW<E, W>>* CreateEntryPy(size_t index,
 }
 
 struct TraceEntry2Py {
+  TraceEntry2Py() : py(nullptr) {}
+
   template <typename Entry>
   int operator()(size_t index, Entry entry) {
     py = CreateEntryPy(index, entry);
@@ -1084,6 +1086,13 @@ class TraceBase {
 
 template <typename W>
 struct Range {
+  Range() {}
+  Range(W startAddr, W endAddr) : startAddr(startAddr), endAddr(endAddr) {}
+
+  bool operator==(const Range& rhs) const {
+    return startAddr == rhs.startAddr && endAddr == rhs.endAddr;
+  }
+
   W startAddr;
   W endAddr;
 };
@@ -1259,11 +1268,14 @@ class Trace : public TraceBase {
   std::uint16_t GetRegsSize() override { return header_.GetRegsSize(); }
 
   boost::python::object Next() override {
-    if (cur_ == end_) boost::python::objects::stop_iteration_error();
-    TraceEntry2Py visitor;
-    int err = VisitOne(&visitor);
-    if (err < 0) throw std::runtime_error("Failed to parse the next entry");
-    return boost::python::object(boost::python::ptr(visitor.py));
+    while (true) {
+      if (cur_ == end_) boost::python::objects::stop_iteration_error();
+      TraceEntry2Py visitor;
+      int err = VisitOne(&visitor);
+      if (err < 0) throw std::runtime_error("Failed to parse the next entry");
+      if (visitor.py != nullptr)
+        return boost::python::object(boost::python::ptr(visitor.py));
+    }
   }
 
   [[nodiscard]] int SeekInsn(std::uint32_t index) override {
@@ -1971,7 +1983,8 @@ class UdBase {
 
   virtual ~UdBase() = default;
   [[nodiscard]] virtual int Init(const BinaryHeader& header) = 0;
-  virtual std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const = 0;
+  virtual std::vector<std::uint32_t> GetCodesForPcRanges(
+      const std::vector<Range<std::uint64_t>>& pcRanges) const = 0;
   virtual std::uint64_t GetPcForCode(std::uint32_t code) const = 0;
   virtual std::string GetDisasmForCode(std::uint32_t code) const = 0;
   virtual std::vector<std::uint32_t> GetTracesForCode(
@@ -2124,12 +2137,19 @@ class Ud : public UdBase {
     return 0;
   }
 
-  std::vector<std::uint32_t> GetCodesForPc(std::uint64_t pc) const override {
+  std::vector<std::uint32_t> GetCodesForPcRanges(
+      const std::vector<Range<std::uint64_t>>& pcRanges) const override {
     std::vector<std::uint32_t> codes;
     for (std::uint32_t code = 0,
                        size = static_cast<std::uint32_t>(code_.size());
          code < size; code++)
-      if (code_[code].pc == pc) codes.push_back(code);
+      for (const Range<std::uint64_t>& pcRange : pcRanges) {
+        std::uint64_t pc = code_[code].pc;
+        if (pc >= pcRange.startAddr && pc <= pcRange.endAddr) {
+          codes.push_back(code);
+          break;
+        }
+      }
     return codes;
   }
 
@@ -2641,13 +2661,19 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("set_filter", &TraceBase::SetFilter);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
+  bp::class_<Range<std::uint64_t>>("Range",
+                                   bp::init<std::uint64_t, std::uint64_t>())
+      .def_readonly("start_addr", &Range<std::uint64_t>::startAddr)
+      .def_readonly("end_addr", &Range<std::uint64_t>::endAddr);
+  bp::class_<std::vector<Range<std::uint64_t>>>("VectorOfRanges")
+      .def(bp::vector_indexing_suite<std::vector<Range<std::uint64_t>>>());
   bp::class_<UdBase, boost::noncopyable>("_Ud", bp::no_init)
       .def("analyze", &UdBase::Analyze,
            bp::return_value_policy<bp::manage_new_object>())
       .def("load", &UdBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
       .staticmethod("load")
-      .def("get_codes_for_pc", &UdBase::GetCodesForPc)
+      .def("get_codes_for_pc_ranges", &UdBase::GetCodesForPcRanges)
       .def("get_pc_for_code", &UdBase::GetPcForCode)
       .def("get_disasm_for_code", &UdBase::GetDisasmForCode)
       .def("get_traces_for_code", &UdBase::GetTracesForCode)

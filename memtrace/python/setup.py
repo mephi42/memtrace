@@ -34,6 +34,7 @@ setuptools.setup(
         )
     ],
     install_requires=[
-        'dataclasses',
+        'dataclasses; python_version < \'3.7\'',
+        'sortedcontainers',
     ],
 )

@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from memtrace.native import wrap_err
 from memtrace_ext import _Trace, _TraceFilter, VectorOfU32s, Tag
@@ -12,7 +12,7 @@ class TraceFilter:
         return getattr(self.native, name)
 
     @property
-    def tags(self):
+    def tags(self) -> Iterable[Tag]:
         tags = []
         mask = self.native.tag_mask
         for i in range(int(Tag.MT_LAST) - int(Tag.MT_FIRST)):
@@ -21,7 +21,7 @@ class TraceFilter:
         return tags
 
     @tags.setter
-    def tags(self, tags):
+    def tags(self, tags: Iterable[Tag]):
         mask = 0
         for tag in tags:
             mask |= 1 << (int(tag) - int(Tag.MT_FIRST))

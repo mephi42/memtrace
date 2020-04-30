@@ -3,7 +3,7 @@ import argparse
 import os
 import sys
 import tempfile
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from memtrace.trace import Trace
 import memtrace_ext
@@ -39,6 +39,18 @@ class Ud:
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.native, name)
+
+    def get_codes_for_pc_ranges(
+            self, pc_ranges: List[Tuple[int, int]]) -> List[int]:
+        native_pc_ranges = memtrace_ext.VectorOfRanges()
+        native_pc_ranges.extend(
+            memtrace_ext.Range(start_addr, end_addr)
+            for start_addr, end_addr in pc_ranges
+        )
+        return self.native.get_codes_for_pc_ranges(native_pc_ranges)
+
+    def get_codes_for_pc(self, pc: int) -> List[int]:
+        return self.get_codes_for_pc_ranges([(pc, pc)])
 
 
 def main(argv: List[str]) -> None:

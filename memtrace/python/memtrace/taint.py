@@ -45,10 +45,7 @@ class BackwardNode:
                 edge = entry.edge
                 node = edge.dst
                 code_index = analysis.ud.get_code_for_trace(node.trace_index)
-                pc = analysis.ud.get_pc_for_code(code_index)
-                disasm_str = analysis.ud.get_disasm_for_code(code_index)
-                symbolized_pc = analysis.symbolizer.symbolize(pc)
-                disasm_str = f'{disasm_str} {symbolized_pc}'
+                disasm_str = analysis.pp_code(code_index)
                 is_seen = node.trace_index in seen
                 if is_seen:
                     prefix, suffix = '[[', ']]'
@@ -56,7 +53,7 @@ class BackwardNode:
                     prefix, suffix = '<<', '>>'
                 fp.write(
                     f'{indent} {prefix}InsnInTrace:{node.trace_index}'
-                    f'{suffix} 0x{pc:016x} {disasm_str}\n'
+                    f'{suffix} {disasm_str}\n'
                 )
                 for trace_entry in edge.reg:
                     entry_str = format_entry(
