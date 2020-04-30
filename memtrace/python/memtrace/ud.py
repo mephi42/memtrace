@@ -61,6 +61,7 @@ def main(argv: List[str]) -> None:
     from memtrace.analysis import Analysis
     analysis = Analysis(
         args.memtrace_out, memtrace_idx, args.binary, args.log)
+    analysis.ud
     try:
         if args.dot is not None:
             analysis.ud.dump_dot(args.dot)
@@ -73,4 +74,4 @@ def main(argv: List[str]) -> None:
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main(sys.argv[1:])

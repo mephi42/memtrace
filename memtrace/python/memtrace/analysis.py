@@ -9,7 +9,7 @@ from memtrace.format import format_entry
 from memtrace.symbolizer import Symbolizer
 from memtrace.trace import Trace
 from memtrace.ud import Ud
-from memtrace_ext import Disasm, get_endianness_str, Tag
+from memtrace_ext import Disasm, get_endianness_str, Tag, TraceFilter
 
 
 class Analysis:
@@ -19,34 +19,65 @@ class Analysis:
             index_path: Optional[str] = None,
             ud_path: Optional[str] = None,
             ud_log: Optional[str] = None,
+            first_entry_index: Optional[int] = None,
+            last_entry_index: Optional[int] = None,
     ):
-        trace = Trace.load(trace_path)
-        if index_path is None:
+        self.index_path = index_path
+        self.ud_path = ud_path
+        self.ud_log = ud_log
+        self.trace = Trace.load(trace_path)
+        if first_entry_index is not None or last_entry_index is not None:
+            filter = TraceFilter()
+            if first_entry_index is not None:
+                filter.first_entry_index = first_entry_index
+            if last_entry_index is not None:
+                filter.last_entry_index = last_entry_index
+            self.trace.set_filter(filter)
+        self._ud: Optional[Ud] = None
+        self.endianness_str = get_endianness_str(self.trace.get_endianness())
+        self._disasm: Optional[Disasm] = None
+        self._symbolizer: Optional[Symbolizer] = None
+
+    def _init_insn_index(self):
+        if self.index_path is None:
             with tempfile.TemporaryDirectory() as tmpdir:
                 index_path = os.path.join(tmpdir, '{}.bin')
-                trace.build_insn_index(index_path)
-        elif not os.path.exists(index_path.replace('{}', 'header')):
-            trace.build_insn_index(index_path)
+                self.trace.build_insn_index(index_path)
+        elif not os.path.exists(self.index_path.replace('{}', 'header')):
+            self.trace.build_insn_index(self.index_path)
         else:
-            trace.load_insn_index(index_path)
-        if (ud_path is None or
-                not os.path.exists(ud_path.replace('{}', 'header'))):
-            ud = Ud.analyze(ud_path, trace, ud_log)
-        else:
-            ud = Ud.load(ud_path, trace)
-        self.trace = trace
-        self.ud = ud
-        endianness = self.trace.get_endianness()
-        self.endianness_str = get_endianness_str(endianness)
-        self.disasm = Disasm(
-            self.trace.get_machine_type(),
-            endianness,
-            self.trace.get_word_size(),
-        )
-        self.symbolizer = Symbolizer(self.trace.get_mmap_entries())
+            self.trace.load_insn_index(self.index_path)
+
+    @property
+    def ud(self) -> Ud:
+        if self._ud is None:
+            self._init_insn_index()
+            if (self.ud_path is None or
+                    not os.path.exists(self.ud_path.replace('{}', 'header'))):
+                self._ud = Ud.analyze(self.ud_path, self.trace, self.ud_log)
+            else:
+                self._ud = Ud.load(self.ud_path, self.trace)
+        return self._ud
+
+    @property
+    def disasm(self) -> Disasm:
+        if self._disasm is None:
+            self._disasm = Disasm(
+                self.trace.get_machine_type(),
+                self.trace.get_endianness(),
+                self.trace.get_word_size(),
+            )
+        return self._disasm
+
+    @property
+    def symbolizer(self) -> Symbolizer:
+        if self._symbolizer is None:
+            self._symbolizer = Symbolizer(self.trace.get_mmap_entries())
+        return self._symbolizer
 
     def close(self):
-        self.symbolizer.close()
+        if self._symbolizer is not None:
+            self._symbolizer.close()
 
     def __enter__(self):
         return self

@@ -37,5 +37,5 @@ class Trace:
         pass
 
     @wrap_err
-    def dump(self, output: Optional[str], start: int, end: int) -> None:
+    def dump(self, output: Optional[str]) -> None:
         pass
