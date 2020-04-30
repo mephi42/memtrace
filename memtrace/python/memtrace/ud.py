@@ -45,8 +45,8 @@ def main(argv: List[str]) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
     parser.add_argument('memtrace_idx', nargs='?')
-    parser.add_argument('--start', default=0, type=int)
-    parser.add_argument('--end', default=9999999999, type=int)
+    parser.add_argument('--start', type=int)
+    parser.add_argument('--end', type=int)
     parser.add_argument('--dot')
     parser.add_argument('--html')
     parser.add_argument('--csv')
@@ -60,15 +60,21 @@ def main(argv: List[str]) -> None:
         memtrace_idx = args.memtrace_idx
     from memtrace.analysis import Analysis
     analysis = Analysis(
-        args.memtrace_out, memtrace_idx, args.binary, args.log)
-    analysis.ud
+        args.memtrace_out,
+        memtrace_idx,
+        args.binary,
+        args.log,
+        first_entry_index=args.start,
+        last_entry_index=args.end,
+    )
+    ud = analysis.ud
     try:
         if args.dot is not None:
-            analysis.ud.dump_dot(args.dot)
+            ud.dump_dot(args.dot)
         if args.html is not None:
-            analysis.ud.dump_dot(args.html)
+            ud.dump_dot(args.html)
         if args.csv is not None:
-            analysis.ud.dump_csv(args.csv)
+            ud.dump_csv(args.csv)
     finally:
         analysis.close()
 

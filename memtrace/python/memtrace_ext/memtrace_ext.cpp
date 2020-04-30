@@ -19,6 +19,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -48,6 +49,9 @@ enum class Tag {
   MT_GET_REG_NX = 0x4d48,
   MT_PUT_REG_NX = 0x4d49,
   MT_MMAP = 0x4d50,
+
+  MT_LAST,
+  MT_FIRST = MT_LOAD,
 };
 
 const char* GetTagStr(Tag tag) {
@@ -1018,18 +1022,43 @@ struct InsnIndexEntry {
 struct TraceFilter {
   TraceFilter()
       : firstEntryIndex(std::numeric_limits<size_t>::min()),
-        lastEntryIndex(std::numeric_limits<size_t>::max()) {}
+        lastEntryIndex(std::numeric_limits<size_t>::max()),
+        tagMask(static_cast<std::uint32_t>(-1)) {}
 
   bool isEntryIndexOk(size_t entryIndex) const {
     return entryIndex >= firstEntryIndex && entryIndex <= lastEntryIndex;
   }
 
+  bool isTagOk(Tag tag) const {
+    return tagMask & (1 << (static_cast<std::uint16_t>(tag) -
+                            static_cast<std::uint16_t>(Tag::MT_FIRST)));
+  }
+
+  std::vector<std::uint32_t> GetInsnSeqs() const {
+    return std::vector<std::uint32_t>(insnSeqs.begin(), insnSeqs.end());
+  }
+
+  void SetInsnSeqs(const std::vector<std::uint32_t>& insnSeqs) {
+    this->insnSeqs = std::set<std::uint32_t>(insnSeqs.begin(), insnSeqs.end());
+  }
+
+  bool isMissingInsnSeqOk() const { return insnSeqs.empty(); }
+
+  bool isInsnSeqOk(std::uint32_t insnSeq) const {
+    return insnSeqs.empty() || insnSeqs.find(insnSeq) != insnSeqs.end();
+  }
+
   size_t firstEntryIndex;
   size_t lastEntryIndex;
+  std::uint32_t tagMask;
+  std::set<std::uint32_t> insnSeqs;
 };
 
 struct TraceFilterNoOp {
   bool isEntryIndexOk(size_t /* entryIndex */) const { return true; }
+  bool isTagOk(Tag /* tag */) const { return true; }
+  bool isMissingInsnSeqOk() const { return true; }
+  bool isInsnSeqOk(std::uint32_t /* insnSeq */) const { return true; }
 };
 
 class TraceBase {
@@ -1166,32 +1195,47 @@ class Trace : public TraceBase {
     if (!Have(tlv.GetAlignedLength())) return -EINVAL;
     if (filter.isEntryIndexOk(entryIndex_)) {
       Tag tag = tlv.GetTag();
-      int err = -EINVAL;
-      switch (tag) {
-        case Tag::MT_LOAD:
-        case Tag::MT_STORE:
-        case Tag::MT_REG:
-        case Tag::MT_GET_REG:
-        case Tag::MT_PUT_REG:
-          err = (*visitor)(entryIndex_, LdStEntry<E, W>(cur_));
-          break;
-        case Tag::MT_INSN:
-          err = (*visitor)(entryIndex_, InsnEntry<E, W>(cur_));
-          break;
-        case Tag::MT_INSN_EXEC:
-          err = (*visitor)(entryIndex_, InsnExecEntry<E, W>(cur_));
-          break;
-        case Tag::MT_GET_REG_NX:
-        case Tag::MT_PUT_REG_NX:
-          err = (*visitor)(entryIndex_, LdStNxEntry<E, W>(cur_));
-          break;
-        case Tag::MT_MMAP:
-          err = (*visitor)(entryIndex_, MmapEntry<E, W>(cur_));
-          break;
-        default:
-          return -EINVAL;
+      if (filter.isTagOk(tag)) {
+        int err = 0;
+        switch (tag) {
+          case Tag::MT_LOAD:
+          case Tag::MT_STORE:
+          case Tag::MT_REG:
+          case Tag::MT_GET_REG:
+          case Tag::MT_PUT_REG: {
+            LdStEntry<E, W> entry(cur_);
+            if (filter.isInsnSeqOk(entry.GetInsnSeq()))
+              err = (*visitor)(entryIndex_, entry);
+            break;
+          }
+          case Tag::MT_INSN: {
+            InsnEntry<E, W> entry(cur_);
+            if (filter.isInsnSeqOk(entry.GetInsnSeq()))
+              err = (*visitor)(entryIndex_, entry);
+            break;
+          }
+          case Tag::MT_INSN_EXEC: {
+            InsnExecEntry<E, W> entry(cur_);
+            if (filter.isInsnSeqOk(entry.GetInsnSeq()))
+              err = (*visitor)(entryIndex_, entry);
+            break;
+          }
+          case Tag::MT_GET_REG_NX:
+          case Tag::MT_PUT_REG_NX: {
+            LdStNxEntry<E, W> entry(cur_);
+            if (filter.isInsnSeqOk(entry.GetInsnSeq()))
+              err = (*visitor)(entryIndex_, entry);
+            break;
+          }
+          case Tag::MT_MMAP:
+            if (filter.isMissingInsnSeqOk())
+              err = (*visitor)(entryIndex_, MmapEntry<E, W>(cur_));
+            break;
+          default:
+            return -EINVAL;
+        }
+        if (err < 0) return err;
       }
-      if (err < 0) return err;
     }
     if (!Advance(tlv.GetAlignedLength())) return -EINVAL;
     entryIndex_++;
@@ -2531,6 +2575,8 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .value("Big", Endianness::Big);
   bp::def("get_endianness_str", GetEndiannessStrPy);
   bp::enum_<Tag>("Tag")
+      .value("MT_FIRST", Tag::MT_FIRST)
+      .value("MT_LAST", Tag::MT_LAST)
       .value("MT_HEADER32", Tag::MT_HEADER32)
       .value("MT_HEADER64", Tag::MT_HEADER64)
       .value("MT_LOAD", Tag::MT_LOAD)
@@ -2567,9 +2613,15 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def(bp::map_indexing_suite<std::map<Tag, TagStats>>());
   bp::class_<Stats>("Stats", bp::no_init)
       .def_readonly("tag_stats", &Stats::tagStats);
-  bp::class_<TraceFilter>("TraceFilter", bp::init())
+  bp::class_<std::vector<std::uint32_t>>("VectorOfU32s")
+      .def(bp::vector_indexing_suite<std::vector<std::uint32_t>>());
+  bp::class_<TraceFilter>("_TraceFilter", bp::init())
       .def_readwrite("first_entry_index", &TraceFilter::firstEntryIndex)
-      .def_readwrite("last_entry_index", &TraceFilter::lastEntryIndex);
+      .def_readwrite("last_entry_index", &TraceFilter::lastEntryIndex)
+      .def_readwrite("tag_mask", &TraceFilter::tagMask)
+      /* There is no set_indexing_suite, so use vectors in the interface. */
+      .add_property("insn_seqs", &TraceFilter::GetInsnSeqs,
+                    &TraceFilter::SetInsnSeqs);
   bp::class_<TraceBase, boost::noncopyable>("_Trace", bp::no_init)
       .def("load", &TraceBase::Load,
            bp::return_value_policy<bp::manage_new_object>())
@@ -2589,8 +2641,6 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def("set_filter", &TraceBase::SetFilter);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
-  bp::class_<std::vector<std::uint32_t>>("std::vector<std::uint32_t>")
-      .def(bp::vector_indexing_suite<std::vector<std::uint32_t>>());
   bp::class_<UdBase, boost::noncopyable>("_Ud", bp::no_init)
       .def("analyze", &UdBase::Analyze,
            bp::return_value_policy<bp::manage_new_object>())

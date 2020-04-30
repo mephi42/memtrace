@@ -1,18 +1,52 @@
 from typing import Any, Optional
 
 from memtrace.native import wrap_err
-import memtrace_ext
+from memtrace_ext import _Trace, _TraceFilter, VectorOfU32s, Tag
+
+
+class TraceFilter:
+    def __init__(self):
+        self.native = _TraceFilter()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.native, name)
+
+    @property
+    def tags(self):
+        tags = []
+        mask = self.native.tag_mask
+        for i in range(int(Tag.MT_LAST) - int(Tag.MT_FIRST)):
+            if mask & (1 << i):
+                tags.append(Tag.values[(int(Tag.MT_FIRST) + i)])
+        return tags
+
+    @tags.setter
+    def tags(self, tags):
+        mask = 0
+        for tag in tags:
+            mask |= 1 << (int(tag) - int(Tag.MT_FIRST))
+        self.native.tag_mask = mask
+
+    @property
+    def insn_seqs(self):
+        return self.native.insn_seqs
+
+    @insn_seqs.setter
+    def insn_seqs(self, insn_seqs):
+        native_insn_seqs = VectorOfU32s()
+        native_insn_seqs.extend(insn_seqs)
+        self.native.insn_seqs = native_insn_seqs
 
 
 class Trace:
     @staticmethod
     def load(path: str) -> 'Trace':
-        native = memtrace_ext._Trace.load(path)
+        native = _Trace.load(path)
         if native is None:
             raise Exception('_Trace.load() failed')
         return Trace(native)
 
-    def __init__(self, native: memtrace_ext._Trace):
+    def __init__(self, native: _Trace):
         self.native = native
 
     def __getattr__(self, name: str) -> Any:
@@ -39,3 +73,9 @@ class Trace:
     @wrap_err
     def dump(self, output: Optional[str]) -> None:
         pass
+
+    def set_filter(self, filter: Optional[TraceFilter]) -> None:
+        if filter is None:
+            self.native.set_filter(None)
+        else:
+            self.native.set_filter(filter.native)

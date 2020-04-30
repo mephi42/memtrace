@@ -3,13 +3,13 @@ import argparse
 import os
 import sys
 import tempfile
-from typing import Optional
+from typing import Iterable, Optional
 
 from memtrace.format import format_entry
 from memtrace.symbolizer import Symbolizer
-from memtrace.trace import Trace
+from memtrace.trace import Trace, TraceFilter
 from memtrace.ud import Ud
-from memtrace_ext import Disasm, get_endianness_str, Tag, TraceFilter
+from memtrace_ext import Disasm, get_endianness_str, Tag
 
 
 class Analysis:
@@ -21,17 +21,25 @@ class Analysis:
             ud_log: Optional[str] = None,
             first_entry_index: Optional[int] = None,
             last_entry_index: Optional[int] = None,
+            tags: Optional[Iterable[Tag]] = None,
+            insn_seqs: Optional[Iterable[int]] = None,
     ):
         self.index_path = index_path
         self.ud_path = ud_path
         self.ud_log = ud_log
         self.trace = Trace.load(trace_path)
-        if first_entry_index is not None or last_entry_index is not None:
+        if (first_entry_index is not None or
+                last_entry_index is not None or
+                tags is not None):
             filter = TraceFilter()
             if first_entry_index is not None:
                 filter.first_entry_index = first_entry_index
             if last_entry_index is not None:
                 filter.last_entry_index = last_entry_index
+            if tags is not None:
+                filter.tags = tags
+            if insn_seqs is not None:
+                filter.insn_seqs = insn_seqs
             self.trace.set_filter(filter)
         self._ud: Optional[Ud] = None
         self.endianness_str = get_endianness_str(self.trace.get_endianness())
