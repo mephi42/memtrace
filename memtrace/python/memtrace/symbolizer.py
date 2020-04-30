@@ -26,6 +26,7 @@ class Symbolizer:
     def __init__(self, mappings: List[object]):
         self.maps = fake_maps(mappings)
         self.cmd: List[str] = [
+            'stdbuf', '-i0', '-o0', '-e0',
             'eu-addr2line',
             f'--linux-process-map={self.maps.name}',
             '--addresses',

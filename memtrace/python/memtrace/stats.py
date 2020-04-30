@@ -14,7 +14,7 @@ def pp(stats, fp):
         entry.key(): entry.data()
         for entry in stats.tag_stats
     }
-    for tag, tag_stats in sorted(tag_stats.items()):
+    for tag, tag_stats in sorted(tag_stats.items(), key=str):
         fp.write(f'{tag} count={tag_stats.count} size={tag_stats.size}\n')
 
 

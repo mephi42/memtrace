@@ -33,4 +33,7 @@ setuptools.setup(
             ],
         )
     ],
+    install_requires=[
+        'dataclasses',
+    ],
 )

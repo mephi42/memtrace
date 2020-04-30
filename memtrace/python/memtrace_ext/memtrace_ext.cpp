@@ -8,6 +8,7 @@
 #include <array>
 #include <cassert>
 #include <cerrno>
+#include <cinttypes>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -37,16 +38,16 @@ namespace {
 enum class Tag {
   MT_HEADER32 = 0x4d34,
   MT_HEADER64 = 0x4d38,
-  MT_LOAD = 0x4c4c,
-  MT_STORE = 0x5353,
-  MT_REG = 0x5252,
-  MT_INSN = 0x4949,
-  MT_GET_REG = 0x4747,
-  MT_PUT_REG = 0x5050,
-  MT_INSN_EXEC = 0x5858,
-  MT_GET_REG_NX = 0x6767,
-  MT_PUT_REG_NX = 0x7070,
-  MT_MMAP = 0x4d4d,
+  MT_LOAD = 0x4d41,
+  MT_STORE = 0x4d42,
+  MT_REG = 0x4d43,
+  MT_INSN = 0x4d44,
+  MT_GET_REG = 0x4d45,
+  MT_PUT_REG = 0x4d46,
+  MT_INSN_EXEC = 0x4d47,
+  MT_GET_REG_NX = 0x4d48,
+  MT_PUT_REG_NX = 0x4d49,
+  MT_MMAP = 0x4d50,
 };
 
 const char* GetTagStr(Tag tag) {

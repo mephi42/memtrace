@@ -55,16 +55,16 @@ static IRExpr* mkPtr(void* ptr)
    return mkUIntPtr((UIntPtr)ptr);
 }
 
-#define MT_LOAD 0x4c4c
-#define MT_STORE 0x5353
-#define MT_REG 0x5252
-#define MT_INSN 0x4949
-#define MT_GET_REG 0x4747
-#define MT_PUT_REG 0x5050
-#define MT_INSN_EXEC 0x5858
-#define MT_GET_REG_NX 0x6767
-#define MT_PUT_REG_NX 0x7070
-#define MT_MMAP 0x4d4d
+#define MT_LOAD 0x4d41
+#define MT_STORE 0x4d42
+#define MT_REG 0x4d43
+#define MT_INSN 0x4d44
+#define MT_GET_REG 0x4d45
+#define MT_PUT_REG 0x4d46
+#define MT_INSN_EXEC 0x4d47
+#define MT_GET_REG_NX 0x4d48
+#define MT_PUT_REG_NX 0x4d49
+#define MT_MMAP 0x4d50
 
 #define TRACE_BUFFER_SIZE (1024 * 1024 * 1024)
 #define MAX_ENTRY_LENGTH (4 * 1024)
