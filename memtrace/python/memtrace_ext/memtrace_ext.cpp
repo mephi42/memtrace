@@ -2635,7 +2635,7 @@ BOOST_PYTHON_MODULE(memtrace_ext) {
       .def_readonly("tag_stats", &Stats::tagStats);
   bp::class_<std::vector<std::uint32_t>>("VectorOfU32s")
       .def(bp::vector_indexing_suite<std::vector<std::uint32_t>>());
-  bp::class_<TraceFilter>("_TraceFilter", bp::init())
+  bp::class_<TraceFilter>("_TraceFilter", bp::init<>())
       .def_readwrite("first_entry_index", &TraceFilter::firstEntryIndex)
       .def_readwrite("last_entry_index", &TraceFilter::lastEntryIndex)
       .def_readwrite("tag_mask", &TraceFilter::tagMask)

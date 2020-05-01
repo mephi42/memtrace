@@ -18,6 +18,7 @@ import memtrace.stats as stats
 from memtrace.symbolizer import Symbolizer
 from memtrace.taint import BackwardAnalysis
 from memtrace.trace import Trace
+import memtrace.tracer
 import memtrace.ud
 from memtrace.ud import Ud
 from memtrace_ext import Disasm, get_endianness_str, Tag
@@ -69,10 +70,7 @@ class CommonTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.basedir = os.path.dirname(os.path.realpath(__file__))
-        pythondir = os.path.dirname(cls.basedir)
-        memtracedir = os.path.dirname(pythondir)
-        cls.rootdir = os.path.dirname(memtracedir)
-        cls.vg_in_place = os.path.join(cls.rootdir, 'vg-in-place')
+        cls.pydir = os.path.dirname(cls.basedir)
         cls.workdir = tempfile.TemporaryDirectory()
         cls.trace_path = os.path.join(cls.workdir.name, 'memtrace.out')
         cls._compile()
@@ -84,30 +82,28 @@ class CommonTest(unittest.TestCase):
 
     @classmethod
     def _compile(cls) -> None:
+        path = os.path.join(cls.workdir.name, cls.get_target())
         args = [
             'cc',
-            '-o', os.path.join(cls.workdir.name, cls.get_target()),
+            '-o', path,
             *cls.get_cflags(),
             f'{cls.get_target()}{cls.get_source_ext()}',
         ]
         sys.stderr.write('{}\n'.format(' '.join(args)))
         subprocess.check_call(args, cwd=cls.basedir)
+        args = ['objdump', '-x', path]
+        sys.stderr.write('{}\n'.format(' '.join(args)))
+        subprocess.check_call(args, cwd=cls.basedir)
 
     @classmethod
     def _memtrace(cls) -> None:
-        args = [
-            cls.vg_in_place,
-            '--tool=memtrace',
-            f'./{cls.get_target()}',
-        ]
-        sys.stderr.write('{}\n'.format(' '.join(args)))
         with tempfile.NamedTemporaryFile() as fp:
             fp.write(cls.get_input())
             fp.flush()
             fp.seek(0)
             with timeit('memtrace'):
-                subprocess.check_call(
-                    args,
+                memtrace.tracer.main(
+                    [f'./{cls.get_target()}'],
                     stdin=fp,
                     stdout=subprocess.DEVNULL,
                     cwd=cls.workdir.name,
@@ -155,10 +151,11 @@ class MachineTest(CommonTest):
             return
         line = line.replace(workdir, b'{workdir}')
         line = re.sub(b'(lea [^,]+, )[^ ]+ ptr ', b'\\g<1>', line)
+        line = re.sub(b'^(MT_MMAP count=\\d+ size=)\\d+$', b'\\g<1>', line)
         fp.write(line)
 
     def filter_file(self, path):
-        rootdir_bytes = self.rootdir.encode()
+        pydir_bytes = self.pydir.encode()
         workdir_bytes = self.workdir.name.encode()
         done = False
         with tempfile.NamedTemporaryFile(prefix=path, delete=False) as tmpfp:
@@ -166,7 +163,7 @@ class MachineTest(CommonTest):
                 with open(path, 'rb') as fp:
                     for line in fp:
                         self._filter_line(
-                            tmpfp, line, rootdir_bytes, workdir_bytes)
+                            tmpfp, line, pydir_bytes, workdir_bytes)
                 os.rename(tmpfp.name, path)
                 done = True
             finally:
@@ -219,7 +216,7 @@ class MachineTest(CommonTest):
                 trace.get_machine_type()).encode())
             fp.write('Regs size         : {}\n'.format(
                 trace.get_regs_size()).encode())
-            rootdir_bytes = self.rootdir.encode()
+            rootdir_bytes = self.pydir.encode()
             workdir_bytes = self.workdir.name.encode()
             for entry in trace:
                 if entry.tag == Tag.MT_INSN_EXEC:
@@ -283,6 +280,7 @@ class MachineTest(CommonTest):
             dag = backward.analyze()
             with open(actual_taint_org, 'w') as fp:
                 dag.pp(analysis, fp)
+        self.filter_file(actual_taint_org)
         diff_files(expected_taint_org, actual_taint_org)
 
     def test_stats(self) -> None:
@@ -293,6 +291,7 @@ class MachineTest(CommonTest):
             os.path.join(self.workdir.name, 'memtrace.out'))
         with open(actual_stats_txt, 'w') as fp:
             stats.pp(result, fp)
+        self.filter_file(actual_stats_txt)
         diff_files(expected_stats_txt, actual_stats_txt)
 
 

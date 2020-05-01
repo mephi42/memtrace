@@ -3,12 +3,12 @@ import sys
 
 setuptools.setup(
     name='memtrace',
-    version='0.0.8',
+    version='0.1.0',
     author='mephi42',
     author_email='mephi42@gmail.com',
-    description='memtrace post-processing scripts',
+    description='Valgrind tool for tracing memory accesses',
     url='https://github.com/mephi42/memtrace',
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages(exclude=('test',)),
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: GNU General Public License v2 (GPLv2)',
@@ -37,4 +37,5 @@ setuptools.setup(
         'dataclasses; python_version < \'3.7\'',
         'sortedcontainers',
     ],
+    include_package_data=True,
 )

@@ -13,7 +13,7 @@ Reason: [        39] 0x00000009: MT_LOAD uint8_t [0x804a000] 0x2a
 Reason: [        19] 0x00000006: MT_GET_REG uint32_t [0x8] 0x3
 **** <<InsnInTrace:3>> 0x000000000804900b mov ebx, 0 in _base+0x6 (.text) at ??:0
 Reason: [        20] 0x00000006: MT_GET_REG uint32_t [0x14] 0x0
-**** <<InsnInTrace:4>> 0x0000000008049010 lea ecx, dword ptr [ebp + 0xffb] in _base+0xb (.text) at ??:0
+**** <<InsnInTrace:4>> 0x0000000008049010 lea ecx, [ebp + 0xffb] in _base+0xb (.text) at ??:0
 Reason: [        21] 0x00000006: MT_GET_REG uint32_t [0xc] 0x804a000
 ***** [[InsnInTrace:1]] 0x0000000008049000 call 0x8049005 in _start (.text) at ??:0
 Reason: [        11] 0x00000004: MT_GET_REG uint32_t [0x1c] 0x8049005

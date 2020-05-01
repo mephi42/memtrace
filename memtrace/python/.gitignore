@@ -2,4 +2,10 @@
 /dist/
 /memtrace.egg-info/
 /memtrace/__pycache__/
+/memtrace/tracer/
 /.mypy_cache/
+/py36/
+/py37/
+/py38/
+/tracer/
+/tracer-build/
