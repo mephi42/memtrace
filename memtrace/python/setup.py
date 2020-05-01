@@ -1,7 +1,8 @@
 import setuptools
-import sys
 
-setuptools.setup(
+import skbuild
+
+skbuild.setup(
     name='memtrace',
     version='0.1.0',
     author='mephi42',
@@ -15,24 +16,6 @@ setuptools.setup(
         'Operating System :: OS Independent',
     ],
     python_requires='>=3.6',
-    ext_modules=[
-        setuptools.Extension(
-            'memtrace_ext',
-            sources=['memtrace_ext/memtrace_ext.cpp'],
-            libraries=[
-                ('boost_python' +
-                 str(sys.version_info[0]) +
-                 str(sys.version_info[1])),
-                'capstone',
-            ],
-            extra_compile_args=[
-                '-std=c++17',
-                '-Wextra',
-                '-Wconversion',
-                '-pedantic',
-            ],
-        )
-    ],
     install_requires=[
         'dataclasses; python_version < \'3.7\'',
         'sortedcontainers',

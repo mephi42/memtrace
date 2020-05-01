@@ -7,3 +7,4 @@
 /memtrace/__pycache__/
 /memtrace/tracer/
 /.mypy_cache/
+/_skbuild/
