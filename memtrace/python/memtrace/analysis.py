@@ -120,7 +120,7 @@ def range_any_base(x):
     return int_any_base(start), int_any_base(end)
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--trace-path', default='memtrace.out')
     parser.add_argument('--ud-path')
@@ -224,3 +224,7 @@ if __name__ == '__main__':
                         entry_str = format_entry(
                             entry, analysis.endianness_str, analysis.disasm)
                         print(f'***** {entry_str}')
+
+
+if __name__ == '__main__':
+    main()

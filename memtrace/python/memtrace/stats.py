@@ -18,10 +18,10 @@ def pp(stats, fp):
         fp.write(f'{tag} count={tag_stats.count} size={tag_stats.size}\n')
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     stats = from_trace_file(args.memtrace_out)
     pp(stats, sys.stdout)
 

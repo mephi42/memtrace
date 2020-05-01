@@ -38,4 +38,14 @@ setuptools.setup(
         'sortedcontainers',
     ],
     include_package_data=True,
+    entry_points={
+        'console_scripts': [
+            'memtrace=memtrace.tracer:main',
+            'memtrace-analyze=memtrace.analysis:main',
+            'memtrace-dump=memtrace.dump:main',
+            'memtrace-index=memtrace.index:main',
+            'memtrace-stats=memtrace.stats:main',
+            'memtrace-ud=memtrace.ud:main',
+        ],
+    },
 )

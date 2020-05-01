@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import os
-import sys
 
 from memtrace.trace import Trace
 
 
-def main(argv):
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
     parser.add_argument('memtrace_idx', nargs='?')
@@ -21,4 +20,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main()

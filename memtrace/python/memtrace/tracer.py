@@ -21,7 +21,7 @@ def popen(argv, **kwargs):
     )
 
 
-if __name__ == '__main__':
+def main():
     p = popen(sys.argv[1:])
     while True:
         try:
@@ -29,3 +29,7 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             p.send_signal(signal.SIGINT)
             continue
+
+
+if __name__ == '__main__':
+    main()

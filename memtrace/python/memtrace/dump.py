@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 import argparse
-import sys
-from typing import List
+from typing import List, Optional
 
 from memtrace.analysis import Analysis
 import memtrace_ext
 
 
-def main(argv: List[str]) -> None:
+def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
     parser.add_argument('--output', default='/dev/stdout')
@@ -29,4 +28,4 @@ def main(argv: List[str]) -> None:
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main()

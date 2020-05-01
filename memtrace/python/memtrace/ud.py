@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import os
-import sys
 import tempfile
 from typing import Any, List, Optional, Tuple
 
@@ -53,7 +52,7 @@ class Ud:
         return self.get_codes_for_pc_ranges([(pc, pc)])
 
 
-def main(argv: List[str]) -> None:
+def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('memtrace_out', nargs='?', default='memtrace.out')
     parser.add_argument('memtrace_idx', nargs='?')
@@ -92,4 +91,4 @@ def main(argv: List[str]) -> None:
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main()
