@@ -6,7 +6,7 @@ find_package(PythonExtensions REQUIRED)
 message(STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")
 message(STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
 include_directories(${Boost_INCLUDE_DIRS})
-add_library(memtrace_ext MODULE memtrace_ext/memtrace_ext.cpp)
+add_library(memtrace_ext MODULE memtrace_ext/memtrace_ext.cc)
 target_compile_options(
     memtrace_ext
     PRIVATE -std=c++17
