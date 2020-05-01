@@ -14,7 +14,7 @@ RUN curl -L https://dl.bintray.com/boostorg/release/"$(echo ${boost_version} | t
 WORKDIR /usr/src/boost_${boost_version}
 RUN ./bootstrap.sh
 COPY user-config.jam tools/build/src/
-RUN ./b2 cxxflags=-fPIC --with-python python=3.6,3.7,3.8 variant=release link=static threading=multi runtime-link=static --prefix=/opt/boost/usr install
+RUN ./b2 cxxflags=-fPIC --with-python python=3.6,3.7,3.8 variant=release link=static threading=multi runtime-link=shared --prefix=/opt/boost/usr install
 
 FROM base AS capstone
 ARG capstone_version
@@ -27,6 +27,18 @@ RUN make
 RUN make install DESTDIR=/opt/capstone
 
 FROM base
-RUN yum install -y elfutils libgcc.i686
+RUN yum install -y \
+    elfutils \
+    libgcc.i686 \
+    ninja-build
+RUN yum remove -y cmake cmake28
+RUN cd /tmp && \
+    curl -L https://github.com/Kitware/CMake/archive/v3.11.4.tar.gz | tar -xvz && \
+    cd CMake-3.11.4 && \
+    ./configure --prefix=/usr --parallel=$(getconf _NPROCESSORS_ONLN) && \
+    make -j$(getconf _NPROCESSORS_ONLN) && \
+    make install -j$(getconf _NPROCESSORS_ONLN) && \
+    cd /tmp && \
+    rm -r CMake-3.11.4
 COPY --from=capstone /opt/capstone/ /
 COPY --from=boost /opt/boost/ /
