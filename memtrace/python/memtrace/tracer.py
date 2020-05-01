@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 import os
+import signal
 import subprocess
 import sys
 
 
-def main(argv, **kwargs):
+def popen(argv, **kwargs):
     basedir = os.path.dirname(os.path.realpath(__file__))
     valgrind = os.path.join(basedir, 'tracer', 'bin', 'valgrind')
     valgrind_lib = os.path.join(basedir, 'tracer', 'lib', 'valgrind')
     env = {**kwargs.get('env', os.environ), 'VALGRIND_LIB': valgrind_lib}
-    subprocess.check_call(
+    return subprocess.Popen(
         [
             valgrind,
             '--tool=memtrace',
@@ -21,4 +22,10 @@ def main(argv, **kwargs):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    p = popen(sys.argv[1:])
+    while True:
+        try:
+            sys.exit(p.wait())
+        except KeyboardInterrupt:
+            p.send_signal(signal.SIGINT)
+            continue

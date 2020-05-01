@@ -4,6 +4,7 @@ import os
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -42,6 +43,12 @@ def timeit(s):
         yield
     finally:
         print('{} done in {:2f}s'.format(s, time.time() - t0), file=sys.stderr)
+
+
+def check_wait(p):
+    returncode = p.wait()
+    if returncode != 0:
+        raise subprocess.CalledProcessError(returncode, p.args)
 
 
 class CommonTest(unittest.TestCase):
@@ -96,18 +103,23 @@ class CommonTest(unittest.TestCase):
         subprocess.check_call(args, cwd=cls.basedir)
 
     @classmethod
+    def memtrace_call(cls, fp):
+        p = memtrace.tracer.popen(
+            [f'./{cls.get_target()}'],
+            stdin=fp,
+            stdout=subprocess.DEVNULL,
+            cwd=cls.workdir.name,
+        )
+        check_wait(p)
+
+    @classmethod
     def _memtrace(cls) -> None:
         with tempfile.NamedTemporaryFile() as fp:
             fp.write(cls.get_input())
             fp.flush()
             fp.seek(0)
             with timeit('memtrace'):
-                memtrace.tracer.main(
-                    [f'./{cls.get_target()}'],
-                    stdin=fp,
-                    stdout=subprocess.DEVNULL,
-                    cwd=cls.workdir.name,
-                )
+                cls.memtrace_call(fp)
             trace_size = os.stat(cls.trace_path).st_size / (1024 * 1024 * 1024)
             print('trace size is {:2f}G'.format(trace_size), file=sys.stderr)
 
@@ -327,6 +339,32 @@ class TestCat(CommonTest):
     @staticmethod
     def get_input() -> bytes:
         return bytes(range(256)) * ((64 * 1024 + 256) // 256)
+
+    @classmethod
+    def memtrace_call(cls, fp):
+        p = memtrace.tracer.popen(
+            [f'./{cls.get_target()}'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            cwd=cls.workdir.name,
+        )
+        try:
+            expected = cls.get_input()
+            p.stdin.write(expected)
+            p.stdin.flush()
+            actual = bytearray()
+            while len(actual) < len(expected):
+                chunk = p.stdout.read(len(expected) - len(actual))
+                if chunk == b'':
+                    raise Exception('Premature EOF')
+                actual.extend(chunk)
+            if actual != expected:
+                raise Exception('cat produced malformed output')
+            p.send_signal(signal.SIGINT)
+        finally:
+            p.wait()
+            p.stdin.close()
+            p.stdout.close()
 
     def test(self):
         trace = self.load_trace()
