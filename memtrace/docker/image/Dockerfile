@@ -1,8 +1,6 @@
-# https://github.com/pypa/manylinux/issues/561
-# ARG repo=quay.io/pypa
-ARG repo=mephi42
+ARG repo=quay.io/pypa
 ARG arch=x86_64
-ARG version=2020-05-01-1dc251d
+ARG version=2020-05-25-6481506
 ARG capstone_version=4.0.1
 ARG boost_version=1_73_0
 FROM ${repo}/manylinux2010_${arch}:${version} AS base
