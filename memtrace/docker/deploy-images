@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+from configparser import ConfigParser
+from datetime import datetime
+import os
+import subprocess
+
+
+def main():
+    parser = ArgumentParser()
+    parser.add_argument('--name', action='append')
+    args, rest = parser.parse_known_args()
+    basedir = os.path.dirname(__file__)
+    config = ConfigParser()
+    config.read(os.path.join(basedir, 'images.ini'))
+    rev = subprocess.check_output(
+        ['git', 'rev-parse', '--short', 'HEAD'],
+        cwd=basedir,
+    ).strip().decode()
+    date = datetime.now().strftime('%Y-%m-%d')
+    for name in config.sections():
+        if args.name is not None and name not in args.name:
+            continue
+        version = config[name]['version']
+        tag = f'mephi42/memtrace-build-{name}:{date}-{rev}'
+        docker_build_args = [
+            'docker',
+            'build',
+            os.path.join(basedir, 'image'),
+            '-t', tag,
+            f'--build-arg=base=quay.io/pypa/{name}:{version}',
+        ]
+        subprocess.check_call(docker_build_args + rest)
+        subprocess.check_call(['docker', 'push', tag])
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,10 @@
+--- a/src/converter/builtin_converters.cpp
++++ b/src/converter/builtin_converters.cpp
+@@ -568,7 +568,6 @@ void initialize_builtin_converters()
+     // floating types
+     slot_rvalue_from_python<float,float_rvalue_from_python>();
+     slot_rvalue_from_python<double,float_rvalue_from_python>();
+-    slot_rvalue_from_python<long double,float_rvalue_from_python>();
+     
+     slot_rvalue_from_python<std::complex<float>,complex_rvalue_from_python>();
+     slot_rvalue_from_python<std::complex<double>,complex_rvalue_from_python>();

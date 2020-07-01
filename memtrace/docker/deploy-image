@@ -1,6 +1,0 @@
-#!/bin/sh
-set -e -u -x
-tag=mephi42/memtrace-build:$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)
-basedir=$(dirname "$0")/image
-docker build "$basedir" -t "$tag"
-docker push "$tag"
