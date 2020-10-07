@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
-from glob import glob
 import os
-import signal
 import subprocess
-import sys
 
 
 def popen(argv, **kwargs):
@@ -23,17 +20,3 @@ def popen(argv, **kwargs):
         **kwargs,
         env=env,
     )
-
-
-def main():
-    p = popen(sys.argv[1:])
-    while True:
-        try:
-            sys.exit(p.wait())
-        except KeyboardInterrupt:
-            p.send_signal(signal.SIGINT)
-            continue
-
-
-if __name__ == '__main__':
-    main()

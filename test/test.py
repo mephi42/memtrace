@@ -13,7 +13,7 @@ from typing import List
 import unittest
 
 from memtrace.analysis import Analysis
-import memtrace.dump
+import memtrace.cli
 from memtrace.format import format_entry
 import memtrace.stats as stats
 from memtrace.symbolizer import Symbolizer
@@ -186,10 +186,12 @@ class MachineTest(CommonTest):
         dump_txt = f'{self.get_target()}-dump.txt'
         actual_dump_txt = os.path.join(self.workdir.name, dump_txt)
         expected_dump_txt = os.path.join(self.basedir, dump_txt)
-        memtrace.dump.main([
-            os.path.join(self.workdir.name, 'memtrace.out'),
-            f'--output={actual_dump_txt}',
-        ])
+        with self.assertRaises(SystemExit):
+            memtrace.cli.main([
+                'report',
+                '--input=' + os.path.join(self.workdir.name, 'memtrace.out'),
+                f'--output={actual_dump_txt}',
+            ])
         self.filter_file(actual_dump_txt)
         diff_files(expected_dump_txt, actual_dump_txt)
 
