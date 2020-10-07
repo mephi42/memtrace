@@ -48,7 +48,8 @@ FROM base
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN yum install -y \
     elfutils \
-    $([ "$(uname -m)" != "x86_64" ] || echo libgcc.i686)
+    quilt \
+    $([ "$(uname -m)" != "x86_64" ] || echo glibc-devel.i686 libgcc.i686)
 RUN yum remove -y cmake cmake28
 COPY --from=boost /opt/boost/ /
 COPY --from=capstone /opt/capstone/ /
