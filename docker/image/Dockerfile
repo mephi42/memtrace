@@ -3,6 +3,7 @@ ARG capstone_version=4.0.1
 ARG boost_version=1_73_0
 ARG cmake_version=3.11.4
 ARG ninja_version=1.10.0
+ARG quilt_version=0.66
 FROM ${base} AS base
 
 FROM base AS boost
@@ -44,14 +45,25 @@ RUN ./configure.py --bootstrap
 RUN mkdir -p /opt/ninja/usr/bin
 RUN cp ninja /opt/ninja/usr/bin/
 
+FROM base as quilt
+ARG quilt_version
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN curl -L  http://download.savannah.gnu.org/releases/quilt/quilt-${quilt_version}.tar.gz | tar -C /usr/src -xvz
+WORKDIR /usr/src/quilt-${quilt_version}
+# quilt's build system does not support DESTDIR
+RUN ./configure --prefix=/opt/quilt
+RUN make -j"$(getconf _NPROCESSORS_ONLN)"
+RUN make install
+
 FROM base
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN yum install -y \
     elfutils \
-    quilt \
     $([ "$(uname -m)" != "x86_64" ] || echo glibc-devel.i686 libgcc.i686)
 RUN yum remove -y cmake cmake28
 COPY --from=boost /opt/boost/ /
 COPY --from=capstone /opt/capstone/ /
 COPY --from=cmake /opt/cmake/ /
 COPY --from=ninja /opt/ninja/ /
+COPY --from=quilt /opt/quilt/ /opt/quilt/
+RUN ln -s /opt/quilt/bin/quilt /usr/bin/quilt
