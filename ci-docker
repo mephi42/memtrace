@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e -u -x
+
+cd "$(dirname "$0")"
+version=2020-07-27-a3828e95f
+docker run \
+    --interactive \
+    --tty \
+    --rm \
+    --volume "$PWD:$PWD" \
+    --workdir "$PWD" \
+    mephi42/memtrace-build-manylinux2014_"$(uname -m)":"$version" \
+    ./ci

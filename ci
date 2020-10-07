@@ -1,22 +1,30 @@
 #!/bin/sh
 set -e -u -x
 
-cd "$(dirname "$0")"/..
+cd "$(dirname "$0")"
 basedir=$PWD
+
+valgrind=$basedir/valgrind
+cd "$valgrind"
+if QUILT_PATCHES="$basedir"/valgrind-patches quilt push -a; then
+    :
+else
+    quilt_rc=$?
+    [ "$quilt_rc" -eq 2 ] || exit "$quilt_rc"
+fi
 [ -e configure ] || ./autogen.sh
 
-python=$basedir/memtrace/python
 uname=$(uname -s)-$(uname -m)
-build=$python/build/$uname
+build=$basedir/build/$uname
 tracer=$build/tracer
 mkdir -p "$tracer"
 cd "$tracer"
-[ -e Makefile ] || "$basedir"/configure --prefix="$tracer/install"
+[ -e Makefile ] || "$valgrind"/configure --prefix="$tracer"/install
 nproc=$(getconf _NPROCESSORS_ONLN)
 make -j"$nproc"
 make -j"$nproc" install
 
-cd "$python"
+cd "$basedir"
 mkdir -p memtrace/tracer/"$uname"
 (cd "$tracer"/install && tar -c \
      bin/valgrind \
