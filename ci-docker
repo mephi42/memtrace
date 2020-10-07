@@ -2,7 +2,7 @@
 set -e -u -x
 
 cd "$(dirname "$0")"
-version=2020-07-27-a3828e95f
+version=2020-10-07-976386e5b
 docker run \
     --interactive \
     --tty \
