@@ -21,7 +21,10 @@ skbuild.setup(
     author_email='mephi42@gmail.com',
     description='Valgrind tool for tracing memory accesses',
     url='https://github.com/mephi42/memtrace',
-    packages=setuptools.find_packages(exclude=('test',)),
+    packages=[
+        'memtrace',
+        'memtrace_ext',
+    ],
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: GNU General Public License v2 (GPLv2)',
