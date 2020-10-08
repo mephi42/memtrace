@@ -25,10 +25,11 @@ def main():
         docker_run_args = [
             'docker', 'run',
             '--interactive',
-            '--tty',
             '--rm',
-            '--volume', f'{basedir}:{basedir}',
-            '--workdir', basedir,
+            '--tty',
+            f'--user={os.getuid()}:{os.getgid()}',
+            f'--volume={basedir}:{basedir}',
+            f'--workdir={basedir}',
             f'mephi42/memtrace-build-{name}:{args.version}',
             './ci',
         ]
