@@ -4,6 +4,7 @@ ARG boost_version=1_73_0
 ARG cmake_version=3.11.4
 ARG ninja_version=1.10.0
 ARG quilt_version=0.66
+ARG ccache_version=3.7.12
 FROM ${base} AS base
 
 FROM base AS boost
@@ -48,10 +49,19 @@ RUN cp ninja /opt/ninja/usr/bin/
 FROM base as quilt
 ARG quilt_version
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -L  http://download.savannah.gnu.org/releases/quilt/quilt-${quilt_version}.tar.gz | tar -C /usr/src -xvz
+RUN curl -L http://download.savannah.gnu.org/releases/quilt/quilt-${quilt_version}.tar.gz | tar -C /usr/src -xvz
 WORKDIR /usr/src/quilt-${quilt_version}
 # quilt's build system does not support DESTDIR
 RUN ./configure --prefix=/opt/quilt
+RUN make -j"$(getconf _NPROCESSORS_ONLN)"
+RUN make install
+
+FROM base as ccache
+ARG ccache_version
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN curl -L https://github.com/ccache/ccache/releases/download/v${ccache_version}/ccache-${ccache_version}.tar.xz | tar -C /usr/src -xvJ
+WORKDIR /usr/src/ccache-${ccache_version}
+RUN ./configure --prefix=/opt/ccache
 RUN make -j"$(getconf _NPROCESSORS_ONLN)"
 RUN make install
 
@@ -67,3 +77,7 @@ COPY --from=cmake /opt/cmake/ /
 COPY --from=ninja /opt/ninja/ /
 COPY --from=quilt /opt/quilt/ /opt/quilt/
 RUN ln -s /opt/quilt/bin/quilt /usr/bin/quilt
+COPY --from=ccache /opt/ccache/ /opt/ccache/
+RUN ln -s ccache /opt/ccache/bin/c++
+RUN ln -s ccache /opt/ccache/bin/cc
+ENV PATH=/opt/ccache/bin:$PATH
