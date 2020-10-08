@@ -88,12 +88,12 @@ class Tlv : public B {
     return static_cast<Tag>(
         RawInt<E, std::uint16_t>(this->GetData()).GetValue());
   }
-  W GetLength() const {
+  std::uint32_t GetLength() const {
     return RawInt<E, std::uint16_t>(this->GetData() + 2).GetValue();
   }
-  W GetAlignedLength() const {
-    return (GetLength() + (static_cast<W>(sizeof(W)) - 1)) &
-           ~(static_cast<W>(sizeof(W)) - 1);
+  std::uint32_t GetAlignedLength() const {
+    return (GetLength() + (static_cast<std::uint32_t>(sizeof(W)) - 1)) &
+           ~(static_cast<std::uint32_t>(sizeof(W)) - 1);
   }
 };
 
@@ -138,8 +138,8 @@ class LdStEntry : public B {
   const std::uint8_t* GetValue() const {
     return this->GetData() + kValueOffset;
   }
-  W GetSize() const {
-    return GetTlv().GetLength() - static_cast<W>(kValueOffset);
+  std::uint32_t GetSize() const {
+    return GetTlv().GetLength() - static_cast<std::uint32_t>(kValueOffset);
   }
   std::vector<std::uint8_t> CopyValue() const {
     return std::vector<std::uint8_t>(GetValue(), GetValue() + GetSize());
@@ -167,8 +167,8 @@ class InsnEntry : public B {
   const std::uint8_t* GetValue() const {
     return this->GetData() + kValueOffset;
   }
-  W GetSize() const {
-    return GetTlv().GetLength() - static_cast<W>(kValueOffset);
+  std::uint32_t GetSize() const {
+    return GetTlv().GetLength() - static_cast<std::uint32_t>(kValueOffset);
   }
   std::vector<std::uint8_t> CopyValue() const {
     return std::vector<std::uint8_t>(GetValue(), GetValue() + GetSize());
@@ -245,8 +245,8 @@ class MmapEntry : public B {
   const std::uint8_t* GetValue() const {
     return this->GetData() + kValueOffset;
   }
-  W GetSize() const {
-    return GetTlv().GetLength() - static_cast<W>(kValueOffset);
+  std::uint32_t GetSize() const {
+    return GetTlv().GetLength() - static_cast<std::uint32_t>(kValueOffset);
   }
   std::string CopyValue() const {
     return reinterpret_cast<const char*>(GetValue());

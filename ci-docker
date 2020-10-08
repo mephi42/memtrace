@@ -12,10 +12,12 @@ def main():
     parser.add_argument(
         '--name',
         action='append',
-        default='manylinux2014_' + platform.machine(),
+        default=[],
     )
     parser.add_argument('--version', default='2020-10-08-4c00466c7')
     args, rest = parser.parse_known_args()
+    if len(args.name) == 0:
+        args.name.append('manylinux2014_' + platform.machine())
     basedir = os.path.dirname(os.path.realpath(__file__))
     config = ConfigParser()
     config.read(os.path.join(basedir, 'docker', 'images.ini'))
