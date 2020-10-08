@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.11.0)
 project(_memtrace)
-set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost REQUIRED COMPONENTS python)
 find_package(PythonExtensions REQUIRED)
 message(STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")

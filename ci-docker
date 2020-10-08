@@ -46,6 +46,7 @@ def main():
             f'--workdir={basedir}',
             f'mephi42/memtrace-build-{name}:{args.version}',
             './ci',
+            '-DBoost_USE_STATIC_LIBS=ON',
             *rest,
         ]
         subprocess.check_call(docker_run_args)

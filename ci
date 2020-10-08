@@ -36,7 +36,7 @@ for python_version in cp36-cp36m cp37-cp37m cp38-cp38; do
     /opt/python/"$python_version"/bin/python -m venv "$build/$python_version"
     . "$build/$python_version"/bin/activate
     pip --disable-pip-version-check install -r requirements.txt
-    python setup.py bdist_wheel
+    python setup.py bdist_wheel "$@"
     set +u; deactivate; set -u
     auditwheel repair --wheel-dir=dist/wheelhouse dist/memtrace-*-"$python_version"-*_"$uname_m".whl
 done
