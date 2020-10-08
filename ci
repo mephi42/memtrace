@@ -14,7 +14,8 @@ else
 fi
 [ -e configure ] || ./autogen.sh
 
-uname=$(uname -s)-$(uname -m)
+uname_m=$(uname -m)
+uname=$(uname -s)-$uname_m
 build=$basedir/build/$uname
 tracer=$build/tracer
 mkdir -p "$tracer"
@@ -37,7 +38,5 @@ for python_version in cp36-cp36m cp37-cp37m cp38-cp38; do
     pip --disable-pip-version-check install -r requirements.txt
     python setup.py bdist_wheel
     set +u; deactivate; set -u
-done
-for whl in dist/*.whl; do
-    auditwheel repair --wheel-dir=dist/wheelhouse "$whl"
+    auditwheel repair --wheel-dir=dist/wheelhouse dist/memtrace-*-"$python_version"-*_"$uname_m".whl
 done
