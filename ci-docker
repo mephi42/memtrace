@@ -1,13 +1,39 @@
-#!/bin/sh
-set -e -u -x
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+from configparser import ConfigParser
+import os
+import platform
+import subprocess
 
-cd "$(dirname "$0")"
-version=2020-10-07-976386e5b
-docker run \
-    --interactive \
-    --tty \
-    --rm \
-    --volume "$PWD:$PWD" \
-    --workdir "$PWD" \
-    mephi42/memtrace-build-manylinux2014_"$(uname -m)":"$version" \
-    ./ci
+
+def main():
+    parser = ArgumentParser()
+    parser.add_argument('--all', action='store_true')
+    parser.add_argument(
+        '--name',
+        action='append',
+        default='manylinux2014_' + platform.machine(),
+    )
+    parser.add_argument('--version', default='2020-10-08-6dd855227')
+    args = parser.parse_args()
+    basedir = os.path.dirname(os.path.realpath(__file__))
+    config = ConfigParser()
+    config.read(os.path.join(basedir, 'docker', 'images.ini'))
+    for name in config.sections():
+        if not args.all and name not in args.name:
+            continue
+        docker_run_args = [
+            'docker', 'run',
+            '--interactive',
+            '--tty',
+            '--rm',
+            '--volume', f'{basedir}:{basedir}',
+            '--workdir', basedir,
+            f'mephi42/memtrace-build-{name}:{args.version}',
+            './ci',
+        ]
+        subprocess.check_call(docker_run_args)
+
+
+if __name__ == '__main__':
+    main()
