@@ -10,13 +10,15 @@ def main():
     basedir = os.path.dirname(os.path.realpath(__file__))
     config = ConfigParser()
     config.read(os.path.join(basedir, 'docker', 'images.ini'))
+    wheels = []
     for name in config.sections():
         for python_version in ('cp36-cp36m', 'cp37-cp37m', 'cp38-cp38'):
-            subprocess.check_call([
-                'twine', 'upload',
-                '--username=mephi42',
-                f'dist/wheelhouse/memtrace-{memtrace.__version__}-{python_version}-{name}.whl',  # noqa: E501
-            ], cwd=basedir)
+            wheels.append(f'dist/wheelhouse/memtrace-{memtrace.__version__}-{python_version}-{name}.whl')  # noqa: E501
+    subprocess.check_call([
+        'twine', 'upload',
+        '--username=mephi42',
+        *wheels,
+    ])
 
 
 if __name__ == '__main__':
