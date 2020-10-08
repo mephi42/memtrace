@@ -14,7 +14,7 @@ def main():
         action='append',
         default='manylinux2014_' + platform.machine(),
     )
-    parser.add_argument('--version', default='2020-10-08-6432c8081')
+    parser.add_argument('--version', default='2020-10-08-dd482b368')
     args = parser.parse_args()
     basedir = os.path.dirname(os.path.realpath(__file__))
     config = ConfigParser()
