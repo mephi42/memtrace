@@ -80,4 +80,6 @@ RUN ln -s /opt/quilt/bin/quilt /usr/bin/quilt
 COPY --from=ccache /opt/ccache/ /opt/ccache/
 RUN ln -s ccache /opt/ccache/bin/c++
 RUN ln -s ccache /opt/ccache/bin/cc
+RUN ln -s ccache /opt/ccache/bin/gcc
+RUN ln -s ccache /opt/ccache/bin/g++
 ENV PATH=/opt/ccache/bin:$PATH
