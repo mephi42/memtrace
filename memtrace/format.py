@@ -1,6 +1,6 @@
 import struct
 
-from memtrace_ext import Disasm, Entry, Tag
+from ._memtrace import Disasm, Entry, Tag
 
 
 def format_value(value: bytes, endianness: str) -> str:

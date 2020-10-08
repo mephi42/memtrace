@@ -1963,7 +1963,7 @@ void RegisterEntries() {
 
 }  // namespace
 
-BOOST_PYTHON_MODULE(memtrace_ext) {
+BOOST_PYTHON_MODULE(_memtrace) {
   namespace bp = boost::python;
   bp::enum_<Endianness>("Endianness")
       .value("Little", Endianness::Little)

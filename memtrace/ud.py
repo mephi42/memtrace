@@ -5,7 +5,7 @@ import tempfile
 from typing import Any, List, Optional, Tuple
 
 from memtrace.trace import Trace
-import memtrace_ext
+from ._memtrace import Range, _Ud, VectorOfRanges
 
 
 class Ud:
@@ -18,22 +18,22 @@ class Ud:
         if path is None:
             with tempfile.TemporaryDirectory() as tmpdir:
                 ud_path = os.path.join(tmpdir, '{}.bin')
-                native = memtrace_ext._Ud.analyze(
+                native = _Ud.analyze(
                     ud_path, trace.native, log)
         else:
-            native = memtrace_ext._Ud.analyze(path, trace.native, log)
+            native = _Ud.analyze(path, trace.native, log)
         if native is None:
             raise Exception('_Ud.analyze() failed')
         return Ud(native)
 
     @staticmethod
     def load(path: str, trace: Trace) -> 'Ud':
-        native = memtrace_ext._Ud.load(path, trace.native)
+        native = _Ud.load(path, trace.native)
         if native is None:
             raise Exception('_Ud.load() failed')
         return Ud(native)
 
-    def __init__(self, native: memtrace_ext._Ud):
+    def __init__(self, native: _Ud):
         self.native = native
 
     def __getattr__(self, name: str) -> Any:
@@ -41,9 +41,9 @@ class Ud:
 
     def get_codes_for_pc_ranges(
             self, pc_ranges: List[Tuple[int, int]]) -> List[int]:
-        native_pc_ranges = memtrace_ext.VectorOfRanges()
+        native_pc_ranges = VectorOfRanges()
         native_pc_ranges.extend(
-            memtrace_ext.Range(start_addr, end_addr)
+            Range(start_addr, end_addr)
             for start_addr, end_addr in pc_ranges
         )
         return self.native.get_codes_for_pc_ranges(native_pc_ranges)

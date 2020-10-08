@@ -1,7 +1,7 @@
 from typing import Any, Iterable, Optional
 
 from memtrace.native import wrap_err
-from memtrace_ext import _Trace, _TraceFilter, VectorOfU32s, Tag
+from ._memtrace import _Trace, _TraceFilter, VectorOfU32s, Tag
 
 
 class TraceFilter:

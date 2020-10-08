@@ -11,7 +11,7 @@ from memtrace.interval_tree import IntervalTree
 from memtrace.symbolizer import Symbolizer
 from memtrace.trace import Trace, TraceFilter
 from memtrace.ud import Ud
-from memtrace_ext import Disasm, get_endianness_str, Tag
+from ._memtrace import Disasm, get_endianness_str, Tag
 
 
 class Analysis:

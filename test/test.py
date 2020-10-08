@@ -22,7 +22,7 @@ from memtrace.trace import Trace
 import memtrace.tracer
 import memtrace.ud
 from memtrace.ud import Ud
-from memtrace_ext import Disasm, get_endianness_str, Tag
+from memtrace._memtrace import Disasm, get_endianness_str, Tag
 
 
 def diff_files(expected, actual):

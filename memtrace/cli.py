@@ -8,7 +8,7 @@ import click.types
 import memtrace
 from memtrace.analysis import Analysis
 import memtrace.tracer
-import memtrace_ext
+from ._memtrace import Tag
 
 
 @click.group(help='memtrace version ' + memtrace.__version__)
@@ -37,7 +37,7 @@ class TagParamType(click.ParamType):
     name = 'tag'
 
     def convert(self, value, param, ctx):
-        return memtrace_ext.Tag.names[value]
+        return Tag.names[value]
 
 
 class AnyIntParamType(click.types.IntParamType):

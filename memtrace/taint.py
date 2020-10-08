@@ -7,7 +7,7 @@ from memtrace.analysis import Analysis
 from memtrace.format import format_entry
 from memtrace.trace import Trace
 from memtrace.ud import Ud
-from memtrace_ext import Entry, Tag
+from ._memtrace import Entry, Tag
 
 
 @dataclass
