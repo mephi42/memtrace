@@ -14,21 +14,26 @@ def main():
         action='append',
         default='manylinux2014_' + platform.machine(),
     )
-    parser.add_argument('--version', default='2020-10-08-6dd855227')
+    parser.add_argument('--version', default='2020-10-08-6432c8081')
     args = parser.parse_args()
     basedir = os.path.dirname(os.path.realpath(__file__))
     config = ConfigParser()
     config.read(os.path.join(basedir, 'docker', 'images.ini'))
+    local_ccache = os.path.expanduser('~/.ccache')
+    container_ccache = '/var/cache/ccache'
+    os.makedirs(local_ccache, exist_ok=True)
     for name in config.sections():
         if not args.all and name not in args.name:
             continue
         docker_run_args = [
             'docker', 'run',
+            f'--env=CCACHE_DIR={container_ccache}',
             '--interactive',
             '--rm',
             '--tty',
             f'--user={os.getuid()}:{os.getgid()}',
             f'--volume={basedir}:{basedir}',
+            f'--volume={local_ccache}:{container_ccache}',
             f'--workdir={basedir}',
             f'mephi42/memtrace-build-{name}:{args.version}',
             './ci',
