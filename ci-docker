@@ -15,28 +15,34 @@ def main():
         default='manylinux2014_' + platform.machine(),
     )
     parser.add_argument('--version', default='2020-10-08-4c00466c7')
-    args = parser.parse_args()
+    args, rest = parser.parse_known_args()
     basedir = os.path.dirname(os.path.realpath(__file__))
     config = ConfigParser()
     config.read(os.path.join(basedir, 'docker', 'images.ini'))
     local_ccache = os.path.expanduser('~/.ccache')
     container_ccache = '/var/cache/ccache'
     os.makedirs(local_ccache, exist_ok=True)
+    local_pip_cache = os.path.expanduser('~/.cache/pip')
+    container_pip_cache = '/var/cache/pip'
+    os.makedirs(local_pip_cache, exist_ok=True)
     for name in config.sections():
         if not args.all and name not in args.name:
             continue
         docker_run_args = [
             'docker', 'run',
             f'--env=CCACHE_DIR={container_ccache}',
+            f'--env=PIP_CACHE_DIR={container_pip_cache}',
             '--interactive',
             '--rm',
             '--tty',
             f'--user={os.getuid()}:{os.getgid()}',
             f'--volume={basedir}:{basedir}',
             f'--volume={local_ccache}:{container_ccache}',
+            f'--volume={local_pip_cache}:{container_pip_cache}',
             f'--workdir={basedir}',
             f'mephi42/memtrace-build-{name}:{args.version}',
             './ci',
+            *rest,
         ]
         subprocess.check_call(docker_run_args)
 

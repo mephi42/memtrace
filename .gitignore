@@ -1,3 +1,5 @@
+/.mypy_cache/
+/_skbuild/
 /build/
 /cp36-cp36m/
 /cp37-cp37m/
@@ -6,5 +8,4 @@
 /memtrace.egg-info/
 /memtrace/__pycache__/
 /memtrace/tracer/
-/.mypy_cache/
-/_skbuild/
+/venv/
