@@ -8,7 +8,7 @@ import click.types
 import memtrace
 from memtrace.analysis import Analysis
 import memtrace.tracer
-from ._memtrace import Tag
+from memtrace._memtrace import Tag
 
 
 @click.group(help='memtrace version ' + memtrace.__version__)
@@ -22,6 +22,7 @@ def main():
     },
     help='Run a command and record its execution trace into memtrace.out',
 )
+@click.argument('argv', nargs=-1, type=click.UNPROCESSED)
 def record(argv):
     p = memtrace.tracer.popen(argv)
     while True:
