@@ -1,5 +1,6 @@
 /.mypy_cache/
 /_skbuild/
+/_skbuild.docker/
 /build/
 /cp36-cp36m/
 /cp37-cp37m/
