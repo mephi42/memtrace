@@ -1,12 +1,19 @@
 diff --git a/Makefile.am b/Makefile.am
 --- a/Makefile.am
 +++ b/Makefile.am
-@@ -12,7 +12,8 @@ TOOLS = \
- 		massif \
- 		dhat \
- 		lackey \
+@@ -4,15 +4,7 @@ AUTOMAKE_OPTIONS = 1.10
+ include $(top_srcdir)/Makefile.all.am 
+ 
+ TOOLS = \
+-		memcheck \
+-		cachegrind \
+-		callgrind \
+-		helgrind \
+-		drd \
+-		massif \
+-		dhat \
+-		lackey \
 -		none
-+		none \
 +		memtrace
  
  EXP_TOOLS = \
