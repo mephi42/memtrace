@@ -30,6 +30,9 @@ def main():
     local_skbuild = os.path.join(basedir, '_skbuild.docker')
     container_skbuild = os.path.join(basedir, '_skbuild')
     os.makedirs(local_skbuild, exist_ok=True)
+    # Create directory at container path as well, otherwise docker will create
+    # it for us with root:root ownership.
+    os.makedirs(container_skbuild, exist_ok=True)
     for name in config.sections():
         if not args.all and name not in args.name:
             continue
@@ -47,7 +50,8 @@ def main():
             f'--volume={local_skbuild}:{container_skbuild}',
             f'--workdir={basedir}',
             f'mephi42/memtrace-build-{name}:{args.version}',
-            './ci',
+            '/opt/python/cp38-cp38/bin/python3',
+            'ci',
             '-DBoost_USE_STATIC_LIBS=ON',
             *rest,
         ]

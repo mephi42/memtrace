@@ -1,42 +1,132 @@
-#!/bin/sh
-set -e -u -x
+#!/usr/bin/env python3
+import argparse
+import glob
+import multiprocessing
+import os
+import platform
+import shutil
+import subprocess
+import tempfile
 
-cd "$(dirname "$0")"
-basedir=$PWD
+basedir = os.path.dirname(os.path.realpath(__file__))
+valgrind_src = os.path.join(basedir, 'valgrind')
+uname_m = platform.machine()
+uname = f'{platform.system()}-{uname_m}'
+build = os.path.join(basedir, 'build', uname)
+tracer_build = os.path.join(build, 'tracer')
+tracer_install = os.path.join(tracer_build, 'install')
+tracer_dist = os.path.join(basedir, 'memtrace', 'tracer', uname)
+nproc = multiprocessing.cpu_count()
+run_in_venv = os.path.join(basedir, 'run-in-venv')
 
-valgrind=$basedir/valgrind
-cd "$valgrind"
-if QUILT_PATCHES="$basedir"/valgrind-patches quilt push -a; then
-    :
-else
-    quilt_rc=$?
-    [ "$quilt_rc" -eq 2 ] || exit "$quilt_rc"
-fi
-[ -e configure ] || ./autogen.sh
 
-uname_m=$(uname -m)
-uname=$(uname -s)-$uname_m
-build=$basedir/build/$uname
-tracer=$build/tracer
-mkdir -p "$tracer"
-cd "$tracer"
-[ -e Makefile ] || "$valgrind"/configure --prefix="$tracer"/install
-nproc=$(getconf _NPROCESSORS_ONLN)
-make -j"$nproc"
-make -j"$nproc" install
+def patch_valgrind():
+    quilt = ['quilt', 'push', '-a']
+    returncode = subprocess.call(
+        quilt,
+        env={
+            **os.environ,
+            'QUILT_PATCHES': os.path.join(basedir, 'valgrind-patches'),
+        },
+        cwd=valgrind_src,
+    )
+    if returncode != 0 and returncode != 2:
+        raise subprocess.CalledProcessError(returncode=returncode, cmd=quilt)
 
-cd "$basedir"
-mkdir -p memtrace/tracer/"$uname"
-(cd "$tracer"/install && tar -c \
-     bin/valgrind \
-     lib/valgrind/memtrace-* \
-     lib/valgrind/vgpreload_core-*.so \
-    ) | tar -C memtrace/tracer/"$uname" -xv
-for python_version in cp36-cp36m cp37-cp37m cp38-cp38; do
-    /opt/python/"$python_version"/bin/python -m venv "$build/$python_version"
-    . "$build/$python_version"/bin/activate
-    pip --disable-pip-version-check install -r requirements.txt
-    python setup.py bdist_wheel "$@"
-    set +u; deactivate; set -u
-    auditwheel repair --wheel-dir=dist/wheelhouse dist/memtrace-*-"$python_version"-*_"$uname_m".whl
-done
+
+def autogen_valgrind():
+    if os.path.exists(os.path.join(valgrind_src, 'configure')):
+        return
+    subprocess.check_call(['./autogen.sh'], cwd=valgrind_src)
+
+
+def configure_tracer():
+    if os.path.exists(os.path.join(tracer_build, 'Makefile')):
+        return
+    os.makedirs(tracer_build, exist_ok=True)
+    subprocess.check_call([
+        os.path.join(valgrind_src, 'configure'),
+        f'--prefix={tracer_install}',
+    ], cwd=tracer_build)
+
+
+def build_tracer():
+    subprocess.check_call(['make', f'-j{nproc}', 'install'], cwd=tracer_build)
+
+
+def dist_tracer():
+    files = []
+    for pattern in (
+            'bin/valgrind',
+            'lib/valgrind/memtrace-*',
+            'lib/valgrind/vgpreload_core-*.so',
+    ):
+        for file in glob.glob(os.path.join(tracer_install, pattern)):
+            files.append(os.path.relpath(file, tracer_install))
+    os.makedirs(tracer_dist, exist_ok=True)
+    tar = subprocess.Popen(
+        args=['tar', '-c', *files],
+        cwd=tracer_install,
+        stdout=subprocess.PIPE,
+    )
+    untar = subprocess.Popen(
+        args=['tar', '-x'],
+        cwd=tracer_dist,
+        stdin=tar.stdout,
+    )
+    ret = tar.wait()
+    if ret != 0:
+        raise subprocess.CalledProcessError(ret, tar.args)
+    ret = untar.wait()
+    if ret != 0:
+        raise subprocess.CalledProcessError(ret, untar.args)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--python-version', action='append')
+    parser.add_argument(
+        '--wheel-dir',
+        default=os.path.join(basedir, 'dist', 'wheelhouse'),
+    )
+    args, rest = parser.parse_known_args()
+    if args.python_version is None:
+        args.python_version = ('cp36-cp36m', 'cp37-cp37m', 'cp38-cp38')
+    patch_valgrind()
+    autogen_valgrind()
+    configure_tracer()
+    build_tracer()
+    dist_tracer()
+    workdir = tempfile.TemporaryDirectory()
+    try:
+        for python_version in args.python_version:
+            python = os.path.join(
+                '/opt', 'python', python_version, 'bin', 'python')
+            venv = os.path.join(build, python_version)
+            subprocess.check_call([python, '-m', 'venv', venv])
+            subprocess.check_call([
+                run_in_venv, venv,
+                'pip', 'install',
+                '--disable-pip-version-check',
+                '--requirement=requirements.txt',
+                '--upgrade',
+            ], cwd=basedir)
+            dist_dir = os.path.join(workdir.name, python_version)
+            subprocess.check_call([
+                run_in_venv, venv,
+                'python', 'setup.py', 'bdist_wheel',
+                f'--dist-dir={dist_dir}',
+                *rest,
+            ], cwd=basedir)
+            whl, = os.listdir(dist_dir)
+            subprocess.check_call([
+                'auditwheel', 'repair',
+                f'--wheel-dir={args.wheel_dir}',
+                os.path.join(dist_dir, whl),
+            ])
+    finally:
+        shutil.rmtree(workdir.name)
+
+
+if __name__ == '__main__':
+    main()
