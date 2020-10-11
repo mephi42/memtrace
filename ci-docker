@@ -21,6 +21,12 @@ def main():
     basedir = os.path.dirname(os.path.realpath(__file__))
     config = ConfigParser()
     config.read(os.path.join(basedir, 'docker', 'images.ini'))
+    local_build = os.path.join(basedir, 'build.docker')
+    container_build = os.path.join(basedir, 'build')
+    os.makedirs(local_build, exist_ok=True)
+    # Create directory at container path as well, otherwise docker will create
+    # it for us with root:root ownership.
+    os.makedirs(container_build, exist_ok=True)
     local_ccache = os.path.expanduser('~/.ccache')
     container_ccache = '/var/cache/ccache'
     os.makedirs(local_ccache, exist_ok=True)
@@ -30,8 +36,6 @@ def main():
     local_skbuild = os.path.join(basedir, '_skbuild.docker')
     container_skbuild = os.path.join(basedir, '_skbuild')
     os.makedirs(local_skbuild, exist_ok=True)
-    # Create directory at container path as well, otherwise docker will create
-    # it for us with root:root ownership.
     os.makedirs(container_skbuild, exist_ok=True)
     for name in config.sections():
         if not args.all and name not in args.name:
@@ -45,6 +49,7 @@ def main():
             '--tty',
             f'--user={os.getuid()}:{os.getgid()}',
             f'--volume={basedir}:{basedir}',
+            f'--volume={local_build}:{container_build}',
             f'--volume={local_ccache}:{container_ccache}',
             f'--volume={local_pip_cache}:{container_pip_cache}',
             f'--volume={local_skbuild}:{container_skbuild}',
