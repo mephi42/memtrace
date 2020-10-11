@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import signal
 import sys
+import threading
 
 import click
 import click.types
@@ -8,12 +9,22 @@ import click.types
 import memtrace
 from memtrace.analysis import Analysis
 import memtrace.tracer
+from memtrace.notebook import open_notebook
 from memtrace._memtrace import Tag
 
 
 @click.group(help='memtrace version ' + memtrace.__version__)
 def main():
     pass
+
+
+@main.command(
+    help='Analyze a memtrace.out file in a Jupyter notebook',
+)
+def notebook():
+    with open_notebook(click.echo):
+        click.echo('Press Ctrl+C to stop the container.')
+        threading.Event().wait()
 
 
 @main.command(
