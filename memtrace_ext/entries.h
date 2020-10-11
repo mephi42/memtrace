@@ -278,10 +278,10 @@ class RegMetaEntry : public B {
   std::uint16_t GetSize() const {
     return RawInt<E, std::uint16_t>(this->GetData() + kSizeOffset).GetValue();
   }
-  const std::uint8_t* GetName() const { return this->GetData() + kNameOffset; }
-  std::string CopyName() const {
-    return reinterpret_cast<const char*>(GetName());
+  const char* GetName() const {
+    return reinterpret_cast<const char*>(this->GetData() + kNameOffset);
   }
+  std::string CopyName() const { return GetName(); }
 
  private:
   static constexpr size_t kOffsetOffset = Tlv<E, W>::kFixedLength;

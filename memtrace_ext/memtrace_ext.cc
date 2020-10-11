@@ -174,7 +174,8 @@ class Trace;
 template <Endianness E, typename W>
 class Dumper {
  public:
-  explicit Dumper(std::FILE* f) : f_(f), insnCount_(0) {}
+  explicit Dumper(std::FILE* f, Trace<E, W>* trace)
+      : f_(f), trace_(trace), insnCount_(0) {}
 
   int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
     std::fprintf(f_, "Endian            : %s\n", GetEndiannessStrPy(E));
@@ -187,10 +188,21 @@ class Dumper {
   }
 
   int operator()(size_t i, LdStEntry<E, W> entry) {
-    std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "] ",
-                 i, entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
-                 static_cast<size_t>(entry.GetSize() * 8),
-                 static_cast<std::uint64_t>(entry.GetAddr()));
+    const char* regName;
+    Tag tag = entry.GetTlv().GetTag();
+    if (tag == Tag::MT_REG || tag == Tag::MT_GET_REG || tag == Tag::MT_PUT_REG)
+      regName = trace_->GetRegName(static_cast<std::uint16_t>(entry.GetAddr()),
+                                   static_cast<std::uint16_t>(entry.GetSize()));
+    else
+      regName = nullptr;
+    if (regName == nullptr)
+      std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "] ",
+                   i, entry.GetInsnSeq(), GetTagStr(tag),
+                   static_cast<size_t>(entry.GetSize() * 8),
+                   static_cast<std::uint64_t>(entry.GetAddr()));
+    else
+      std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s %s ", i, entry.GetInsnSeq(),
+                   GetTagStr(tag), regName);
     ValueDump<E>(f_, entry.GetValue(), entry.GetSize());
     std::fprintf(f_, "\n");
     return 0;
@@ -218,10 +230,19 @@ class Dumper {
   }
 
   int operator()(size_t i, LdStNxEntry<E, W> entry) {
-    std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "]\n",
-                 i, entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
-                 static_cast<size_t>(entry.GetSize() * 8),
-                 static_cast<std::uint64_t>(entry.GetAddr()));
+    const char* regName =
+        trace_->GetRegName(static_cast<std::uint16_t>(entry.GetAddr()),
+                           static_cast<std::uint16_t>(entry.GetSize()));
+    if (regName == nullptr)
+      std::fprintf(f_,
+                   "[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "]\n", i,
+                   entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
+                   static_cast<size_t>(entry.GetSize() * 8),
+                   static_cast<std::uint64_t>(entry.GetAddr()));
+    else
+      std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s %s\n", i,
+                   entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
+                   regName);
     return 0;
   }
 
@@ -251,6 +272,7 @@ class Dumper {
 
  private:
   FILE* f_;
+  Trace<E, W>* trace_;
   size_t insnCount_;
   Disasm disasmEngine_;
 };
@@ -470,6 +492,7 @@ class TraceBase {
   virtual boost::python::list GetMmapEntries() = 0;
   virtual int Dump(const char* path) = 0;
   virtual void SetFilter(std::shared_ptr<TraceFilter> filter) = 0;
+  virtual const char* GetRegName(std::uint16_t offset, std::uint16_t size) = 0;
 };
 
 template <typename W>
@@ -539,6 +562,28 @@ struct InsnIndexHeader {
   std::uint8_t stepShift;
 };
 
+using RegMeta = std::map<std::pair<std::uint16_t, std::uint16_t>, const char*>;
+
+struct HeaderVisitor {
+  HeaderVisitor(RegMeta* regMeta) : regMeta(regMeta), proceed(true) {}
+
+  template <Endianness E, typename W>
+  int operator()(size_t /* i */, RegMetaEntry<E, W> entry) {
+    (*regMeta)[std::make_pair(entry.GetOffset(), entry.GetSize())] =
+        entry.GetName();
+    return 0;
+  }
+
+  template <typename Entry>
+  int operator()(size_t /* i */, Entry /* entry */) {
+    proceed = false;
+    return 0;
+  }
+
+  RegMeta* regMeta;
+  bool proceed;
+};
+
 template <Endianness _E, typename _W>
 class Trace : public TraceBase {
  public:
@@ -558,6 +603,12 @@ class Trace : public TraceBase {
   int Init() {
     if (!Have(HeaderEntry<E, W>::kFixedLength)) return -EINVAL;
     if (!Advance(header_.GetTlv().GetAlignedLength())) return -EINVAL;
+    ScopedRewind scopedRewind(this);
+    HeaderVisitor visitor(&regMeta_);
+    TraceFilterNoOp filter;
+    int err;
+    while (cur_ != end_ && visitor.proceed)
+      if ((err = VisitOne(&visitor, filter)) < 0) return err;
     return 0;
   }
 
@@ -801,14 +852,22 @@ class Trace : public TraceBase {
   int Dump(const char* path) override {
     FILE* f = fopen(path, "w");
     if (f == nullptr) return -errno;
-    Dumper<E, W> dumper(f);
+    Dumper<E, W> dumper(f, this);
     int err = VisitAll(&dumper);
     fclose(f);
     return err;
   }
 
-  virtual void SetFilter(std::shared_ptr<TraceFilter> filter) {
+  void SetFilter(std::shared_ptr<TraceFilter> filter) override {
     filter_ = std::move(filter);
+  }
+
+  const char* GetRegName(std::uint16_t offset, std::uint16_t size) override {
+    RegMeta::const_iterator it = regMeta_.find(std::make_pair(offset, size));
+    if (it == regMeta_.end())
+      return nullptr;
+    else
+      return it->second;
   }
 
  private:
@@ -840,6 +899,7 @@ class Trace : public TraceBase {
   MmVector<InsnIndexEntry> insnIndex_;
   size_t insnIndexStepShift_;
   std::shared_ptr<TraceFilter> filter_;
+  RegMeta regMeta_;
 };
 
 int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
@@ -2059,7 +2119,8 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def("load_insn_index", &TraceBase::LoadInsnIndex)
       .def("get_mmap_entries", &TraceBase::GetMmapEntries)
       .def("dump", &TraceBase::Dump)
-      .def("set_filter", &TraceBase::SetFilter);
+      .def("set_filter", &TraceBase::SetFilter)
+      .def("get_reg_name", &TraceBase::GetRegName);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
   bp::class_<Range<std::uint64_t>>("Range",

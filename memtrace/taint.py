@@ -60,6 +60,7 @@ class BackwardNode:
                         entry=trace_entry,
                         endianness=analysis.endianness_str,
                         disasm=analysis.disasm,
+                        trace=analysis.trace,
                     )
                     fp.write(f'Reason: {entry_str}\n')
                 for trace_entry in edge.mem:
@@ -67,6 +68,7 @@ class BackwardNode:
                         entry=trace_entry,
                         endianness=analysis.endianness_str,
                         disasm=analysis.disasm,
+                        trace=analysis.trace,
                     )
                     fp.write(f'Reason: {entry_str}\n')
                 if is_seen:

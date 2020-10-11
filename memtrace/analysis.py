@@ -181,6 +181,7 @@ def main():
                     entry=entry,
                     endianness=analysis.endianness_str,
                     disasm=analysis.disasm,
+                    trace=analysis.trace,
                 )
                 if entry.tag == Tag.MT_INSN_EXEC:
                     pc = analysis.ud.get_pc_for_code(entry.insn_seq)
@@ -222,7 +223,11 @@ def main():
                     print(f'*** {disasm_str}')
                     for entry in index2entry.values():
                         entry_str = format_entry(
-                            entry, analysis.endianness_str, analysis.disasm)
+                            entry=entry,
+                            endianness=analysis.endianness_str,
+                            disasm=analysis.disasm,
+                            trace=analysis.trace,
+                        )
                         print(f'***** {entry_str}')
 
 

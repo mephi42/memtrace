@@ -235,7 +235,7 @@ class MachineTest(CommonTest):
             for entry in trace:
                 if entry.tag == Tag.MT_INSN_EXEC:
                     insn_count += 1
-                line_str = format_entry(entry, endianness_str, disasm)
+                line_str = format_entry(entry, endianness_str, disasm, trace)
                 line = (line_str + '\n').encode()
                 self._filter_line(fp, line, rootdir_bytes, workdir_bytes)
             fp.write('Insns             : {}\n'.format(insn_count).encode())
@@ -264,7 +264,7 @@ class MachineTest(CommonTest):
                 except:  # noqa: E722
                     break
                 entry = next(trace)
-                entry_str = format_entry(entry, endianness_str, disasm)
+                entry_str = format_entry(entry, endianness_str, disasm, trace)
                 fp.write(entry_str + '\n')
                 i += 1
         diff_files(expected_seek_txt, actual_seek_txt)
