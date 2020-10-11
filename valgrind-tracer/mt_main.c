@@ -19,6 +19,8 @@
 
 #include <elf.h>
 
+#include "mt_regs.h"
+
 #if defined(VG_BIGENDIAN)
 #define END Iend_BE
 #elif defined(VG_LITTLEENDIAN)
@@ -65,6 +67,7 @@ static IRExpr* mkPtr(void* ptr)
 #define MT_GET_REG_NX 0x4d48
 #define MT_PUT_REG_NX 0x4d49
 #define MT_MMAP 0x4d50
+#define MT_REGMETA 0x4d51
 
 #define TRACE_BUFFER_SIZE (1024 * 1024 * 1024)
 #define MAX_ENTRY_LENGTH (4 * 1024)
@@ -154,6 +157,33 @@ struct MmapEntry {
    UChar value[0];
 };
 
+/* Used for MT_REGMETA. */
+struct RegMetaEntry {
+   struct Tlv tlv;
+   UShort offset;
+   UShort size;
+   UChar name[0];
+};
+
+static void store_reg_meta(void)
+{
+   struct RegMetaEntry* entry;
+   SizeT nameLength;
+   SizeT i;
+
+   MT_STATIC_ASSERT(sizeof(struct RegMetaEntry) == 8);
+   for (i = 0; i < sizeof(regs) / sizeof(regs[0]); i++) {
+      nameLength = VG_(strlen)(regs[i].name);
+      entry = (struct RegMetaEntry*)trace;
+      entry->tlv.tag = MT_REGMETA;
+      entry->tlv.length = sizeof(struct RegMetaEntry) + nameLength + 1;
+      entry->offset = regs[i].offset;
+      entry->size = regs[i].size;
+      VG_(memcpy)(entry->name, regs[i].name, nameLength + 1);
+      trace += ALIGN_UP(entry->tlv.length, sizeof(UIntPtr));
+   }
+}
+
 static void open_trace_file(void)
 {
    struct HeaderEntry* entry;
@@ -182,6 +212,8 @@ static void open_trace_file(void)
    entry->e_machine = VG_ELF_MACHINE;
    entry->regsSize = sizeof(VexGuestArchState);
    trace += sizeof(struct HeaderEntry);
+
+   store_reg_meta();
 }
 
 static void flush_trace_buffer(void)

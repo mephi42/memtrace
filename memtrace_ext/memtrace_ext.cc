@@ -236,6 +236,14 @@ class Dumper {
     return 0;
   }
 
+  int operator()(size_t i, RegMetaEntry<E, W> entry) {
+    std::fprintf(f_, "[%10zu] %s uint%zu_t %s [0x%" PRIx16 "]\n", i,
+                 GetTagStr(entry.GetTlv().GetTag()),
+                 static_cast<size_t>(entry.GetSize() * 8), entry.GetName(),
+                 entry.GetOffset());
+    return 0;
+  }
+
   int Complete() {
     std::fprintf(f_, "Insns             : %zu\n", insnCount_);
     return 0;
@@ -341,6 +349,11 @@ struct Seeker {
 
   template <Endianness E, typename W>
   int operator()(size_t /* index */, MmapEntry<E, W> /* entry */) {
+    return 0;
+  }
+
+  template <Endianness E, typename W>
+  int operator()(size_t /* index */, RegMetaEntry<E, W> /* entry */) {
     return 0;
   }
 
@@ -614,6 +627,10 @@ class Trace : public TraceBase {
           case Tag::MT_MMAP:
             if (filter.isMissingInsnSeqOk())
               err = (*visitor)(entryIndex_, MmapEntry<E, W>(cur_));
+            break;
+          case Tag::MT_REGMETA:
+            if (filter.isMissingInsnSeqOk())
+              err = (*visitor)(entryIndex_, RegMetaEntry<E, W>(cur_));
             break;
           default:
             return -EINVAL;
@@ -1505,6 +1522,8 @@ class Ud : public UdBase {
 
   int operator()(size_t /* i */, MmapEntry<E, W> /* entry */) { return 0; }
 
+  int operator()(size_t /* i */, RegMetaEntry<E, W> /* entry */) { return 0; }
+
   int Complete() {
     int ret;
     if ((ret = Flush()) < 0) return ret;
@@ -1959,6 +1978,12 @@ void RegisterEntries() {
       .add_property("dev", &MmapEntryPy::GetDev)
       .add_property("inode", &MmapEntryPy::GetInode)
       .add_property("name", &MmapEntryPy::CopyValue);
+  using RegMetaEntryPy = RegMetaEntry<E, W, EntryPyEW<E, W>>;
+  bp::class_<RegMetaEntryPy, boost::noncopyable, bp::bases<EntryPy>>(
+      MangleName<E, W>("RegMetaEntry").c_str(), bp::no_init)
+      .add_property("offset", &RegMetaEntryPy::GetOffset)
+      .add_property("size", &RegMetaEntryPy::GetSize)
+      .add_property("name", &RegMetaEntryPy::CopyName);
 }
 
 }  // namespace
@@ -1983,7 +2008,8 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .value("MT_INSN_EXEC", Tag::MT_INSN_EXEC)
       .value("MT_GET_REG_NX", Tag::MT_GET_REG_NX)
       .value("MT_PUT_REG_NX", Tag::MT_PUT_REG_NX)
-      .value("MT_MMAP", Tag::MT_MMAP);
+      .value("MT_MMAP", Tag::MT_MMAP)
+      .value("MT_REGMETA", Tag::MT_REGMETA);
   bp::enum_<MachineType>("MachineType")
       .value("EM_386", MachineType::EM_386)
       .value("EM_X86_64", MachineType::EM_X86_64)

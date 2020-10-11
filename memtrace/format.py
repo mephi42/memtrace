@@ -58,6 +58,13 @@ def format_entry(entry: Entry, endianness: str, disasm: Disasm) -> str:
             'x' if entry.flags & 4 else '-',
             entry.name,
         )
+    elif entry.tag == Tag.MT_REGMETA:
+        s += '{} uint{}_t {} [0x{:x}]'.format(
+            entry.tag,
+            entry.size * 8,
+            entry.name,
+            entry.offset,
+        )
     else:
         s += '???'
     return s

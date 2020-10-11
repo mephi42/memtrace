@@ -3,59 +3,174 @@ Word              : Q
 Word size         : 8
 Machine           : EM_X86_64
 Regs size         : 928
-[         0] 0x00000001: MT_INSN 0x0000000000401000 48c7c000000000 mov rax, 0
-[         1] 0x00000001: MT_INSN_EXEC
-[         2] 0x00000001: MT_PUT_REG uint64_t [0x10] 0x0
-[         3] 0x00000002: MT_INSN 0x0000000000401007 48c7c700000000 mov rdi, 0
-[         4] 0x00000002: MT_INSN_EXEC
-[         5] 0x00000002: MT_PUT_REG uint64_t [0x48] 0x0
-[         6] 0x00000003: MT_INSN 0x000000000040100e 488d35eb0f0000 lea rsi, [rip + 0xfeb]
-[         7] 0x00000003: MT_INSN_EXEC
-[         8] 0x00000003: MT_PUT_REG uint64_t [0x40] 0x402000
-[         9] 0x00000004: MT_INSN 0x0000000000401015 48c7c201000000 mov rdx, 1
-[        10] 0x00000004: MT_INSN_EXEC
-[        11] 0x00000004: MT_PUT_REG uint64_t [0x20] 0x1
-[        12] 0x00000005: MT_INSN 0x000000000040101c 0f05 syscall 
-[        13] 0x00000005: MT_INSN_EXEC
-[        14] 0x00000005: MT_PUT_REG uint64_t [0x18] 0x40101e
-[        15] 0x00000005: MT_GET_REG uint64_t [0x10] 0x0
-[        16] 0x00000005: MT_GET_REG uint32_t [0x48] 0x0
-[        17] 0x00000005: MT_GET_REG uint64_t [0x40] 0x402000
-[        18] 0x00000005: MT_GET_REG uint64_t [0x20] 0x1
-[        19] 0x00000005: MT_PUT_REG uint64_t [0x10] 0x1
-[        20] 0x00000005: MT_STORE uint8_t [0x402000] 0x2a
-[        21] 0x00000005: MT_PUT_REG uint64_t [0x10] 0x1
-[        22] 0x00000006: MT_INSN 0x000000000040101e 48c7c03c000000 mov rax, 0x3c
-[        23] 0x00000006: MT_INSN_EXEC
-[        24] 0x00000006: MT_PUT_REG uint64_t [0x10] 0x3c
-[        25] 0x00000007: MT_INSN 0x0000000000401025 4831ff xor rdi, rdi
-[        26] 0x00000007: MT_INSN_EXEC
-[        27] 0x00000007: MT_PUT_REG uint64_t [0x90] 0x14
-[        28] 0x00000007: MT_PUT_REG uint64_t [0x98] 0x0
-[        29] 0x00000007: MT_PUT_REG uint64_t [0xa0] 0x0
-[        30] 0x00000007: MT_PUT_REG uint64_t [0x48] 0x0
-[        31] 0x00000008: MT_INSN 0x0000000000401028 803dd10f00002a cmp byte ptr [rip + 0xfd1], 0x2a
-[        32] 0x00000008: MT_INSN_EXEC
-[        33] 0x00000008: MT_LOAD uint8_t [0x402000] 0x2a
-[        34] 0x00000008: MT_PUT_REG uint64_t [0x90] 0x5
-[        35] 0x00000008: MT_PUT_REG uint64_t [0x98] 0x2a
-[        36] 0x00000008: MT_PUT_REG uint64_t [0xa0] 0x2a
-[        37] 0x00000009: MT_INSN 0x000000000040102f 400f95c7 setne dil
-[        38] 0x00000009: MT_INSN_EXEC
-[        39] 0x00000009: MT_GET_REG uint64_t [0x90] 0x5
-[        40] 0x00000009: MT_GET_REG uint64_t [0x98] 0x2a
-[        41] 0x00000009: MT_GET_REG uint64_t [0xa0] 0x2a
-[        42] 0x00000009: MT_GET_REG uint64_t [0xa8] 0x0
-[        43] 0x00000009: MT_PUT_REG uint8_t [0x48] 0x0
-[        44] 0x0000000a: MT_INSN 0x0000000000401033 0f05 syscall 
-[        45] 0x0000000a: MT_INSN_EXEC
-[        46] 0x0000000a: MT_PUT_REG uint64_t [0x18] 0x401035
-[        47] 0x0000000a: MT_GET_REG uint64_t [0x10] 0x3c
-[        48] 0x0000000a: MT_GET_REG uint32_t [0x48] 0x0
-[        49] 0x0000000a: MT_PUT_REG uint64_t [0x10] 0x0
-[        50] 0x0000000a: MT_PUT_REG uint64_t [0x10] 0x0
-[        51] MT_MMAP 0000000000400000-0000000000401000 r-- {workdir}/x86_64
-[        52] MT_MMAP 0000000000401000-0000000000402000 r-x {workdir}/x86_64
-[        53] MT_MMAP 0000000000402000-0000000000403000 rw- 
-[        54] MT_MMAP 0000000004000000-0000000004001000 rwx 
+[         0] MT_REGMETA uint64_t host_EvC_FAILADDR [0x0]
+[         1] MT_REGMETA uint32_t host_EvC_COUNTER [0x8]
+[         2] MT_REGMETA uint32_t pad0 [0xc]
+[         3] MT_REGMETA uint64_t rax [0x10]
+[         4] MT_REGMETA uint32_t eax [0x10]
+[         5] MT_REGMETA uint16_t ax [0x10]
+[         6] MT_REGMETA uint8_t al [0x10]
+[         7] MT_REGMETA uint8_t ah [0x11]
+[         8] MT_REGMETA uint64_t rcx [0x18]
+[         9] MT_REGMETA uint32_t ecx [0x18]
+[        10] MT_REGMETA uint16_t cx [0x18]
+[        11] MT_REGMETA uint8_t cl [0x18]
+[        12] MT_REGMETA uint8_t ch [0x19]
+[        13] MT_REGMETA uint64_t rdx [0x20]
+[        14] MT_REGMETA uint32_t edx [0x20]
+[        15] MT_REGMETA uint16_t dx [0x20]
+[        16] MT_REGMETA uint8_t dl [0x20]
+[        17] MT_REGMETA uint8_t dh [0x21]
+[        18] MT_REGMETA uint64_t rbx [0x20]
+[        19] MT_REGMETA uint32_t ebx [0x20]
+[        20] MT_REGMETA uint16_t bx [0x20]
+[        21] MT_REGMETA uint8_t bl [0x20]
+[        22] MT_REGMETA uint8_t bh [0x21]
+[        23] MT_REGMETA uint64_t rsp [0x30]
+[        24] MT_REGMETA uint32_t esp [0x30]
+[        25] MT_REGMETA uint16_t sp [0x30]
+[        26] MT_REGMETA uint8_t spl [0x30]
+[        27] MT_REGMETA uint64_t rbp [0x38]
+[        28] MT_REGMETA uint32_t ebp [0x38]
+[        29] MT_REGMETA uint16_t bp [0x38]
+[        30] MT_REGMETA uint8_t bpl [0x38]
+[        31] MT_REGMETA uint64_t rsi [0x40]
+[        32] MT_REGMETA uint32_t esi [0x40]
+[        33] MT_REGMETA uint16_t si [0x40]
+[        34] MT_REGMETA uint8_t sil [0x40]
+[        35] MT_REGMETA uint64_t rdi [0x48]
+[        36] MT_REGMETA uint32_t edi [0x48]
+[        37] MT_REGMETA uint16_t di [0x48]
+[        38] MT_REGMETA uint8_t dil [0x48]
+[        39] MT_REGMETA uint64_t r8 [0x50]
+[        40] MT_REGMETA uint32_t r8d [0x50]
+[        41] MT_REGMETA uint16_t r8w [0x50]
+[        42] MT_REGMETA uint8_t r8b [0x50]
+[        43] MT_REGMETA uint64_t r9 [0x58]
+[        44] MT_REGMETA uint32_t r9d [0x58]
+[        45] MT_REGMETA uint16_t r9w [0x58]
+[        46] MT_REGMETA uint8_t r9b [0x58]
+[        47] MT_REGMETA uint64_t r10 [0x60]
+[        48] MT_REGMETA uint32_t r10d [0x60]
+[        49] MT_REGMETA uint16_t r10w [0x60]
+[        50] MT_REGMETA uint8_t r10b [0x60]
+[        51] MT_REGMETA uint64_t r11 [0x68]
+[        52] MT_REGMETA uint32_t r11d [0x68]
+[        53] MT_REGMETA uint16_t r11w [0x68]
+[        54] MT_REGMETA uint8_t r11b [0x68]
+[        55] MT_REGMETA uint64_t r12 [0x70]
+[        56] MT_REGMETA uint32_t r12d [0x70]
+[        57] MT_REGMETA uint16_t r12w [0x70]
+[        58] MT_REGMETA uint8_t r12b [0x70]
+[        59] MT_REGMETA uint64_t r13 [0x78]
+[        60] MT_REGMETA uint32_t r13d [0x78]
+[        61] MT_REGMETA uint16_t r13w [0x78]
+[        62] MT_REGMETA uint8_t r13b [0x78]
+[        63] MT_REGMETA uint64_t r14 [0x80]
+[        64] MT_REGMETA uint32_t r14d [0x80]
+[        65] MT_REGMETA uint16_t r14w [0x80]
+[        66] MT_REGMETA uint8_t r14b [0x80]
+[        67] MT_REGMETA uint64_t r15 [0x88]
+[        68] MT_REGMETA uint32_t r15d [0x88]
+[        69] MT_REGMETA uint16_t r15w [0x88]
+[        70] MT_REGMETA uint8_t r15b [0x88]
+[        71] MT_REGMETA uint64_t guest_CC_OP [0x90]
+[        72] MT_REGMETA uint64_t guest_CC_DEP1 [0x98]
+[        73] MT_REGMETA uint64_t guest_CC_DEP2 [0xa0]
+[        74] MT_REGMETA uint64_t guest_CC_NDEP [0xa8]
+[        75] MT_REGMETA uint64_t guest_DFLAG [0xb0]
+[        76] MT_REGMETA uint64_t rip [0xb8]
+[        77] MT_REGMETA uint32_t eip [0xb8]
+[        78] MT_REGMETA uint16_t ip [0xb8]
+[        79] MT_REGMETA uint64_t guest_ACFLAG [0xc0]
+[        80] MT_REGMETA uint64_t guest_IDFLAG [0xc8]
+[        81] MT_REGMETA uint64_t guest_FS_CONST [0xd0]
+[        82] MT_REGMETA uint64_t guest_SSEROUND [0xd8]
+[        83] MT_REGMETA uint256_t guest_YMM0 [0xe0]
+[        84] MT_REGMETA uint256_t guest_YMM1 [0x100]
+[        85] MT_REGMETA uint256_t guest_YMM2 [0x120]
+[        86] MT_REGMETA uint256_t guest_YMM3 [0x140]
+[        87] MT_REGMETA uint256_t guest_YMM4 [0x160]
+[        88] MT_REGMETA uint256_t guest_YMM5 [0x180]
+[        89] MT_REGMETA uint256_t guest_YMM6 [0x1a0]
+[        90] MT_REGMETA uint256_t guest_YMM7 [0x1c0]
+[        91] MT_REGMETA uint256_t guest_YMM8 [0x1e0]
+[        92] MT_REGMETA uint256_t guest_YMM9 [0x200]
+[        93] MT_REGMETA uint256_t guest_YMM10 [0x220]
+[        94] MT_REGMETA uint256_t guest_YMM11 [0x240]
+[        95] MT_REGMETA uint256_t guest_YMM12 [0x260]
+[        96] MT_REGMETA uint256_t guest_YMM13 [0x280]
+[        97] MT_REGMETA uint256_t guest_YMM14 [0x2a0]
+[        98] MT_REGMETA uint256_t guest_YMM15 [0x2c0]
+[        99] MT_REGMETA uint256_t guest_YMM16 [0x2e0]
+[       100] MT_REGMETA uint32_t guest_FTOP [0x300]
+[       101] MT_REGMETA uint32_t pad1 [0x304]
+[       102] MT_REGMETA uint512_t guest_FPREG [0x308]
+[       103] MT_REGMETA uint64_t guest_FPTAG [0x348]
+[       104] MT_REGMETA uint64_t guest_FPROUND [0x350]
+[       105] MT_REGMETA uint64_t guest_FC3210 [0x358]
+[       106] MT_REGMETA uint32_t guest_EMNOTE [0x360]
+[       107] MT_REGMETA uint32_t pad2 [0x364]
+[       108] MT_REGMETA uint64_t guest_CMSTART [0x368]
+[       109] MT_REGMETA uint64_t guest_CMLEN [0x370]
+[       110] MT_REGMETA uint64_t guest_NRADDR [0x378]
+[       111] MT_REGMETA uint64_t guest_SC_CLASS [0x380]
+[       112] MT_REGMETA uint64_t guest_GS_CONST [0x388]
+[       113] MT_REGMETA uint64_t guest_IP_AT_SYSCALL [0x390]
+[       114] MT_REGMETA uint64_t pad3 [0x398]
+[       115] 0x00000001: MT_INSN 0x0000000000401000 48c7c000000000 mov rax, 0
+[       116] 0x00000001: MT_INSN_EXEC
+[       117] 0x00000001: MT_PUT_REG uint64_t [0x10] 0x0
+[       118] 0x00000002: MT_INSN 0x0000000000401007 48c7c700000000 mov rdi, 0
+[       119] 0x00000002: MT_INSN_EXEC
+[       120] 0x00000002: MT_PUT_REG uint64_t [0x48] 0x0
+[       121] 0x00000003: MT_INSN 0x000000000040100e 488d35eb0f0000 lea rsi, [rip + 0xfeb]
+[       122] 0x00000003: MT_INSN_EXEC
+[       123] 0x00000003: MT_PUT_REG uint64_t [0x40] 0x402000
+[       124] 0x00000004: MT_INSN 0x0000000000401015 48c7c201000000 mov rdx, 1
+[       125] 0x00000004: MT_INSN_EXEC
+[       126] 0x00000004: MT_PUT_REG uint64_t [0x20] 0x1
+[       127] 0x00000005: MT_INSN 0x000000000040101c 0f05 syscall 
+[       128] 0x00000005: MT_INSN_EXEC
+[       129] 0x00000005: MT_PUT_REG uint64_t [0x18] 0x40101e
+[       130] 0x00000005: MT_GET_REG uint64_t [0x10] 0x0
+[       131] 0x00000005: MT_GET_REG uint32_t [0x48] 0x0
+[       132] 0x00000005: MT_GET_REG uint64_t [0x40] 0x402000
+[       133] 0x00000005: MT_GET_REG uint64_t [0x20] 0x1
+[       134] 0x00000005: MT_PUT_REG uint64_t [0x10] 0x1
+[       135] 0x00000005: MT_STORE uint8_t [0x402000] 0x2a
+[       136] 0x00000005: MT_PUT_REG uint64_t [0x10] 0x1
+[       137] 0x00000006: MT_INSN 0x000000000040101e 48c7c03c000000 mov rax, 0x3c
+[       138] 0x00000006: MT_INSN_EXEC
+[       139] 0x00000006: MT_PUT_REG uint64_t [0x10] 0x3c
+[       140] 0x00000007: MT_INSN 0x0000000000401025 4831ff xor rdi, rdi
+[       141] 0x00000007: MT_INSN_EXEC
+[       142] 0x00000007: MT_PUT_REG uint64_t [0x90] 0x14
+[       143] 0x00000007: MT_PUT_REG uint64_t [0x98] 0x0
+[       144] 0x00000007: MT_PUT_REG uint64_t [0xa0] 0x0
+[       145] 0x00000007: MT_PUT_REG uint64_t [0x48] 0x0
+[       146] 0x00000008: MT_INSN 0x0000000000401028 803dd10f00002a cmp byte ptr [rip + 0xfd1], 0x2a
+[       147] 0x00000008: MT_INSN_EXEC
+[       148] 0x00000008: MT_LOAD uint8_t [0x402000] 0x2a
+[       149] 0x00000008: MT_PUT_REG uint64_t [0x90] 0x5
+[       150] 0x00000008: MT_PUT_REG uint64_t [0x98] 0x2a
+[       151] 0x00000008: MT_PUT_REG uint64_t [0xa0] 0x2a
+[       152] 0x00000009: MT_INSN 0x000000000040102f 400f95c7 setne dil
+[       153] 0x00000009: MT_INSN_EXEC
+[       154] 0x00000009: MT_GET_REG uint64_t [0x90] 0x5
+[       155] 0x00000009: MT_GET_REG uint64_t [0x98] 0x2a
+[       156] 0x00000009: MT_GET_REG uint64_t [0xa0] 0x2a
+[       157] 0x00000009: MT_GET_REG uint64_t [0xa8] 0x0
+[       158] 0x00000009: MT_PUT_REG uint8_t [0x48] 0x0
+[       159] 0x0000000a: MT_INSN 0x0000000000401033 0f05 syscall 
+[       160] 0x0000000a: MT_INSN_EXEC
+[       161] 0x0000000a: MT_PUT_REG uint64_t [0x18] 0x401035
+[       162] 0x0000000a: MT_GET_REG uint64_t [0x10] 0x3c
+[       163] 0x0000000a: MT_GET_REG uint32_t [0x48] 0x0
+[       164] 0x0000000a: MT_PUT_REG uint64_t [0x10] 0x0
+[       165] 0x0000000a: MT_PUT_REG uint64_t [0x10] 0x0
+[       166] MT_MMAP 0000000000400000-0000000000401000 r-- {workdir}/x86_64
+[       167] MT_MMAP 0000000000401000-0000000000402000 r-x {workdir}/x86_64
+[       168] MT_MMAP 0000000000402000-0000000000403000 rw- 
+[       169] MT_MMAP 0000000004000000-0000000004001000 rwx 
 Insns             : 10

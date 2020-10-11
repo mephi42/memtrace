@@ -25,6 +25,7 @@ enum class Tag {
   MT_GET_REG_NX = 0x4d48,
   MT_PUT_REG_NX = 0x4d49,
   MT_MMAP = 0x4d50,
+  MT_REGMETA = 0x4d51,
 
   MT_LAST,
   MT_FIRST = MT_LOAD,
@@ -52,6 +53,8 @@ const char* GetTagStr(Tag tag) {
       return "MT_PUT_REG_NX";
     case Tag::MT_MMAP:
       return "MT_MMAP";
+    case Tag::MT_REGMETA:
+      return "MT_REGMETA";
     default:
       return nullptr;
   }
@@ -261,6 +264,29 @@ class MmapEntry : public B {
   static constexpr size_t kDevOffset = kOffsetOffset + sizeof(std::uint64_t);
   static constexpr size_t kInodeOffset = kDevOffset + sizeof(std::uint64_t);
   static constexpr size_t kValueOffset = kInodeOffset + sizeof(std::uint64_t);
+};
+
+template <Endianness E, typename W, typename B = Overlay>
+class RegMetaEntry : public B {
+ public:
+  using B::B;
+
+  Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
+  std::uint16_t GetOffset() const {
+    return RawInt<E, std::uint16_t>(this->GetData() + kOffsetOffset).GetValue();
+  }
+  std::uint16_t GetSize() const {
+    return RawInt<E, std::uint16_t>(this->GetData() + kSizeOffset).GetValue();
+  }
+  const std::uint8_t* GetName() const { return this->GetData() + kNameOffset; }
+  std::string CopyName() const {
+    return reinterpret_cast<const char*>(GetName());
+  }
+
+ private:
+  static constexpr size_t kOffsetOffset = Tlv<E, W>::kFixedLength;
+  static constexpr size_t kSizeOffset = kOffsetOffset + sizeof(std::uint16_t);
+  static constexpr size_t kNameOffset = kSizeOffset + sizeof(std::uint16_t);
 };
 
 }  // namespace
