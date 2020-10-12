@@ -60,6 +60,7 @@ class CommonTest(unittest.TestCase):
             '-Wconversion',
             '-pedantic',
             '-O3',
+            '-g',
         ]
 
     @staticmethod
@@ -77,7 +78,7 @@ class CommonTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.basedir = os.path.dirname(os.path.realpath(__file__))
-        cls.pydir = os.path.dirname(cls.basedir)
+        cls.pydir = os.path.dirname(os.path.realpath(memtrace.__file__))
         cls.workdir = tempfile.TemporaryDirectory()
         cls.trace_path = os.path.join(cls.workdir.name, 'memtrace.out')
         cls._compile()
@@ -156,12 +157,19 @@ class MachineTest(CommonTest):
         super().setUpClass()
 
     def _filter_line(
-            self, fp, line: bytes, rootdir: bytes, workdir: bytes) -> None:
-        if rootdir in line:
+            self,
+            fp,
+            line: bytes,
+            pydir: bytes,
+            workdir: bytes,
+            testdir: bytes,
+    ) -> None:
+        if pydir in line:
             return
         if b'[stack]' in line:
             return
         line = line.replace(workdir, b'{workdir}')
+        line = line.replace(testdir, b'{testdir}')
         line = re.sub(b'(lea [^,]+, )[^ ]+ ptr ', b'\\g<1>', line)
         line = re.sub(b'^(MT_MMAP count=\\d+ size=)\\d+$', b'\\g<1>', line)
         fp.write(line)
@@ -169,13 +177,19 @@ class MachineTest(CommonTest):
     def filter_file(self, path):
         pydir_bytes = self.pydir.encode()
         workdir_bytes = self.workdir.name.encode()
+        basedir_bytes = self.basedir.encode()
         done = False
         with tempfile.NamedTemporaryFile(prefix=path, delete=False) as tmpfp:
             try:
                 with open(path, 'rb') as fp:
                     for line in fp:
                         self._filter_line(
-                            tmpfp, line, pydir_bytes, workdir_bytes)
+                            fp=tmpfp,
+                            line=line,
+                            pydir=pydir_bytes,
+                            workdir=workdir_bytes,
+                            testdir=basedir_bytes,
+                        )
                 os.rename(tmpfp.name, path)
                 done = True
             finally:
@@ -230,14 +244,21 @@ class MachineTest(CommonTest):
                 trace.get_machine_type()).encode())
             fp.write('Regs size         : {}\n'.format(
                 trace.get_regs_size()).encode())
-            rootdir_bytes = self.pydir.encode()
+            pydir_bytes = self.pydir.encode()
             workdir_bytes = self.workdir.name.encode()
+            testdir_bytes = self.basedir.encode()
             for entry in trace:
                 if entry.tag == Tag.MT_INSN_EXEC:
                     insn_count += 1
                 line_str = format_entry(entry, endianness_str, disasm, trace)
                 line = (line_str + '\n').encode()
-                self._filter_line(fp, line, rootdir_bytes, workdir_bytes)
+                self._filter_line(
+                    fp=fp,
+                    line=line,
+                    pydir=pydir_bytes,
+                    workdir=workdir_bytes,
+                    testdir=testdir_bytes,
+                )
             fp.write('Insns             : {}\n'.format(insn_count).encode())
         diff_files(expected_dump_txt, actual_dump_txt)
 

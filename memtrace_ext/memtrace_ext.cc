@@ -840,10 +840,7 @@ class Trace : public TraceBase {
 
   boost::python::list GetMmapEntries() override {
     ScopedRewind scopedRewind(this);
-    if (insnIndex_.IsInitalized())
-      Rewind(insnIndex_[insnIndex_.size() - 1]);
-    else
-      Rewind();
+    Rewind();
     MmapEntryGatherer visitor;
     while (cur_ != end_)
       if (VisitOne(&visitor) < 0)

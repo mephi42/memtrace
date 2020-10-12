@@ -1,21 +1,21 @@
 #+STARTUP: indent
-* <<InsnInTrace:10>> 0x000000000804902b setne bl in ?? at ??:0
-** <<InsnInTrace:9>> 0x0000000008049024 cmp byte ptr [ebp + 0xffb], 0x2a in ?? at ??:0
+* <<InsnInTrace:10>> 0x000000000804902b setne bl in _base+0x26 (.text) at {testdir}/i386.S:20
+** <<InsnInTrace:9>> 0x0000000008049024 cmp byte ptr [ebp + 0xffb], 0x2a in _base+0x1f (.text) at {testdir}/i386.S:19
 Reason: [        51] 0x0000000a: MT_GET_REG uint32_t [0x28] 0x4
 Reason: [        52] 0x0000000a: MT_GET_REG uint32_t [0x2c] 0x2a
 Reason: [        53] 0x0000000a: MT_GET_REG uint32_t [0x30] 0x2a
 Reason: [        54] 0x0000000a: MT_GET_REG uint32_t [0x34] 0x0
-*** <<InsnInTrace:1>> 0x0000000008049000 call 0x8049005 in ?? at ??:0
+*** <<InsnInTrace:1>> 0x0000000008049000 call 0x8049005 in _start (.text) at {testdir}/i386.S:8
 Reason: [        43] 0x00000009: MT_GET_REG uint32_t [0x1c] 0x8049005
-*** <<InsnInTrace:6>> 0x000000000804901b int 0x80 in ?? at ??:0
+*** <<InsnInTrace:6>> 0x000000000804901b int 0x80 in _base+0x16 (.text) at {testdir}/i386.S:15
 Reason: [        44] 0x00000009: MT_LOAD uint8_t [0x804a000] 0x2a
-**** <<InsnInTrace:2>> 0x0000000008049006 mov eax, 3 in ?? at ??:0
+**** <<InsnInTrace:2>> 0x0000000008049006 mov eax, 3 in _base+0x1 (.text) at {testdir}/i386.S:11
 Reason: [        24] 0x00000006: MT_GET_REG uint32_t [0x8] 0x3
-**** <<InsnInTrace:3>> 0x000000000804900b mov ebx, 0 in ?? at ??:0
+**** <<InsnInTrace:3>> 0x000000000804900b mov ebx, 0 in _base+0x6 (.text) at {testdir}/i386.S:12
 Reason: [        25] 0x00000006: MT_GET_REG uint32_t [0x14] 0x0
-**** <<InsnInTrace:4>> 0x0000000008049010 lea ecx, [ebp + 0xffb] in ?? at ??:0
+**** <<InsnInTrace:4>> 0x0000000008049010 lea ecx, [ebp + 0xffb] in _base+0xb (.text) at {testdir}/i386.S:13
 Reason: [        26] 0x00000006: MT_GET_REG uint32_t [0xc] 0x804a000
-***** [[InsnInTrace:1]] 0x0000000008049000 call 0x8049005 in ?? at ??:0
+***** [[InsnInTrace:1]] 0x0000000008049000 call 0x8049005 in _start (.text) at {testdir}/i386.S:8
 Reason: [        16] 0x00000004: MT_GET_REG uint32_t [0x1c] 0x8049005
-**** <<InsnInTrace:5>> 0x0000000008049016 mov edx, 1 in ?? at ??:0
+**** <<InsnInTrace:5>> 0x0000000008049016 mov edx, 1 in _base+0x11 (.text) at {testdir}/i386.S:14
 Reason: [        27] 0x00000006: MT_GET_REG uint32_t [0x10] 0x1
