@@ -3,6 +3,7 @@ MT_HEADER32 count=1 size=8
 MT_INSN count=11 size=204
 MT_INSN_EXEC count=11 size=88
 MT_LOAD count=1 size=16
-MT_MMAP count=6 size=
+MT_MMAP count=5 size=
 MT_PUT_REG count=22 size=352
 MT_STORE count=1 size=16
+total count=64 size=1140

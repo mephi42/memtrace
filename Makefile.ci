@@ -1,3 +1,7 @@
+define ls_files
+  $(foreach file,$(shell cd $(1) && git ls-files),$(1)/$(file))
+endef
+
 basedir=$(CURDIR)
 uname_m=$(shell uname -m)
 uname=$(shell uname -s)-$(shell uname -m)
@@ -5,17 +9,21 @@ build=$(basedir)/build/$(uname)
 elfutils_src=$(basedir)/elfutils
 elfutils_build=$(build)/elfutils
 elfutils_install=$(elfutils_build)/install
-libdwfl_pic_a=$(elfutils_build)/libdwfl/libdwfl_pic.a
+libdw_a=$(elfutils_install)/lib/libdw.a
+elfutils_source_files=$(call ls_files,$(elfutils_src))
 valgrind_src=$(basedir)/valgrind
 valgrind_build=$(build)/valgrind
 valgrind_install=$(valgrind_build)/install
 valgrind=$(valgrind_install)/bin/valgrind
 valgrind_tracer_src=$(basedir)/valgrind-tracer
+valgrind_source_files=\
+	$(call ls_files,$(valgrind_src)) \
+	$(call ls_files,$(valgrind_tracer_src))
 
 .PHONY: all
-all: $(libdwfl_pic_a) $(valgrind)
+all: $(libdw_a) $(valgrind)
 
-$(libdwfl_pic_a): $(elfutils_build)/Makefile
+$(libdw_a): $(elfutils_build)/Makefile $(elfutils_source_files)
 	cd $(elfutils_build) && $(MAKE) install
 
 $(elfutils_build)/Makefile: $(elfutils_src)/configure
@@ -32,7 +40,7 @@ $(elfutils_src)/configure: \
 		$(elfutils_src)/Makefile.am
 	cd $(elfutils_src) && autoreconf -i
 
-$(valgrind): $(valgrind_build)/Makefile
+$(valgrind): $(valgrind_build)/Makefile $(valgrind_source_files)
 	cd $(valgrind_build) && $(MAKE) install
 
 $(valgrind_build)/Makefile: \

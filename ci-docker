@@ -14,7 +14,7 @@ def main():
         action='append',
         default=[],
     )
-    parser.add_argument('--version', default='2020-10-12-387d595f2')
+    parser.add_argument('--version', default='2020-10-13-db8737d6d')
     args, rest = parser.parse_known_args()
     if len(args.name) == 0:
         args.name.append('manylinux2014_' + platform.machine())

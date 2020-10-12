@@ -73,7 +73,12 @@ def main():
     if args.python_version is None:
         args.python_version = ('cp36-cp36m', 'cp37-cp37m', 'cp38-cp38')
     patch_valgrind()
-    subprocess.check_call(['make', '-f', 'Makefile.ci', f'-j{nproc}'])
+    subprocess.check_call([
+        'make',
+        '--file=Makefile.ci',
+        f'--jobs={nproc}',
+        '--no-builtin-rules',
+    ])
     dist_tracer()
     workdir = tempfile.TemporaryDirectory()
     try:

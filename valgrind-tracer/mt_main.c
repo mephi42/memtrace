@@ -73,11 +73,11 @@ static IRExpr* mkPtr(void* ptr)
 #define MAX_ENTRY_LENGTH (4 * 1024)
 #define ALIGN_UP(p, size) (((p) + ((size) - 1)) & ~((size) - 1))
 #define MT_STATIC_ASSERT(expr) (void)VKI_STATIC_ASSERT(expr)
-static const HChar trace_file_name[] = "memtrace.out";
-static Int trace_fd;
-static UChar* trace_start;
+static const HChar traceFileName[] = "memtrace.out";
+static Int traceFd;
+static UChar* traceStart;
 static UChar* trace;
-static UChar* trace_end;
+static UChar* traceEnd;
 #define AR_MEM (1 << 1)
 #define AR_REGS (1 << 2)
 #define AR_INSNS (1 << 3)
@@ -165,6 +165,15 @@ struct RegMetaEntry {
    UChar name[0];
 };
 
+static void flush_trace_buffer(void)
+{
+   Int traceSize = trace - traceStart;
+
+   VG_(write)(traceFd, traceStart, traceSize);
+   VG_(memset)(traceStart, 0, traceSize);
+   trace = traceStart;
+}
+
 static void store_reg_meta(void)
 {
    struct RegMetaEntry* entry;
@@ -184,26 +193,81 @@ static void store_reg_meta(void)
    }
 }
 
+static void trace_segment(const NSegment* seg)
+{
+   struct MmapEntry* entry;
+   Int alignedEntryLength;
+   const HChar* name;
+   Int entryLength;
+   Int nameLength;
+
+   name = VG_(am_get_filename)(seg);
+   if (name == NULL && seg->end == VG_(clstk_end))
+      name = "[stack]";
+   nameLength = name == NULL ? 1 : VG_(strlen)(name) + 1;
+   entryLength = sizeof(struct MmapEntry) + nameLength;
+   alignedEntryLength = ALIGN_UP(entryLength, sizeof(UIntPtr));
+   tl_assert(alignedEntryLength <= MAX_ENTRY_LENGTH);
+   entry = (struct MmapEntry*)trace;
+   entry->tlv.tag = MT_MMAP;
+   entry->tlv.length = entryLength;
+#if VG_WORDSIZE == 8
+   entry->padding = 0;
+#endif
+   entry->start = seg->start;
+   entry->end = seg->end;
+   entry->flags = (seg->hasR ? 1 : 0) |
+                  (seg->hasW ? 2 : 0) |
+                  (seg->hasX ? 4 : 0);
+   entry->offset = seg->offset;
+   entry->dev = seg->dev;
+   entry->inode = seg->ino;
+   if (nameLength == 1)
+      entry->value[0] = 0;
+   else
+      VG_(memcpy)(entry->value, name, nameLength);
+   trace += alignedEntryLength;
+   if (trace > traceEnd - MAX_ENTRY_LENGTH)
+      flush_trace_buffer();
+}
+
+static void trace_segments(void)
+{
+   const NSegment* seg;
+   Addr* segStarts;
+   Int nSegStarts;
+   Int i;
+
+   segStarts = VG_(get_segment_starts)(SkFileC | SkAnonC | SkShmC,
+                                       &nSegStarts);
+   for (i = 0; i < nSegStarts; i++) {
+      seg = VG_(am_find_nsegment)(segStarts[i]);
+      tl_assert(seg);
+      trace_segment(seg);
+   }
+   VG_(free)(segStarts);
+}
+
 static void open_trace_file(void)
 {
    struct HeaderEntry* entry;
    SysRes o;
 
-   o = VG_(open)(trace_file_name,
+   o = VG_(open)(traceFileName,
                  VKI_O_CREAT | VKI_O_TRUNC | VKI_O_RDWR,
                  0644);
    if (sr_isError(o)) {
-      VG_(umsg)("error: can't open '%s'\n", trace_file_name);
+      VG_(umsg)("error: can't open '%s'\n", traceFileName);
       VG_(exit)(1);
    }
-   trace_fd = VG_(safe_fd)(sr_Res(o));
-   if (trace_fd == -1) {
-      VG_(umsg)("error: safe_fd for '%s' failed\n", trace_file_name);
+   traceFd = VG_(safe_fd)(sr_Res(o));
+   if (traceFd == -1) {
+      VG_(umsg)("error: safe_fd for '%s' failed\n", traceFileName);
       VG_(exit)(1);
    }
-   trace_start = VG_(malloc)("mt.trace", TRACE_BUFFER_SIZE);
-   trace = trace_start;
-   trace_end = trace_start + TRACE_BUFFER_SIZE;
+   traceStart = VG_(malloc)("mt.trace", TRACE_BUFFER_SIZE);
+   trace = traceStart;
+   traceEnd = traceStart + TRACE_BUFFER_SIZE;
 
    MT_STATIC_ASSERT(sizeof(struct HeaderEntry) == 8);
    entry = (struct HeaderEntry*)trace;
@@ -214,22 +278,14 @@ static void open_trace_file(void)
    trace += sizeof(struct HeaderEntry);
 
    store_reg_meta();
-}
-
-static void flush_trace_buffer(void)
-{
-   Int traceSize = trace - trace_start;
-
-   VG_(write)(trace_fd, trace_start, traceSize);
-   VG_(memset)(trace_start, 0, traceSize);
-   trace = trace_start;
+   trace_segments();
 }
 
 static void close_trace_file(void)
 {
    flush_trace_buffer();
-   VG_(free)(trace_start);
-   VG_(close)(trace_fd);
+   VG_(free)(traceStart);
+   VG_(close)(traceFd);
 }
 
 static IRTemp load_current_entry_ptr(IRSB* out)
@@ -293,7 +349,7 @@ static void update_current_entry_ptr(IRSB* out,
    addStmtToIRSB(out,
                  IRStmt_WrTmp(isFlushNeeded,
                               IRExpr_Binop(Iop_CmpLTPtr,
-                                           mkPtr(trace_end - MAX_ENTRY_LENGTH),
+                                           mkPtr(traceEnd - MAX_ENTRY_LENGTH),
                                            IRExpr_RdTmp(updatedEntryPtr))));
    /* if (isFlushNeeded) flush_trace_buffer(); */
    d = unsafeIRDirty_0_N(0,
@@ -377,7 +433,7 @@ static void add_ldst_entries_now(UShort tag,
       else
          VG_(memcpy)(entry->value, (void*)addr, chunkSize);
       trace += alignedEntryLength;
-      if (trace > trace_end - MAX_ENTRY_LENGTH)
+      if (trace > traceEnd - MAX_ENTRY_LENGTH)
          flush_trace_buffer();
       addr += chunkSize;
       size -= chunkSize;
@@ -420,7 +476,7 @@ static void add_insn_entry_now(UInt insnSeq, Addr pc, UInt insn_length)
    alignedEntryLength = ALIGN_UP(entryLength, sizeof(UIntPtr));
    tl_assert(alignedEntryLength <= MAX_ENTRY_LENGTH);
    trace += alignedEntryLength;
-   if (trace > trace_end - MAX_ENTRY_LENGTH)
+   if (trace > traceEnd - MAX_ENTRY_LENGTH)
       flush_trace_buffer();
 }
 
@@ -450,58 +506,24 @@ static void add_raw_entries_now(XArray* entries)
    Word n;
 
    VG_(getContentsXA_UNSAFE)(entries, &ptr, &n);
-   if (trace + n + MAX_ENTRY_LENGTH > trace_end)
+   if (trace + n + MAX_ENTRY_LENGTH > traceEnd)
       flush_trace_buffer();
    VG_(memcpy)(trace, ptr, n);
    trace += n;
 }
 
-static void trace_segments(void)
+static void mt_track_new_mem_mmap(Addr a,
+                                  SizeT len,
+                                  Bool rr,
+                                  Bool ww,
+                                  Bool xx,
+                                  ULong di_handle)
 {
-   Addr* segStarts;
-   Int nSegStarts;
-   Int i;
+   const NSegment* seg;
 
-   segStarts = VG_(get_segment_starts)(SkFileC | SkAnonC | SkShmC,
-                                       &nSegStarts);
-   for (i = 0; i < nSegStarts; i++) {
-      struct MmapEntry* entry;
-      Int alignedEntryLength;
-      const NSegment* seg;
-      const HChar* name;
-      Int entryLength;
-      Int nameLength;
-
-      seg = VG_(am_find_nsegment)(segStarts[i]);
-      name = VG_(am_get_filename)(seg);
-      if (name == NULL && seg->end == VG_(clstk_end))
-         name = "[stack]";
-      nameLength = name == NULL ? 1 : VG_(strlen)(name) + 1;
-      entryLength = sizeof(struct MmapEntry) + nameLength;
-      alignedEntryLength = ALIGN_UP(entryLength, sizeof(UIntPtr));
-      tl_assert(alignedEntryLength <= MAX_ENTRY_LENGTH);
-      entry = (struct MmapEntry*)trace;
-      entry->tlv.tag = MT_MMAP;
-      entry->tlv.length = entryLength;
-#if VG_WORDSIZE == 8
-      entry->padding = 0;
-#endif
-      entry->start = seg->start;
-      entry->end = seg->end;
-      entry->flags = (seg->hasR ? 1 : 0) |
-                     (seg->hasW ? 2 : 0) |
-                     (seg->hasX ? 4 : 0);
-      entry->offset = seg->offset;
-      entry->dev = seg->dev;
-      entry->inode = seg->ino;
-      if (nameLength == 1)
-         entry->value[0] = 0;
-      else
-         VG_(memcpy)(entry->value, name, nameLength);
-      trace += alignedEntryLength;
-      if (trace > trace_end - MAX_ENTRY_LENGTH)
-         flush_trace_buffer();
-   }
+   seg = VG_(am_find_nsegment)(a);
+   if (seg)
+      trace_segment(seg);
 }
 
 static Int get_pc_flags(Addr pc)
@@ -855,7 +877,6 @@ static void mt_track_post_reg_write(CorePart part,
 
 static void mt_fini(Int exitcode)
 {
-   trace_segments();
    close_trace_file();
 }
 
@@ -885,6 +906,8 @@ static void mt_pre_clo_init(void)
    VG_(track_post_mem_write)(mt_track_post_mem_write);
    VG_(track_pre_reg_read)(mt_track_pre_reg_read);
    VG_(track_post_reg_write)(mt_track_post_reg_write);
+   VG_(track_new_mem_mmap)(mt_track_new_mem_mmap);
+
    open_trace_file();
 }
 
