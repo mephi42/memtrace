@@ -2,6 +2,7 @@
 /_skbuild/
 /_skbuild.docker/
 /build/
+/build.docker/
 /cp36-cp36m/
 /cp37-cp37m/
 /cp38-cp38/
