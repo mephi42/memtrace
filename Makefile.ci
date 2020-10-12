@@ -1,0 +1,49 @@
+basedir=$(CURDIR)
+uname_m=$(shell uname -m)
+uname=$(shell uname -s)-$(shell uname -m)
+build=$(basedir)/build/$(uname)
+elfutils_src=$(basedir)/elfutils
+elfutils_build=$(build)/elfutils
+elfutils_install=$(elfutils_build)/install
+libdwfl_pic_a=$(elfutils_build)/libdwfl/libdwfl_pic.a
+valgrind_src=$(basedir)/valgrind
+valgrind_build=$(build)/valgrind
+valgrind_install=$(valgrind_build)/install
+valgrind=$(valgrind_install)/bin/valgrind
+valgrind_tracer_src=$(basedir)/valgrind-tracer
+
+.PHONY: all
+all: $(libdwfl_pic_a) $(valgrind)
+
+$(libdwfl_pic_a): $(elfutils_build)/Makefile
+	cd $(elfutils_build) && $(MAKE) install
+
+$(elfutils_build)/Makefile: $(elfutils_src)/configure
+	mkdir -p $(elfutils_build) && \
+		cd $(elfutils_build) && \
+		CFLAGS=-fPIC $(elfutils_src)/configure \
+			--disable-debuginfod \
+			--disable-libdebuginfod \
+			--enable-maintainer-mode \
+			--prefix=$(elfutils_install)
+
+$(elfutils_src)/configure: \
+		$(elfutils_src)/configure.ac \
+		$(elfutils_src)/Makefile.am
+	cd $(elfutils_src) && autoreconf -i
+
+$(valgrind): $(valgrind_build)/Makefile
+	cd $(valgrind_build) && $(MAKE) install
+
+$(valgrind_build)/Makefile: \
+		$(valgrind_src)/configure \
+		$(valgrind_tracer_src)/Makefile.in
+	mkdir -p $(valgrind_build) && \
+		cd $(valgrind_build) && \
+		$(valgrind_src)/configure --prefix=$(valgrind_install)
+
+$(valgrind_src)/configure $(valgrind_tracer_src)/Makefile.in: \
+		$(valgrind_tracer_src)/Makefile.am \
+		$(valgrind_src)/configure.ac \
+		$(valgrind_src)/Makefile.am
+	cd $(valgrind_src) && ./autogen.sh

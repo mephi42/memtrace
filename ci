@@ -13,7 +13,7 @@ valgrind_src = os.path.join(basedir, 'valgrind')
 uname_m = platform.machine()
 uname = f'{platform.system()}-{uname_m}'
 build = os.path.join(basedir, 'build', uname)
-tracer_build = os.path.join(build, 'tracer')
+tracer_build = os.path.join(build, 'valgrind')
 tracer_install = os.path.join(tracer_build, 'install')
 tracer_dist = os.path.join(basedir, 'memtrace', 'tracer', uname)
 nproc = multiprocessing.cpu_count()
@@ -32,26 +32,6 @@ def patch_valgrind():
     )
     if returncode != 0 and returncode != 2:
         raise subprocess.CalledProcessError(returncode=returncode, cmd=quilt)
-
-
-def autogen_valgrind():
-    if os.path.exists(os.path.join(valgrind_src, 'configure')):
-        return
-    subprocess.check_call(['./autogen.sh'], cwd=valgrind_src)
-
-
-def configure_tracer():
-    if os.path.exists(os.path.join(tracer_build, 'Makefile')):
-        return
-    os.makedirs(tracer_build, exist_ok=True)
-    subprocess.check_call([
-        os.path.join(valgrind_src, 'configure'),
-        f'--prefix={tracer_install}',
-    ], cwd=tracer_build)
-
-
-def build_tracer():
-    subprocess.check_call(['make', f'-j{nproc}', 'install'], cwd=tracer_build)
 
 
 def dist_tracer():
@@ -93,9 +73,7 @@ def main():
     if args.python_version is None:
         args.python_version = ('cp36-cp36m', 'cp37-cp37m', 'cp38-cp38')
     patch_valgrind()
-    autogen_valgrind()
-    configure_tracer()
-    build_tracer()
+    subprocess.check_call(['make', '-f', 'Makefile.ci', f'-j{nproc}'])
     dist_tracer()
     workdir = tempfile.TemporaryDirectory()
     try:

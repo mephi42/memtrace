@@ -19,7 +19,16 @@ target_compile_options(
             -fstack-protector-strong
             -D_FORTIFY_SOURCE=2
 )
-target_link_libraries(_memtrace ${Boost_LIBRARIES})
+set(uname ${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR})
+set(elfutils_build ${CMAKE_CURRENT_SOURCE_DIR}/build/${uname}/elfutils)
+set(elfutils_install ${elfutils_build}/install)
+target_include_directories(
+    _memtrace
+    SYSTEM
+    PRIVATE ${elfutils_install}/include
+)
+target_link_directories(_memtrace PRIVATE ${elfutils_install}/lib)
+target_link_libraries(_memtrace ${Boost_LIBRARIES} dw)
 target_link_libraries(_memtrace capstone)
 python_extension_module(_memtrace)
 install(TARGETS _memtrace LIBRARY DESTINATION memtrace)

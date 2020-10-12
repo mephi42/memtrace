@@ -37,18 +37,18 @@ class Disasm {
     cs_arch arch;
     cs_mode mode;
     switch (type) {
-      case MachineType::EM_386:
+      case MachineType::X_EM_386:
         if (endianness != Endianness::Little || wordSize != 4) return -EINVAL;
         arch = CS_ARCH_X86;
         mode = CS_MODE_32;
         break;
-      case MachineType::EM_X86_64:
+      case MachineType::X_EM_X86_64:
         if (endianness != Endianness::Little || wordSize != 8) return -EINVAL;
         arch = CS_ARCH_X86;
         mode = CS_MODE_64;
         break;
         // EM_PPC is not supported.
-      case MachineType::EM_PPC64:
+      case MachineType::X_EM_PPC64:
         if (wordSize != 8) return -EINVAL;
         arch = CS_ARCH_PPC;
         if (endianness == Endianness::Little)
@@ -56,7 +56,7 @@ class Disasm {
         else
           mode = static_cast<cs_mode>(CS_MODE_64 | CS_MODE_BIG_ENDIAN);
         break;
-      case MachineType::EM_ARM:
+      case MachineType::X_EM_ARM:
         if (wordSize != 4) return -EINVAL;
         arch = CS_ARCH_ARM;
         if (endianness == Endianness::Little)
@@ -64,7 +64,7 @@ class Disasm {
         else
           mode = static_cast<cs_mode>(CS_MODE_ARM | CS_MODE_BIG_ENDIAN);
         break;
-      case MachineType::EM_AARCH64:
+      case MachineType::X_EM_AARCH64:
         if (wordSize != 8) return -EINVAL;
         arch = CS_ARCH_ARM64;
         if (endianness == Endianness::Little)
@@ -72,12 +72,12 @@ class Disasm {
         else
           mode = CS_MODE_BIG_ENDIAN;
         break;
-      case MachineType::EM_S390:
+      case MachineType::X_EM_S390:
         if (endianness != Endianness::Big) return -EINVAL;
         arch = CS_ARCH_SYSZ;
         mode = CS_MODE_BIG_ENDIAN;
         break;
-      case MachineType::EM_MIPS:
+      case MachineType::X_EM_MIPS:
         arch = CS_ARCH_MIPS;
         if (wordSize == 4) {
           if (endianness == Endianness::Little)
@@ -91,7 +91,7 @@ class Disasm {
             mode = static_cast<cs_mode>(CS_MODE_MIPS64 | CS_MODE_BIG_ENDIAN);
         }
         break;
-        // EM_NANOMIPS is not supported.
+        // X_EM_NANOMIPS is not supported.
       default:
         return -1;
     }

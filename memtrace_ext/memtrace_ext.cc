@@ -35,6 +35,7 @@
 
 #include "./align.h"
 #include "./disasm.h"
+#include "./debuginfo.h"
 #include "./endian.h"
 #include "./entries.h"
 #include "./machine.h"
@@ -601,6 +602,7 @@ class Trace : public TraceBase {
   virtual ~Trace() { munmap(data_, length_); }
 
   int Init() {
+    if (!(dwfl_ = DwflBegin())) return -EINVAL;
     if (!Have(HeaderEntry<E, W>::kFixedLength)) return -EINVAL;
     if (!Advance(header_.GetTlv().GetAlignedLength())) return -EINVAL;
     ScopedRewind scopedRewind(this);
@@ -900,6 +902,7 @@ class Trace : public TraceBase {
   size_t insnIndexStepShift_;
   std::shared_ptr<TraceFilter> filter_;
   RegMeta regMeta_;
+  DwflPtr dwfl_;
 };
 
 int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
@@ -2071,15 +2074,15 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .value("MT_MMAP", Tag::MT_MMAP)
       .value("MT_REGMETA", Tag::MT_REGMETA);
   bp::enum_<MachineType>("MachineType")
-      .value("EM_386", MachineType::EM_386)
-      .value("EM_X86_64", MachineType::EM_X86_64)
-      .value("EM_PPC", MachineType::EM_PPC)
-      .value("EM_PPC64", MachineType::EM_PPC64)
-      .value("EM_ARM", MachineType::EM_ARM)
-      .value("EM_AARCH64", MachineType::EM_AARCH64)
-      .value("EM_S390", MachineType::EM_S390)
-      .value("EM_MIPS", MachineType::EM_MIPS)
-      .value("EM_NANOMIPS", MachineType::EM_NANOMIPS);
+      .value("EM_386", MachineType::X_EM_386)
+      .value("EM_X86_64", MachineType::X_EM_X86_64)
+      .value("EM_PPC", MachineType::X_EM_PPC)
+      .value("EM_PPC64", MachineType::X_EM_PPC64)
+      .value("EM_ARM", MachineType::X_EM_ARM)
+      .value("EM_AARCH64", MachineType::X_EM_AARCH64)
+      .value("EM_S390", MachineType::X_EM_S390)
+      .value("EM_MIPS", MachineType::X_EM_MIPS)
+      .value("EM_NANOMIPS", MachineType::X_EM_NANOMIPS);
   bp::class_<EntryPy, boost::noncopyable>("Entry", bp::no_init)
       .def_readonly("index", &EntryPy::index)
       .add_property("tag", &EntryPy::GetTag);

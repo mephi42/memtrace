@@ -2,39 +2,41 @@
 #ifndef MACHINE_H_
 #define MACHINE_H_
 
+#include <elf.h>
+
 namespace {  // NOLINT(build/namespaces)
 
 enum class MachineType {
-  EM_386 = 3,
-  EM_X86_64 = 62,
-  EM_PPC = 20,
-  EM_PPC64 = 21,
-  EM_ARM = 40,
-  EM_AARCH64 = 183,
-  EM_S390 = 22,
-  EM_MIPS = 8,
-  EM_NANOMIPS = 249,
+  X_EM_386 = EM_386,
+  X_EM_X86_64 = EM_X86_64,
+  X_EM_PPC = EM_PPC,
+  X_EM_PPC64 = EM_PPC64,
+  X_EM_ARM = EM_ARM,
+  X_EM_AARCH64 = EM_AARCH64,
+  X_EM_S390 = EM_S390,
+  X_EM_MIPS = EM_MIPS,
+  X_EM_NANOMIPS = 249,
 };
 
 const char* GetMachineTypeStr(MachineType type) {
   switch (type) {
-    case MachineType::EM_386:
+    case MachineType::X_EM_386:
       return "EM_386";
-    case MachineType::EM_X86_64:
+    case MachineType::X_EM_X86_64:
       return "EM_X86_64";
-    case MachineType::EM_PPC:
+    case MachineType::X_EM_PPC:
       return "EM_PPC";
-    case MachineType::EM_PPC64:
+    case MachineType::X_EM_PPC64:
       return "EM_PPC64";
-    case MachineType::EM_ARM:
+    case MachineType::X_EM_ARM:
       return "EM_ARM";
-    case MachineType::EM_AARCH64:
+    case MachineType::X_EM_AARCH64:
       return "EM_AARCH64";
-    case MachineType::EM_S390:
+    case MachineType::X_EM_S390:
       return "EM_S390";
-    case MachineType::EM_MIPS:
+    case MachineType::X_EM_MIPS:
       return "EM_MIPS";
-    case MachineType::EM_NANOMIPS:
+    case MachineType::X_EM_NANOMIPS:
       return "EM_NANOMIPS";
     default:
       return nullptr;

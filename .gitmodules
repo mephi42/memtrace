@@ -1,3 +1,6 @@
 [submodule "valgrind"]
 	path = valgrind
 	url = https://sourceware.org/git/valgrind.git
+[submodule "elfutils"]
+	path = elfutils
+	url = https://sourceware.org/git/elfutils.git
