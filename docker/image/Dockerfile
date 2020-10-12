@@ -75,6 +75,8 @@ RUN yum install -y \
     openssl-devel \
     $([ "$(uname -m)" != "x86_64" ] || echo glibc-devel.i686 libgcc.i686)
 RUN yum remove -y cmake cmake28
+# https://stackoverflow.com/a/35163779
+RUN echo /usr/share/aclocal >>/usr/local/share/aclocal/dirlist
 COPY --from=boost /opt/boost/ /
 COPY --from=capstone /opt/capstone/ /
 COPY --from=cmake /opt/cmake/ /
