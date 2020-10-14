@@ -48,7 +48,9 @@ $(valgrind_build)/Makefile: \
 		$(valgrind_tracer_src)/Makefile.in
 	mkdir -p $(valgrind_build) && \
 		cd $(valgrind_build) && \
-		$(valgrind_src)/configure --prefix=$(valgrind_install)
+		$(valgrind_src)/configure \
+			--prefix=$(valgrind_install) \
+			--with-mpicc=false
 
 $(valgrind_src)/configure $(valgrind_tracer_src)/Makefile.in: \
 		$(valgrind_tracer_src)/Makefile.am \
