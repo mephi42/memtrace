@@ -278,6 +278,68 @@ class Dumper {
   Disasm disasmEngine_;
 };
 
+template <Endianness E, typename W>
+class SourceDumper {
+ public:
+  SourceDumper(std::FILE* f, Trace<E, W>* trace)
+      : f_(f), trace_(trace), prevFile_(nullptr), prevLinep_(-1) {}
+
+  int Init(HeaderEntry<E, W> /* entry */, size_t /* expectedInsnCount */) {
+    return 0;
+  }
+
+  int operator()(size_t /* i */, InsnEntry<E, W> entry) {
+    if (!insns_.empty() &&
+        entry.GetInsnSeq() != insns_[0].GetInsnSeq() + insns_.size())
+      return -EINVAL;
+    insns_.push_back(entry);
+    return 0;
+  }
+
+  int operator()(size_t /* index */, InsnExecEntry<E, W> entry) {
+    if (insns_.empty()) return -EINVAL;
+    size_t insnIndex = entry.GetInsnSeq() - insns_[0].GetInsnSeq();
+    if (insnIndex >= insns_.size()) return -EINVAL;
+    int err;
+    if ((err = trace_->UpdateDwfl()) < 0) return err;
+    const InsnEntry<E, W>* insn = &insns_[insnIndex];
+    Dwfl_Module* mod = dwfl_addrmodule(trace_->dwfl_.get(), insn->GetPc());
+    Dwfl_Line* line =
+        mod == nullptr ? nullptr : dwfl_module_getsrc(mod, insn->GetPc());
+    if (line == nullptr) {
+      PrintAddr(f_, mod, insn->GetPc());
+      fprintf(f_, "\n");
+      prevFile_ = nullptr;
+      prevLinep_ = -1;
+      return 0;
+    }
+    int linep;
+    const char* file =
+        dwfl_lineinfo(line, nullptr, &linep, nullptr, nullptr, nullptr);
+    if (linep != prevLinep_ || prevFile_ == nullptr ||
+        (prevFile_ != file && strcmp(prevFile_, file) != 0))
+      fprintf(f_, "%s:%d\n", file, linep);
+    prevFile_ = file;
+    prevLinep_ = linep;
+    return 0;
+  }
+
+  template <typename Entry>
+  int operator()(size_t /* index */, Entry /* entry */) {
+    return 0;
+  }
+
+  int Complete() { return 0; }
+
+ private:
+  FILE* f_;
+  Trace<E, W>* trace_;
+  static_assert(sizeof(InsnEntry<E, W>) == sizeof(void*));
+  std::vector<InsnEntry<E, W>> insns_;
+  const char* prevFile_;
+  int prevLinep_;
+};
+
 struct TagStats {
   TagStats() : count(0), size(0) {}
 
@@ -488,6 +550,11 @@ struct TraceFilterNoOp {
   bool isInsnSeqOk(std::uint32_t /* insnSeq */) const { return true; }
 };
 
+enum class DumpKind {
+  Raw,
+  Source,
+};
+
 class TraceBase {
  public:
   static TraceBase* Load(const char* path);
@@ -503,9 +570,10 @@ class TraceBase {
   virtual int SeekInsn(std::uint32_t index) = 0;
   virtual int SeekEnd() = 0;
   virtual Stats GatherStats() = 0;
+  virtual bool HasInsnIndex() = 0;
   virtual int BuildInsnIndex(const char* path, size_t stepShift) = 0;
   virtual int LoadInsnIndex(const char* path) = 0;
-  virtual int Dump(const char* path) = 0;
+  virtual int Dump(const char* path, DumpKind kind) = 0;
   virtual void SetFilter(std::shared_ptr<TraceFilter> filter) = 0;
   virtual const char* GetRegName(std::uint16_t offset, std::uint16_t size) = 0;
   virtual LinePy Symbolize(std::uint64_t addr) = 0;
@@ -606,6 +674,7 @@ class Trace : public TraceBase {
  public:
   static constexpr Endianness E = _E;
   using W = _W;
+  friend class SourceDumper<E, W>;
 
   Trace(void* data, size_t length)
       : data_(static_cast<std::uint8_t*>(data)),
@@ -619,7 +688,8 @@ class Trace : public TraceBase {
   virtual ~Trace() { munmap(data_, length_); }
 
   int Init() {
-    if (!(dwfl_ = DwflBegin())) return -EINVAL;
+    if ((dwfl_ = DwflBegin()) == nullptr) return -EINVAL;
+    symbolIndex_.reset(new SymbolIndex(dwfl_.get()));
     if (!Have(HeaderEntry<E, W>::kFixedLength)) return -EINVAL;
     if (!Advance(header_.GetTlv().GetAlignedLength())) return -EINVAL;
     ScopedRewind scopedRewind(this);
@@ -742,10 +812,11 @@ class Trace : public TraceBase {
 
   [[nodiscard]] int SeekInsn(std::uint32_t index) override {
     Seeker visitor;
-    if (insnIndexStepShift_ != static_cast<size_t>(-1)) {
-      InsnIndexEntry* entry = &insnIndex_[index >> insnIndexStepShift_];
-      Rewind(*entry);
-      visitor.insnIndex = (index >> insnIndexStepShift_) << insnIndexStepShift_;
+    if (HasInsnIndex()) {
+      std::uint32_t insnIndexIndex = index >> insnIndexStepShift_;
+      if (insnIndexIndex >= insnIndex_.size()) return -EINVAL;
+      Rewind(insnIndex_[insnIndexIndex]);
+      visitor.insnIndex = insnIndexIndex << insnIndexStepShift_;
       if (visitor.insnIndex == index) return 0;
       visitor.insnIndex--;
     } else {
@@ -766,8 +837,7 @@ class Trace : public TraceBase {
   }
 
   int SeekEnd() override {
-    if (insnIndexStepShift_ != static_cast<size_t>(-1))
-      Rewind(insnIndex_[insnIndex_.size() - 1]);
+    if (HasInsnIndex()) Rewind(insnIndex_[insnIndex_.size() - 1]);
     NoOp visitor;
     while (cur_ != end_) {
       int err;
@@ -806,8 +876,12 @@ class Trace : public TraceBase {
     return visitor.stats;
   }
 
+  bool HasInsnIndex() override {
+    return insnIndexStepShift_ != static_cast<size_t>(-1);
+  }
+
   int BuildInsnIndex(const char* path, size_t stepShift) override {
-    if (insnIndexStepShift_ != static_cast<size_t>(-1)) return -EINVAL;
+    if (HasInsnIndex()) return -EINVAL;
     int err;
     PathWithPlaceholder indexPath;
     if ((err = indexPath.Init(path, "index")) < 0) return err;
@@ -844,7 +918,7 @@ class Trace : public TraceBase {
 
   [[nodiscard]] int LoadInsnIndex(const char* path) override {
     int err;
-    if (insnIndexStepShift_ != static_cast<size_t>(-1)) return -EINVAL;
+    if (HasInsnIndex()) return -EINVAL;
     PathWithPlaceholder indexPath;
     if ((err = indexPath.Init(path, "index")) < 0) return err;
     InsnIndexHeader header;
@@ -874,12 +948,26 @@ class Trace : public TraceBase {
     InsnIndexEntry saved_;
   };
 
-  int Dump(const char* path) override {
+  int Dump(const char* path, DumpKind kind) override {
     FILE* f = fopen(path, "w");
     if (f == nullptr) return -errno;
-    Dumper<E, W> dumper(f, this);
-    int err = VisitAll(&dumper);
-    fclose(f);
+    int err;
+    switch (kind) {
+      case DumpKind::Raw: {
+        Dumper<E, W> dumper(f, this);
+        err = VisitAll(&dumper);
+        break;
+      }
+      case DumpKind::Source: {
+        SourceDumper<E, W> dumper(f, this);
+        err = VisitAll(&dumper);
+        break;
+      }
+      default:
+        err = -EINVAL;
+        break;
+    }
+    if (fclose(f) == EOF && err == 0) err = -errno;
     return err;
   }
 
@@ -939,37 +1027,54 @@ class Trace : public TraceBase {
     return it->fileOffset;
   }
 
-  using Elves = std::map<std::string, W>;
+  struct ElfInfo {
+    ElfInfo() : base(0), isLoaded(false), needsOpen(true), fd(-1) {}
+    ElfInfo(const ElfInfo&) = delete;
+    ~ElfInfo() {
+      if (fd != -1) close(fd);
+    }
 
-  Elves GetElves(size_t mmapFileOffset) const {
-    Elves elves;
+    W base;
+    bool isLoaded;
+    bool needsOpen;
+    int fd;
+  };
+
+  using Elves = std::map<std::string, ElfInfo>;
+
+  void UpdateElves(size_t mmapFileOffset) {
+    for (typename Elves::value_type& elf : elves_) elf.second.isLoaded = false;
     for (size_t i = 0, size = mmapIndex_.size();
          i < size && mmapIndex_[i].fileOffset <= mmapFileOffset; i++) {
       MmapEntry<E, W> entry(data_ + mmapIndex_[i].fileOffset);
       const char* name = entry.GetValue();
       if (*name == 0 || *name == '[') continue;
-      std::string nameStr(name);
-      typename Elves::iterator it = elves.find(nameStr);
-      if (it == elves.end())
-        elves.insert(std::make_pair(std::move(nameStr), entry.GetStart()));
-      else
-        it->second = std::min(it->second, entry.GetStart());
+      ElfInfo& elfInfo = elves_[name];
+      if (elfInfo.isLoaded) {
+        elfInfo.base = std::min(elfInfo.base, entry.GetStart());
+      } else {
+        elfInfo.base = entry.GetStart();
+        if (elfInfo.needsOpen) {
+          elfInfo.fd = open(name, O_RDONLY);
+          elfInfo.needsOpen = false;
+        }
+        elfInfo.isLoaded = true;
+      }
     }
-    return elves;
   }
 
   int UpdateDwfl() {
+    if (!HasInsnIndex()) return -EINVAL;
     size_t mmapFileOffset = FindMmapFileOffset(cur_ - data_);
     if (mmapFileOffset == mmapFileOffset_) return 0;
-    Elves elves = GetElves(mmapFileOffset);
-    if (elves == elves_) return 0;
+    UpdateElves(mmapFileOffset);
     dwfl_report_begin(dwfl_.get());
-    for (typename Elves::iterator it = elves.begin(); it != elves.end(); it++)
-      dwfl_report_elf(dwfl_.get(), it->first.c_str(), it->first.c_str(), -1,
-                      it->second, false);
+    for (typename Elves::value_type& elf : elves_)
+      if (elf.second.isLoaded && elf.second.fd != -1)
+        dwfl_report_elf(dwfl_.get(), elf.first.c_str(), elf.first.c_str(),
+                        elf.second.fd, elf.second.base, false);
     if (dwfl_report_end(dwfl_.get(), nullptr, nullptr) != 0) return -EINVAL;
     mmapFileOffset_ = mmapFileOffset;
-    elves_ = std::move(elves);
     symbolIndex_.reset(new SymbolIndex(dwfl_.get()));
     return 0;
   }
@@ -2205,6 +2310,7 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def("seek_insn", &TraceBase::SeekInsn)
       .def("seek_end", &TraceBase::SeekEnd)
       .def("gather_stats", &TraceBase::GatherStats)
+      .def("has_insn_index", &TraceBase::HasInsnIndex)
       .def("build_insn_index", &TraceBase::BuildInsnIndex)
       .def("load_insn_index", &TraceBase::LoadInsnIndex)
       .def("dump", &TraceBase::Dump)
@@ -2247,4 +2353,7 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def_readonly("section", &LinePy::section)
       .def_readonly("file", &LinePy::file)
       .def_readonly("line", &LinePy::line);
+  bp::enum_<DumpKind>("DumpKind")
+      .value("Raw", DumpKind::Raw)
+      .value("Source", DumpKind::Source);
 }

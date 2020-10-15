@@ -49,7 +49,9 @@ class Analysis:
         self._disasm: Optional[Disasm] = None
         self._symbolizer: Optional[Symbolizer] = None
 
-    def _init_insn_index(self):
+    def init_insn_index(self):
+        if self.trace.has_insn_index():
+            return
         if self.index_path is None:
             with tempfile.TemporaryDirectory() as tmpdir:
                 index_path = os.path.join(tmpdir, '{}.bin')
@@ -62,7 +64,7 @@ class Analysis:
     @property
     def ud(self) -> Ud:
         if self._ud is None:
-            self._init_insn_index()
+            self.init_insn_index()
             if (self.ud_path is None or
                     not os.path.exists(self.ud_path.replace('{}', 'header'))):
                 self._ud = Ud.analyze(self.ud_path, self.trace, self.ud_log)

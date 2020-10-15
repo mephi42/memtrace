@@ -3,6 +3,7 @@
 #define DEBUGINFO_H_
 
 #include <elfutils/libdwfl.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <boost/optional.hpp>
@@ -79,6 +80,20 @@ struct LinePy {
   int line;
 };
 
+const char* GetSectionName(Dwfl_Module* mod, Dwarf_Addr addr) {
+  Dwarf_Addr adjusted = addr;
+  Dwarf_Addr bias;
+  Elf_Scn* scn = dwfl_module_address_section(mod, &adjusted, &bias);
+  if (scn == nullptr) return nullptr;
+  GElf_Shdr shdrMem;
+  GElf_Shdr* shdr;
+  if ((shdr = gelf_getshdr(scn, &shdrMem)) == nullptr) return nullptr;
+  Elf* elf = dwfl_module_getelf(mod, &bias);
+  size_t shstrndx;
+  if (elf_getshdrstrndx(elf, &shstrndx) < 0) return nullptr;
+  return elf_strptr(elf, shstrndx, shdr->sh_name);
+}
+
 /* print_addrsym() */
 LinePy FindAddr(Dwfl* dwfl, std::uint64_t addr) {
   LinePy linePy;
@@ -93,19 +108,8 @@ LinePy FindAddr(Dwfl* dwfl, std::uint64_t addr) {
     linePy.offset = offset;
   }
 
-  Dwarf_Addr adjusted = addr;
-  Dwarf_Addr bias;
-  Elf_Scn* scn = dwfl_module_address_section(mod, &adjusted, &bias);
-  if (scn != nullptr) {
-    GElf_Shdr shdrMem;
-    GElf_Shdr* shdr;
-    if ((shdr = gelf_getshdr(scn, &shdrMem)) != nullptr) {
-      Elf* elf = dwfl_module_getelf(mod, &bias);
-      size_t shstrndx;
-      if (elf_getshdrstrndx(elf, &shstrndx) >= 0)
-        linePy.section = strdup(elf_strptr(elf, shstrndx, shdr->sh_name));
-    }
-  }
+  const char* sectionName = GetSectionName(mod, addr);
+  if (sectionName != nullptr) linePy.section = strdup(sectionName);
 
   Dwfl_Line* line = dwfl_module_getsrc(mod, addr);
   if (line == nullptr) return linePy;
@@ -116,6 +120,32 @@ LinePy FindAddr(Dwfl* dwfl, std::uint64_t addr) {
   linePy.file = strdup(file);
   linePy.line = linep;
   return linePy;
+}
+
+void PrintNamePlusOffset(FILE* f, const char* name, Dwarf_Addr offset) {
+  if (offset == 0)
+    fprintf(f, "%s", name);
+  else
+    fprintf(f, "%s+0x%" PRIx64, name, static_cast<std::uint64_t>(offset));
+}
+
+void PrintAddr(FILE* f, Dwfl_Module* mod, Dwarf_Addr addr) {
+  if (mod == nullptr) {
+    fprintf(f, "0x%" PRIx64, static_cast<std::uint64_t>(addr));
+    return;
+  }
+  GElf_Off offset;
+  GElf_Sym sym;
+  const char* symbolName =
+      dwfl_module_addrinfo(mod, addr, &offset, &sym, nullptr, nullptr, nullptr);
+  if (symbolName == nullptr) {
+    Dwarf_Addr start;
+    const char* moduleName = dwfl_module_info(
+        mod, nullptr, &start, nullptr, nullptr, nullptr, nullptr, nullptr);
+    PrintNamePlusOffset(f, moduleName, addr - start);
+  } else {
+    PrintNamePlusOffset(f, symbolName, offset);
+  }
 }
 
 }  // namespace

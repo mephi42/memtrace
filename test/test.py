@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from contextlib import contextmanager
+import ctypes
 import os
 import platform
 import re
@@ -22,7 +23,9 @@ from memtrace.trace import Trace
 import memtrace.tracer
 import memtrace.ud
 from memtrace.ud import Ud
-from memtrace._memtrace import Disasm, get_endianness_str, Tag
+from memtrace._memtrace import Disasm, DumpKind, get_endianness_str, Tag
+
+ADDR_NO_RANDOMIZE = 0x0040000
 
 
 def diff_files(expected, actual):
@@ -104,12 +107,19 @@ class CommonTest(unittest.TestCase):
         subprocess.check_call(args, cwd=cls.basedir)
 
     @classmethod
+    def disable_aslr(cls):
+        libc = ctypes.CDLL('libc.so.6')
+        libc.personality(libc.personality(0xffffffff) | ADDR_NO_RANDOMIZE)
+
+    @classmethod
     def memtrace_call(cls, fp):
         p = memtrace.tracer.popen(
             [f'./{cls.get_target()}'],
             stdin=fp,
             stdout=subprocess.DEVNULL,
             cwd=cls.workdir.name,
+            env={},
+            preexec_fn=cls.disable_aslr,
         )
         check_wait(p)
 
@@ -124,8 +134,9 @@ class CommonTest(unittest.TestCase):
             trace_size = os.stat(cls.trace_path).st_size / (1024 * 1024 * 1024)
             print('trace size is {:2f}G'.format(trace_size), file=sys.stderr)
 
-    def load_trace(self):
-        return Trace.load(self.trace_path)
+    @classmethod
+    def load_trace(cls):
+        return Trace.load(cls.trace_path)
 
 
 class MachineTest(CommonTest):
@@ -205,6 +216,20 @@ class MachineTest(CommonTest):
                 'report',
                 '--input=' + os.path.join(self.workdir.name, 'memtrace.out'),
                 f'--output={actual_dump_txt}',
+            ])
+        self.filter_file(actual_dump_txt)
+        diff_files(expected_dump_txt, actual_dump_txt)
+
+    def test_dump_srcline(self) -> None:
+        dump_txt = f'{self.get_target()}-dump-srcline.txt'
+        actual_dump_txt = os.path.join(self.workdir.name, dump_txt)
+        expected_dump_txt = os.path.join(self.basedir, dump_txt)
+        with self.assertRaises(SystemExit):
+            memtrace.cli.main([
+                'report',
+                '--input=' + os.path.join(self.workdir.name, 'memtrace.out'),
+                f'--output={actual_dump_txt}',
+                '--srcline',
             ])
         self.filter_file(actual_dump_txt)
         diff_files(expected_dump_txt, actual_dump_txt)
@@ -399,13 +424,12 @@ class TestCat(CommonTest):
         self.assertIsNotNone(ud)
         expected = self.get_input()
         cat_buf = bytearray(len(expected))
-        trace.seek_end()
-        try:
-            with Symbolizer(trace) as symbolizer:
-                cat_buf_start = symbolizer.resolve('cat_buf')
-        finally:
+        with Symbolizer(trace) as symbolizer:
+            self.assertIsNone(symbolizer.resolve('cat_buf'))
+            trace.seek_end()
+            cat_buf_start = symbolizer.resolve('cat_buf')
+            self.assertIsNotNone(cat_buf_start)
             trace.seek_insn(0)
-        self.assertIsNotNone(cat_buf_start)
         cat_buf_end = cat_buf_start + len(cat_buf)
         for entry in trace:
             if (entry.tag == Tag.MT_STORE and
@@ -416,6 +440,17 @@ class TestCat(CommonTest):
                 offset = entry.addr - cat_buf_start
                 cat_buf[offset:offset + len(value)] = value
         self.assertEqual(expected, cat_buf)
+
+    def test_dump_srcline(self):
+        trace = self.load_trace()
+        with timeit('index'):
+            with tempfile.TemporaryDirectory() as tmp:
+                trace.build_insn_index(os.path.join(tmp, '{}'))
+        with timeit('dump-srcline'):
+            trace.dump(
+                os.path.join(self.workdir.name, 'dump-srcline.txt'),
+                DumpKind.Source,
+            )
 
 
 if __name__ == '__main__':

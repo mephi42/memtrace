@@ -898,7 +898,7 @@ static void mt_pre_clo_init(void)
       accurate association of data accesses to instructions, we need to look at
       one instruction at a time.
       Note: this might not always work, e.g., on x86, call+pop merging ignores
-      this settings. */
+      this setting. */
    VG_(clo_vex_control).guest_max_insns = 1;
    /* Track syscalls. */
    VG_(track_pre_mem_read)(mt_track_pre_mem_read);

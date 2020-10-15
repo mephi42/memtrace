@@ -1,0 +1,13 @@
+diff --git a/VEX/priv/guest_x86_toIR.c b/VEX/priv/guest_x86_toIR.c
+--- a/VEX/priv/guest_x86_toIR.c
++++ b/VEX/priv/guest_x86_toIR.c
+@@ -13118,7 +13118,8 @@ DisResult disInstr_X86_WRK (
+       d32 += (guest_EIP_bbstart+delta); 
+       /* (guest_eip_bbstart+delta) == return-to addr, d32 == call-to addr */
+       if (d32 == guest_EIP_bbstart+delta && getIByte(delta) >= 0x58 
+-                                         && getIByte(delta) <= 0x5F) {
++                                         && getIByte(delta) <= 0x5F
++                                         && vex_control.guest_max_insns != 1) {
+          /* Specially treat the position-independent-code idiom 
+                  call X
+               X: popl %reg

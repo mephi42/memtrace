@@ -10,7 +10,7 @@ import memtrace
 from memtrace.analysis import Analysis
 import memtrace.tracer
 from memtrace.notebook import open_notebook
-from memtrace._memtrace import Tag
+from memtrace._memtrace import DumpKind, Tag
 
 
 @click.group(help='memtrace version ' + memtrace.__version__)
@@ -92,7 +92,12 @@ class AnyIntParamType(click.types.IntParamType):
     multiple=True,
     type=AnyIntParamType(),
 )
-def report(input, output, start, end, tag, insn_seq):
+@click.option(
+    '--srcline',
+    help='Output only source file names and line numbers',
+    is_flag=True,
+)
+def report(input, output, start, end, tag, insn_seq, srcline):
     if len(tag) == 0:
         tag = None
     if len(insn_seq) == 0:
@@ -104,7 +109,12 @@ def report(input, output, start, end, tag, insn_seq):
         tags=tag,
         insn_seqs=insn_seq,
     )
-    analysis.trace.dump(output)
+    if srcline:
+        analysis.init_insn_index()
+        kind = DumpKind.Source
+    else:
+        kind = DumpKind.Raw
+    analysis.trace.dump(output, kind)
 
 
 if __name__ == '__main__':

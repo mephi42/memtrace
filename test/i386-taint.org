@@ -1,21 +1,26 @@
 #+STARTUP: indent
-* <<InsnInTrace:10>> 0x000000000804902b setne bl in _base+0x26 (.text) at {testdir}/i386.S:20
-** <<InsnInTrace:9>> 0x0000000008049024 cmp byte ptr [ebp + 0xffb], 0x2a in _base+0x1f (.text) at {testdir}/i386.S:19
-Reason: [        51] 0x0000000a: MT_GET_REG uint32_t [0x28] 0x4
-Reason: [        52] 0x0000000a: MT_GET_REG uint32_t [0x2c] 0x2a
-Reason: [        53] 0x0000000a: MT_GET_REG uint32_t [0x30] 0x2a
-Reason: [        54] 0x0000000a: MT_GET_REG uint32_t [0x34] 0x0
-*** <<InsnInTrace:1>> 0x0000000008049000 call 0x8049005 in _start (.text) at {testdir}/i386.S:8
-Reason: [        43] 0x00000009: MT_GET_REG uint32_t [0x1c] 0x8049005
-*** <<InsnInTrace:6>> 0x000000000804901b int 0x80 in _base+0x16 (.text) at {testdir}/i386.S:15
-Reason: [        44] 0x00000009: MT_LOAD uint8_t [0x804a000] 0x2a
-**** <<InsnInTrace:2>> 0x0000000008049006 mov eax, 3 in _base+0x1 (.text) at {testdir}/i386.S:11
-Reason: [        24] 0x00000006: MT_GET_REG uint32_t [0x8] 0x3
-**** <<InsnInTrace:3>> 0x000000000804900b mov ebx, 0 in _base+0x6 (.text) at {testdir}/i386.S:12
-Reason: [        25] 0x00000006: MT_GET_REG uint32_t [0x14] 0x0
-**** <<InsnInTrace:4>> 0x0000000008049010 lea ecx, [ebp + 0xffb] in _base+0xb (.text) at {testdir}/i386.S:13
-Reason: [        26] 0x00000006: MT_GET_REG uint32_t [0xc] 0x804a000
-***** [[InsnInTrace:1]] 0x0000000008049000 call 0x8049005 in _start (.text) at {testdir}/i386.S:8
-Reason: [        16] 0x00000004: MT_GET_REG uint32_t [0x1c] 0x8049005
-**** <<InsnInTrace:5>> 0x0000000008049016 mov edx, 1 in _base+0x11 (.text) at {testdir}/i386.S:14
-Reason: [        27] 0x00000006: MT_GET_REG uint32_t [0x10] 0x1
+* <<InsnInTrace:11>> 0x000000000804902b setne bl in _base+0x26 (.text) at {testdir}/i386.S:20
+** <<InsnInTrace:10>> 0x0000000008049024 cmp byte ptr [ebp + 0xffb], 0x2a in _base+0x1f (.text) at {testdir}/i386.S:19
+Reason: [       125] 0x0000000b: MT_GET_REG guest_CC_OP 0x4
+Reason: [       126] 0x0000000b: MT_GET_REG guest_CC_DEP1 0x2a
+Reason: [       127] 0x0000000b: MT_GET_REG guest_CC_DEP2 0x2a
+Reason: [       128] 0x0000000b: MT_GET_REG guest_CC_NDEP 0x0
+*** <<InsnInTrace:2>> 0x0000000008049005 pop ebp in _base (.text) at {testdir}/i386.S:10
+Reason: [       117] 0x0000000a: MT_GET_REG ebp 0x8049005
+**** <<InsnInTrace:1>> 0x0000000008049000 call 0x8049005 in _start (.text) at {testdir}/i386.S:8
+Reason: [        78] 0x00000002: MT_GET_REG esp 0xfeffde4c
+Reason: [        79] 0x00000002: MT_LOAD uint32_t [0xfeffde4c] 0x8049005
+***** <<InsnInTrace:0>> 0x0000000000000000 <unknown> in ?? at ??:0
+Reason: [        73] 0x00000001: MT_GET_REG esp 0xfeffde50
+*** <<InsnInTrace:7>> 0x000000000804901b int 0x80 in _base+0x16 (.text) at {testdir}/i386.S:15
+Reason: [       118] 0x0000000a: MT_LOAD uint8_t [0x804a000] 0x2a
+**** <<InsnInTrace:3>> 0x0000000008049006 mov eax, 3 in _base+0x1 (.text) at {testdir}/i386.S:11
+Reason: [        98] 0x00000007: MT_GET_REG eax 0x3
+**** <<InsnInTrace:4>> 0x000000000804900b mov ebx, 0 in _base+0x6 (.text) at {testdir}/i386.S:12
+Reason: [        99] 0x00000007: MT_GET_REG ebx 0x0
+**** <<InsnInTrace:5>> 0x0000000008049010 lea ecx, [ebp + 0xffb] in _base+0xb (.text) at {testdir}/i386.S:13
+Reason: [       100] 0x00000007: MT_GET_REG ecx 0x804a000
+***** [[InsnInTrace:2]] 0x0000000008049005 pop ebp in _base (.text) at {testdir}/i386.S:10
+Reason: [        90] 0x00000005: MT_GET_REG ebp 0x8049005
+**** <<InsnInTrace:6>> 0x0000000008049016 mov edx, 1 in _base+0x11 (.text) at {testdir}/i386.S:14
+Reason: [       101] 0x00000007: MT_GET_REG edx 0x1

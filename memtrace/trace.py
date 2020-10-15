@@ -1,7 +1,8 @@
 from typing import Any, Iterable, Optional
 
 from memtrace.native import wrap_err
-from ._memtrace import _Trace, _TraceFilter, VectorOfU32s, Tag
+from memtrace._memtrace import DumpKind, Tag, _Trace, _TraceFilter, \
+    VectorOfU32s
 
 
 class TraceFilter:
@@ -75,7 +76,7 @@ class Trace:
         pass
 
     @wrap_err
-    def dump(self, output: Optional[str]) -> None:
+    def dump(self, output: Optional[str], kind: DumpKind) -> None:
         pass
 
     def set_filter(self, filter: Optional[TraceFilter]) -> None:
