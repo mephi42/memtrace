@@ -391,13 +391,20 @@ class TestCat(CommonTest):
 
     def test(self):
         trace = self.load_trace()
+        with timeit('index'):
+            with tempfile.TemporaryDirectory() as tmp:
+                trace.build_insn_index(os.path.join(tmp, '{}'))
         with timeit('ud'):
             ud = Ud.analyze(None, trace)
         self.assertIsNotNone(ud)
         expected = self.get_input()
         cat_buf = bytearray(len(expected))
-        with Symbolizer(trace.get_mmap_entries()) as symbolizer:
-            cat_buf_start = symbolizer.resolve('cat_buf')
+        trace.seek_end()
+        try:
+            with Symbolizer(trace) as symbolizer:
+                cat_buf_start = symbolizer.resolve('cat_buf')
+        finally:
+            trace.seek_insn(0)
         self.assertIsNotNone(cat_buf_start)
         cat_buf_end = cat_buf_start + len(cat_buf)
         for entry in trace:

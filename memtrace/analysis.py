@@ -83,7 +83,7 @@ class Analysis:
     @property
     def symbolizer(self) -> Symbolizer:
         if self._symbolizer is None:
-            self._symbolizer = Symbolizer(self.trace.get_mmap_entries())
+            self._symbolizer = Symbolizer(self.trace)
         return self._symbolizer
 
     def close(self):

@@ -71,6 +71,10 @@ class Trace:
         pass
 
     @wrap_err
+    def seek_end(self) -> None:
+        pass
+
+    @wrap_err
     def dump(self, output: Optional[str]) -> None:
         pass
 

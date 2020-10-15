@@ -1,8 +1,9 @@
+/.idea/
 /.mypy_cache/
-/_skbuild/
 /_skbuild.docker/
-/build/
+/_skbuild/
 /build.docker/
+/build/
 /cp36-cp36m/
 /cp37-cp37m/
 /cp38-cp38/

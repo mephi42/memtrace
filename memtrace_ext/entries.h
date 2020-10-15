@@ -245,15 +245,13 @@ class MmapEntry : public B {
   std::uint64_t GetInode() const {
     return RawInt<E, std::uint64_t>(this->GetData() + kInodeOffset).GetValue();
   }
-  const std::uint8_t* GetValue() const {
-    return this->GetData() + kValueOffset;
+  const char* GetValue() const {
+    return reinterpret_cast<const char*>(this->GetData() + kValueOffset);
   }
   std::uint32_t GetSize() const {
     return GetTlv().GetLength() - static_cast<std::uint32_t>(kValueOffset);
   }
-  std::string CopyValue() const {
-    return reinterpret_cast<const char*>(GetValue());
-  }
+  std::string CopyValue() const { return GetValue(); }
 
  private:
   // Not Tlv<E, W>::kFixedLength due to padding.

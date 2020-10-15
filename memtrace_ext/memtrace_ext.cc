@@ -345,6 +345,13 @@ struct TraceEntry2Py {
   EntryPy* py;
 };
 
+struct NoOp {
+  template <typename Entry>
+  int operator()(size_t /*index*/, Entry /*entry*/) {
+    return 0;
+  }
+};
+
 struct Seeker {
   Seeker()
       : insnIndex(std::numeric_limits<size_t>::max()),
@@ -392,6 +399,25 @@ struct Seeker {
   std::uint32_t prevInsnSeq;
 };
 
+struct Indexer {
+  Indexer() : isMmap(false) {}
+
+  template <Endianness E, typename W>
+  int operator()(size_t index, MmapEntry<E, W> entry) {
+    isMmap = true;
+    return seeker(index, entry);
+  }
+
+  template <typename Entry>
+  int operator()(size_t index, Entry entry) {
+    isMmap = false;
+    return seeker(index, entry);
+  }
+
+  bool isMmap;
+  Seeker seeker;
+};
+
 struct StatsGatherer {
   template <Endianness E, typename W>
   int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
@@ -411,25 +437,13 @@ struct StatsGatherer {
   Stats stats;
 };
 
-struct MmapEntryGatherer {
-  template <Endianness E, typename W>
-  int operator()(size_t i, MmapEntry<E, W> entry) {
-    mmapEntries.append(
-        boost::python::object(boost::python::ptr(CreateEntryPy(i, entry))));
-    return 0;
-  }
-
-  template <typename Entry>
-  int operator()(size_t /* i */, Entry /* entry */) {
-    return 0;
-  }
-
-  boost::python::list mmapEntries;
-};
-
 struct InsnIndexEntry {
   size_t fileOffset;
   size_t entryIndex;
+};
+
+struct MmapIndexEntry {
+  size_t fileOffset;
 };
 
 struct TraceFilter {
@@ -474,6 +488,10 @@ struct TraceFilterNoOp {
   bool isInsnSeqOk(std::uint32_t /* insnSeq */) const { return true; }
 };
 
+struct AddrPy {
+  std::uint64_t value;
+};
+
 class TraceBase {
  public:
   static TraceBase* Load(const char* path);
@@ -487,13 +505,15 @@ class TraceBase {
   virtual std::uint16_t GetRegsSize() = 0;
   virtual boost::python::object Next() = 0;
   virtual int SeekInsn(std::uint32_t index) = 0;
+  virtual int SeekEnd() = 0;
   virtual Stats GatherStats() = 0;
   virtual int BuildInsnIndex(const char* path, size_t stepShift) = 0;
   virtual int LoadInsnIndex(const char* path) = 0;
-  virtual boost::python::list GetMmapEntries() = 0;
   virtual int Dump(const char* path) = 0;
   virtual void SetFilter(std::shared_ptr<TraceFilter> filter) = 0;
   virtual const char* GetRegName(std::uint16_t offset, std::uint16_t size) = 0;
+  virtual LinePy Symbolize(std::uint64_t addr) = 0;
+  virtual AddrPy* Resolve(const char* symbol) = 0;
 };
 
 template <typename W>
@@ -598,7 +618,8 @@ class Trace : public TraceBase {
         end_(cur_ + length_),
         entryIndex_(0),
         header_(cur_),
-        insnIndexStepShift_(static_cast<size_t>(-1)) {}
+        insnIndexStepShift_(static_cast<size_t>(-1)),
+        mmapFileOffset_(0) {}
   virtual ~Trace() { munmap(data_, length_); }
 
   int Init() {
@@ -748,6 +769,17 @@ class Trace : public TraceBase {
     return 0;
   }
 
+  int SeekEnd() override {
+    if (insnIndexStepShift_ != static_cast<size_t>(-1))
+      Rewind(insnIndex_[insnIndex_.size() - 1]);
+    NoOp visitor;
+    while (cur_ != end_) {
+      int err;
+      if ((err = VisitOne(&visitor)) < 0) return err;
+    }
+    return 0;
+  }
+
   template <typename DefSeeker>
   [[nodiscard]] int SeekDef(std::uint32_t insnIndex, std::uint32_t defIndex,
                             Range<W>* range) {
@@ -786,20 +818,25 @@ class Trace : public TraceBase {
     if ((err = insnIndex_.Init(indexPath.Get("data").c_str(),
                                InitMode::CreatePersistent)) < 0)
       return err;
+    if ((err = mmapIndex_.Init(indexPath.Get("mmap").c_str(),
+                               InitMode::CreatePersistent)) < 0)
+      return err;
     size_t stepMask = (1 << stepShift) - 1;
     ScopedRewind scopedRewind(this);
     Rewind();
-    Seeker visitor;
-    size_t prevInsnIndex = visitor.insnIndex;
+    Indexer visitor;
+    size_t prevInsnIndex = visitor.seeker.insnIndex;
     while (cur_ != end_) {
       std::uint8_t* prev = cur_;
       if ((err = VisitOne(&visitor)) < 0) return err;
-      if (visitor.insnIndex != prevInsnIndex) {
-        if ((visitor.insnIndex & stepMask) == 0)
+      if (visitor.seeker.insnIndex != prevInsnIndex) {
+        if ((visitor.seeker.insnIndex & stepMask) == 0)
           insnIndex_.push_back(InsnIndexEntry{static_cast<size_t>(prev - data_),
                                               entryIndex_ - 1});
-        prevInsnIndex = visitor.insnIndex;
+        prevInsnIndex = visitor.seeker.insnIndex;
       }
+      if (visitor.isMmap)
+        mmapIndex_.push_back(MmapIndexEntry{static_cast<size_t>(prev - data_)});
     }
     InsnIndexHeader header;
     header.stepShift = static_cast<std::uint8_t>(stepShift);
@@ -838,16 +875,6 @@ class Trace : public TraceBase {
     InsnIndexEntry saved_;
   };
 
-  boost::python::list GetMmapEntries() override {
-    ScopedRewind scopedRewind(this);
-    Rewind();
-    MmapEntryGatherer visitor;
-    while (cur_ != end_)
-      if (VisitOne(&visitor) < 0)
-        throw std::runtime_error("Failed to parse the next entry");
-    return visitor.mmapEntries;
-  }
-
   int Dump(const char* path) override {
     FILE* f = fopen(path, "w");
     if (f == nullptr) return -errno;
@@ -867,6 +894,19 @@ class Trace : public TraceBase {
       return nullptr;
     else
       return it->second;
+  }
+
+  LinePy Symbolize(std::uint64_t addr) override {
+    if (UpdateDwfl() < 0) return LinePy();
+    return FindAddr(dwfl_.get(), addr);
+  }
+
+  AddrPy* Resolve(const char* symbol) override {
+    if (UpdateDwfl() < 0) return nullptr;
+    if (boost::optional<std::uint64_t> addr = FindSymbol(dwfl_.get(), symbol))
+      return new AddrPy{*addr};
+    else
+      return nullptr;
   }
 
  private:
@@ -889,6 +929,51 @@ class Trace : public TraceBase {
     entryIndex_ = entry.entryIndex;
   }
 
+  size_t FindMmapFileOffset(size_t fileOffset) const {
+    MmVector<MmapIndexEntry>::const_iterator it =
+        std::upper_bound(mmapIndex_.begin(), mmapIndex_.end(), fileOffset,
+                         [](size_t fileOffset, const MmapIndexEntry& entry) {
+                           return fileOffset < entry.fileOffset;
+                         });
+    if (it == mmapIndex_.begin()) return 0;
+    --it;
+    return it->fileOffset;
+  }
+
+  using Elves = std::map<std::string, W>;
+
+  Elves GetElves(size_t mmapFileOffset) const {
+    Elves elves;
+    for (size_t i = 0, size = mmapIndex_.size();
+         i < size && mmapIndex_[i].fileOffset <= mmapFileOffset; i++) {
+      MmapEntry<E, W> entry(data_ + mmapIndex_[i].fileOffset);
+      const char* name = entry.GetValue();
+      if (*name == 0 || *name == '[') continue;
+      std::string nameStr(name);
+      typename Elves::iterator it = elves.find(nameStr);
+      if (it == elves.end())
+        elves.insert(std::make_pair(std::move(nameStr), entry.GetStart()));
+      else
+        it->second = std::min(it->second, entry.GetStart());
+    }
+    return elves;
+  }
+
+  int UpdateDwfl() {
+    size_t mmapFileOffset = FindMmapFileOffset(cur_ - data_);
+    if (mmapFileOffset == mmapFileOffset_) return 0;
+    Elves elves = GetElves(mmapFileOffset);
+    if (elves == elves_) return 0;
+    dwfl_report_begin(dwfl_.get());
+    for (typename Elves::iterator it = elves.begin(); it != elves.end(); it++)
+      dwfl_report_elf(dwfl_.get(), it->first.c_str(), it->first.c_str(), -1,
+                      it->second, false);
+    if (dwfl_report_end(dwfl_.get(), nullptr, nullptr) != 0) return -EINVAL;
+    mmapFileOffset_ = mmapFileOffset;
+    elves_ = std::move(elves);
+    return 0;
+  }
+
   std::uint8_t* data_;
   size_t length_;
   std::uint8_t* cur_;
@@ -896,10 +981,13 @@ class Trace : public TraceBase {
   size_t entryIndex_;
   HeaderEntry<E, W> header_;
   MmVector<InsnIndexEntry> insnIndex_;
+  MmVector<MmapIndexEntry> mmapIndex_;
   size_t insnIndexStepShift_;
   std::shared_ptr<TraceFilter> filter_;
   RegMeta regMeta_;
   DwflPtr dwfl_;
+  size_t mmapFileOffset_;
+  Elves elves_;
 };
 
 int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
@@ -2114,13 +2202,16 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def("__iter__", bp::objects::identity_function())
       .def("__next__", &TraceBase::Next)
       .def("seek_insn", &TraceBase::SeekInsn)
+      .def("seek_end", &TraceBase::SeekEnd)
       .def("gather_stats", &TraceBase::GatherStats)
       .def("build_insn_index", &TraceBase::BuildInsnIndex)
       .def("load_insn_index", &TraceBase::LoadInsnIndex)
-      .def("get_mmap_entries", &TraceBase::GetMmapEntries)
       .def("dump", &TraceBase::Dump)
       .def("set_filter", &TraceBase::SetFilter)
-      .def("get_reg_name", &TraceBase::GetRegName);
+      .def("get_reg_name", &TraceBase::GetRegName)
+      .def("symbolize", &TraceBase::Symbolize)
+      .def("resolve", &TraceBase::Resolve,
+           bp::return_value_policy<bp::manage_new_object>());
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
   bp::class_<Range<std::uint64_t>>("Range",
@@ -2150,4 +2241,11 @@ BOOST_PYTHON_MODULE(_memtrace) {
   bp::class_<Disasm, boost::noncopyable>("Disasm", bp::no_init)
       .def("__init__", bp::make_constructor(CreateDisasm))
       .def("disasm_str", &Disasm::DisasmStr);
+  bp::class_<LinePy>("Line", bp::no_init)
+      .def_readonly("symbol", &LinePy::symbol)
+      .def_readonly("offset", &LinePy::offset)
+      .def_readonly("section", &LinePy::section)
+      .def_readonly("file", &LinePy::file)
+      .def_readonly("line", &LinePy::line);
+  bp::class_<AddrPy>("Addr", bp::no_init).def_readonly("value", &AddrPy::value);
 }
