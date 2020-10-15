@@ -26,15 +26,30 @@ const Dwfl_Callbacks kDwflCallbacks = {
 
 DwflPtr DwflBegin() { return DwflPtr(dwfl_begin(&kDwflCallbacks)); }
 
-struct SymbolFinder {
+class SymbolIndex {
+ public:
+  SymbolIndex(Dwfl* dwfl) {
+    dwfl_getmodules(dwfl, &SymbolIndex::Callback, this, 0);
+  }
+
+  boost::optional<GElf_Addr> Find(const char* symbol) const {
+    std::map<std::string, GElf_Addr>::const_iterator it = map_.find(symbol);
+    if (it == map_.end())
+      return boost::none;
+    else
+      return it->second;
+  }
+
+ private:
   /* find_symbol() */
   static int Callback(Dwfl_Module* mod, void** /* userdata */,
                       const char* /* name */, Dwarf_Addr /* start */,
                       void* arg) {
-    SymbolFinder* finder = reinterpret_cast<SymbolFinder*>(arg);
+    SymbolIndex* index = reinterpret_cast<SymbolIndex*>(arg);
     for (int i = 1, n = dwfl_module_getsymtab(mod); i < n; ++i) {
       GElf_Sym sym;
-      const char* current = dwfl_module_getsym_info(mod, i, &sym, &finder->addr,
+      GElf_Addr addr;
+      const char* current = dwfl_module_getsym_info(mod, i, &sym, &addr,
                                                     nullptr, nullptr, nullptr);
       if (current == nullptr || *current == 0) continue;
       switch (GELF_ST_TYPE(sym.st_info)) {
@@ -43,27 +58,15 @@ struct SymbolFinder {
         case STT_TLS:
           break;
         default:
-          if (strcmp(current, finder->name) == 0) {
-            finder->name = nullptr;
-            return DWARF_CB_ABORT;
-          }
+          index->map_.insert(std::make_pair(current, addr));
+          break;
       }
     }
     return DWARF_CB_OK;
   }
 
-  const char* name;
-  GElf_Addr addr;
+  std::map<std::string, GElf_Addr> map_;
 };
-
-boost::optional<std::uint64_t> FindSymbol(Dwfl* dwfl, const char* symbol) {
-  SymbolFinder finder = {symbol, 0};
-  dwfl_getmodules(dwfl, &SymbolFinder::Callback, &finder, 0);
-  if (finder.name == nullptr)
-    return finder.addr;
-  else
-    return boost::none;
-}
 
 struct LinePy {
   LinePy()

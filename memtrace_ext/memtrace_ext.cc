@@ -488,10 +488,6 @@ struct TraceFilterNoOp {
   bool isInsnSeqOk(std::uint32_t /* insnSeq */) const { return true; }
 };
 
-struct AddrPy {
-  std::uint64_t value;
-};
-
 class TraceBase {
  public:
   static TraceBase* Load(const char* path);
@@ -513,7 +509,7 @@ class TraceBase {
   virtual void SetFilter(std::shared_ptr<TraceFilter> filter) = 0;
   virtual const char* GetRegName(std::uint16_t offset, std::uint16_t size) = 0;
   virtual LinePy Symbolize(std::uint64_t addr) = 0;
-  virtual AddrPy* Resolve(const char* symbol) = 0;
+  virtual boost::python::object Resolve(const char* symbol) = 0;
 };
 
 template <typename W>
@@ -901,12 +897,12 @@ class Trace : public TraceBase {
     return FindAddr(dwfl_.get(), addr);
   }
 
-  AddrPy* Resolve(const char* symbol) override {
-    if (UpdateDwfl() < 0) return nullptr;
-    if (boost::optional<std::uint64_t> addr = FindSymbol(dwfl_.get(), symbol))
-      return new AddrPy{*addr};
+  boost::python::object Resolve(const char* symbol) override {
+    if (UpdateDwfl() < 0) return boost::python::object();
+    if (boost::optional<GElf_Addr> addr = symbolIndex_->Find(symbol))
+      return boost::python::object(*addr);
     else
-      return nullptr;
+      return boost::python::object();
   }
 
  private:
@@ -971,6 +967,7 @@ class Trace : public TraceBase {
     if (dwfl_report_end(dwfl_.get(), nullptr, nullptr) != 0) return -EINVAL;
     mmapFileOffset_ = mmapFileOffset;
     elves_ = std::move(elves);
+    symbolIndex_.reset(new SymbolIndex(dwfl_.get()));
     return 0;
   }
 
@@ -988,6 +985,7 @@ class Trace : public TraceBase {
   DwflPtr dwfl_;
   size_t mmapFileOffset_;
   Elves elves_;
+  std::unique_ptr<SymbolIndex> symbolIndex_;
 };
 
 int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
@@ -2210,8 +2208,7 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def("set_filter", &TraceBase::SetFilter)
       .def("get_reg_name", &TraceBase::GetRegName)
       .def("symbolize", &TraceBase::Symbolize)
-      .def("resolve", &TraceBase::Resolve,
-           bp::return_value_policy<bp::manage_new_object>());
+      .def("resolve", &TraceBase::Resolve);
   bp::class_<std::vector<std::uint8_t>>("std::vector<std::uint8_t>")
       .def(bp::vector_indexing_suite<std::vector<std::uint8_t>>());
   bp::class_<Range<std::uint64_t>>("Range",
@@ -2247,5 +2244,4 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def_readonly("section", &LinePy::section)
       .def_readonly("file", &LinePy::file)
       .def_readonly("line", &LinePy::line);
-  bp::class_<AddrPy>("Addr", bp::no_init).def_readonly("value", &AddrPy::value);
 }

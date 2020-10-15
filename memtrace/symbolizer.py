@@ -37,7 +37,4 @@ class Symbolizer:
         return f'in {symbol}{plus}{section} at {file}:{line.line}'
 
     def resolve(self, symbol: str) -> Optional[int]:
-        result = self.trace.resolve(symbol)
-        if result is None:
-            return None
-        return result.value
+        return self.trace.resolve(symbol)
