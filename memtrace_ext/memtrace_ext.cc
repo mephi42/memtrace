@@ -850,9 +850,12 @@ class Trace : public TraceBase {
     InsnIndexHeader header;
     if ((err = ReadHeader(indexPath.Get("header").c_str(), &header)) < 0)
       return err;
-    if (insnIndex_.Init(indexPath.Get("data").c_str(), InitMode::OpenExisting) <
-        0)
-      throw std::runtime_error("Failed to load index");
+    if ((err = insnIndex_.Init(indexPath.Get("data").c_str(),
+                               InitMode::OpenExisting)) < 0)
+      return err;
+    if ((err = mmapIndex_.Init(indexPath.Get("mmap").c_str(),
+                               InitMode::OpenExisting)) < 0)
+      return err;
     insnIndexStepShift_ = header.stepShift;
     return 0;
   }
