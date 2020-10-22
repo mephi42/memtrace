@@ -64,6 +64,7 @@ def dist_tracer():
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--build-type', default='Release')
     parser.add_argument('--python-version', action='append')
     parser.add_argument(
         '--wheel-dir',
@@ -78,6 +79,7 @@ def main():
         '--file=Makefile.ci',
         f'--jobs={nproc}',
         '--no-builtin-rules',
+        f'BUILD_TYPE={args.build_type}',
     ])
     dist_tracer()
     workdir = tempfile.TemporaryDirectory()
@@ -98,6 +100,7 @@ def main():
             subprocess.check_call([
                 run_in_venv, venv,
                 'python', 'setup.py', 'bdist_wheel',
+                f'--build-type={args.build_type}',
                 f'--dist-dir={dist_dir}',
                 *rest,
             ], cwd=basedir)

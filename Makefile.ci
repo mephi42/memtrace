@@ -1,3 +1,5 @@
+BUILD_TYPE?=Release
+
 define ls_files
   $(foreach file,$(shell cd $(1) && git ls-files),$(1)/$(file))
 endef
@@ -19,6 +21,7 @@ valgrind_tracer_src=$(basedir)/valgrind-tracer
 valgrind_source_files=\
 	$(call ls_files,$(valgrind_src)) \
 	$(call ls_files,$(valgrind_tracer_src))
+valgrind_CFLAGS_Release=-g0
 
 .PHONY: all
 all: $(libdw_a) $(valgrind)
@@ -48,7 +51,7 @@ $(valgrind_build)/Makefile: \
 		$(valgrind_tracer_src)/Makefile.in
 	mkdir -p $(valgrind_build) && \
 		cd $(valgrind_build) && \
-		CFLAGS=-g0 $(valgrind_src)/configure \
+		CFLAGS=$(valgrind_CFLAGS_$(BUILD_TYPE)) $(valgrind_src)/configure \
 			--prefix=$(valgrind_install) \
 			--with-mpicc=false
 

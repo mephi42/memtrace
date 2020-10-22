@@ -1,5 +1,6 @@
 #include "pub_core_aspacemgr.h"
 #include "pub_core_clientstate.h"
+#include "pub_core_debuginfo.h"
 #include "pub_core_libcfile.h"
 #include "pub_core_machine.h"
 #include "pub_tool_aspacehl.h"
@@ -87,12 +88,25 @@ typedef struct {
    Addr start;
    Addr end;
    /* combination of AR_* flags */
-   Int flags;
+   UInt flags;
 } AddrRange;
 #define MAX_PC_RANGES 32
 static AddrRange pcRanges[MAX_PC_RANGES];
 static UInt nPcRanges;
 static UInt syscallInsnSeq;
+typedef struct {
+   HChar* symbol;
+   Addr offset;
+} SymbolicAddr;
+typedef struct {
+   SymbolicAddr start;
+   SymbolicAddr end;
+   /* combination of AR_* flags */
+   UInt flags;
+} SymbolicAddrRange;
+#define MAX_SYMBOLIC_PC_RANGES 32
+static SymbolicAddrRange symbolicPcRanges[MAX_SYMBOLIC_PC_RANGES];
+static UInt nSymbolicPcRanges;
 
 /* Generic entry header. */
 struct Tlv {
@@ -248,6 +262,73 @@ static void trace_segments(void)
    VG_(free)(segStarts);
 }
 
+static Bool resolve_addr(Addr* addr, const SymbolicAddr* symbolic_addr)
+{
+   SymAVMAs avmas;
+
+   if (symbolic_addr->symbol == NULL) {
+      *addr = symbolic_addr->offset;
+      return True;
+   }
+   if (!VG_(lookup_symbol_SLOW)(VG_(current_DiEpoch)(),
+                                "*",
+                                symbolic_addr->symbol,
+                                &avmas))
+      return False;
+   *addr = avmas.main + symbolic_addr->offset;
+   return True;
+}
+
+static Bool update_pc_ranges(void)
+{
+   AddrRange newPcRanges[MAX_PC_RANGES];
+   UInt nNewPcRanges = 0;
+   SizeT n;
+   UInt i;
+
+   VG_(memset)(newPcRanges, 0, sizeof(newPcRanges));
+   for (i = 0; i < nSymbolicPcRanges; i++) {
+      if (!resolve_addr(&newPcRanges[nNewPcRanges].start,
+                        &symbolicPcRanges[i].start))
+         continue;
+      if (!resolve_addr(&newPcRanges[nNewPcRanges].end,
+                        &symbolicPcRanges[i].end))
+         continue;
+      newPcRanges[nNewPcRanges].flags = symbolicPcRanges[i].flags;
+      nNewPcRanges++;
+      if (nNewPcRanges == MAX_PC_RANGES)
+         break;
+   }
+
+   n = sizeof(AddrRange) * nNewPcRanges;
+   if (nNewPcRanges == nPcRanges && VG_(memcmp)(pcRanges, newPcRanges, n) == 0)
+      return False;
+
+   VG_(memcpy)(pcRanges, newPcRanges, n);
+   nPcRanges = nNewPcRanges;
+   return True;
+}
+
+static void show_pc_ranges(void)
+{
+   UInt i;
+
+   VG_(umsg)("Traced addresses:\n");
+   if (nPcRanges == 0) {
+      VG_(umsg)("(none)\n\n");
+      return;
+   }
+   for (i = 0; i < nPcRanges; i++)
+      VG_(umsg)("%016llx-%016llx %c%c%c%c\n",
+                (ULong)pcRanges[i].start,
+                (ULong)pcRanges[i].end,
+                (pcRanges[i].flags & AR_MEM) ? 'm' : '-',
+                (pcRanges[i].flags & AR_REGS) ? 'r' : '-',
+                (pcRanges[i].flags & AR_INSNS) ? 'i' : '-',
+                (pcRanges[i].flags & AR_ALL_REGS) ? 'R' : '-');
+   VG_(umsg)("\n");
+}
+
 static void open_trace_file(void)
 {
    struct HeaderEntry* entry;
@@ -279,6 +360,9 @@ static void open_trace_file(void)
 
    store_reg_meta();
    trace_segments();
+   update_pc_ranges();
+   /* Always show the initial ranges. */
+   show_pc_ranges();
 }
 
 static void close_trace_file(void)
@@ -524,6 +608,9 @@ static void mt_track_new_mem_mmap(Addr a,
    seg = VG_(am_find_nsegment)(a);
    if (seg)
       trace_segment(seg);
+   if (update_pc_ranges())
+      /* Show ranges only if they are new. */
+      show_pc_ranges();
 }
 
 static Int get_pc_flags(Addr pc)
@@ -537,64 +624,133 @@ static Int get_pc_flags(Addr pc)
    return flags;
 }
 
-static void show_pc_ranges(void)
+static Bool parse_offset(Addr* value, const HChar* start, const HChar* end)
 {
-   UInt i;
+   HChar* endptr;
+   ULong tmp;
 
-   VG_(umsg)("Traced addresses:\n");
-   for (i = 0; i < nPcRanges; i++)
-      VG_(umsg)("%016llx-%016llx %c%c%c%c\n",
-                (ULong)pcRanges[i].start,
-                (ULong)pcRanges[i].end,
-                (pcRanges[i].flags & AR_MEM) ? 'm' : '-',
-                (pcRanges[i].flags & AR_REGS) ? 'r' : '-',
-                (pcRanges[i].flags & AR_INSNS) ? 'i' : '-',
-                (pcRanges[i].flags & AR_ALL_REGS) ? 'R' : '-');
+   tmp = VG_(strtoull10)(start, &endptr);
+   if (endptr == end) {
+      *value = tmp;
+      return True;
+   }
+
+   tmp = VG_(strtoull16)(start, &endptr);
+   if (endptr == end) {
+      *value = tmp;
+      return True;
+   }
+
+   return False;
+}
+
+static const HChar* strchr_range(const HChar* start, const HChar* end, HChar c)
+{
+   const HChar* p;
+
+   for (p = start; p != end; p++)
+      if (*p == c)
+         break;
+   return p;
+}
+
+static HChar* strdup_range(const HChar* start, const HChar* end)
+{
+   HChar* result;
+
+   result = VG_(malloc)("strdup_range", end - start + 1);
+   VG_(memcpy)(result, start, end - start);
+   result[end - start] = '\0';
+   return result;
+}
+
+static Bool parse_addr(SymbolicAddr* addr,
+                       const HChar* start,
+                       const HChar* end)
+{
+   const HChar* symbol_end;
+
+   /* Recognize the following combinations:
+      - "<number>".
+      - "<symbol>".
+      - "<symbol>+<number>". */
+
+   if (parse_offset(&addr->offset, start, end)) {
+      addr->symbol = NULL;
+      return True;
+   }
+
+   symbol_end = strchr_range(start, end, '+');
+   addr->symbol = strdup_range(start, symbol_end);
+   if (symbol_end == end) {
+      addr->offset = 0;
+   } else {
+      if (!parse_offset(&addr->offset, symbol_end + 1, end))
+         return False;
+   }
+
+   return True;
+}
+
+static Bool parse_flags(UInt* flags, const HChar* start, const HChar* end)
+{
+   const HChar* p;
+
+   *flags = 0;
+   for (p = start; p != end; p++) {
+      switch (*p) {
+      case 'i':
+         *flags |= AR_INSNS;
+         break;
+      case 'm':
+         *flags |= AR_MEM;
+         break;
+      case 'r':
+         *flags |= AR_REGS;
+         break;
+      case 'R':
+         *flags |= AR_ALL_REGS;
+         break;
+      default:
+         return False;
+      }
+   }
+   return True;
 }
 
 static Bool add_pc_range(const HChar* spec)
 {
+   SymbolicAddrRange* range;
    const HChar* colon;
    const HChar* dash;
-   HChar* endptr;
+   const HChar* end;
 
-   if (nPcRanges == MAX_PC_RANGES)
+   if (nSymbolicPcRanges == MAX_SYMBOLIC_PC_RANGES)
       return False;
+   range = &symbolicPcRanges[nSymbolicPcRanges];
+
+   /* Parse start. */
    dash = VG_(strchr)(spec, '-');
    if (dash == NULL)
       return False;
-   colon = VG_(strchr)(dash, ':');
-   pcRanges[nPcRanges].start = VG_(strtoull16)(spec, &endptr);
-   if (endptr != dash)
+   if (!parse_addr(&range->start, spec, dash))
       return False;
-   pcRanges[nPcRanges].end = VG_(strtoull16)(dash + 1, &endptr);
+
+   /* Parse end. */
+   colon = VG_(strchr)(dash, ':');
+   end = spec + VG_(strlen)(spec);
+   if (!parse_addr(&range->end, dash + 1, colon == NULL ? end : colon))
+      return False;
+
+   /* Parse flags. */
    if (colon == NULL) {
-      if (*endptr != '\0')
-         return False;
-      pcRanges[nPcRanges].flags = AR_DEFAULT;
+      range->flags = AR_DEFAULT;
    } else {
-      if (endptr != colon)
+      if (!parse_flags(&range->flags, colon + 1, end))
          return False;
-      for (endptr++; *endptr; endptr++) {
-         switch (*endptr) {
-         case 'i':
-            pcRanges[nPcRanges].flags |= AR_INSNS;
-            break;
-         case 'm':
-            pcRanges[nPcRanges].flags |= AR_MEM;
-            break;
-         case 'r':
-            pcRanges[nPcRanges].flags |= AR_REGS;
-            break;
-         case 'R':
-            pcRanges[nPcRanges].flags |= AR_ALL_REGS;
-            break;
-         default:
-            return False;
-         }
-      }
    }
-   nPcRanges++;
+
+   nSymbolicPcRanges++;
    return True;
 }
 
@@ -618,17 +774,20 @@ static void mt_print_debug_usage(void)
 
 static void mt_post_clo_init(void)
 {
-   if (nPcRanges == 0) {
-      pcRanges[0].start = 0;
-      pcRanges[0].end = (Addr)-1;
-      pcRanges[0].flags = AR_DEFAULT;
-      nPcRanges = 1;
+   if (nSymbolicPcRanges == 0) {
+      symbolicPcRanges[0].start.symbol = NULL;
+      symbolicPcRanges[0].start.offset = 0;
+      symbolicPcRanges[0].end.symbol = NULL;
+      symbolicPcRanges[0].end.offset = (Addr)-1;
+      symbolicPcRanges[0].flags = AR_DEFAULT;
+      nSymbolicPcRanges = 1;
    }
 
-   show_pc_ranges();
+   open_trace_file();
 }
 
-static Bool is_ijk_syscall(IRJumpKind ijk) {
+static Bool is_ijk_syscall(IRJumpKind ijk)
+{
    switch (ijk) {
    case Ijk_Sys_syscall:
    case Ijk_Sys_int32:
@@ -644,7 +803,8 @@ static Bool is_ijk_syscall(IRJumpKind ijk) {
    }
 }
 
-static void store_syscall_insn_seq(IRSB* out, UInt insnSeq) {
+static void store_syscall_insn_seq(IRSB* out, UInt insnSeq)
+{
    addStmtToIRSB(out,
                  IRStmt_Store(END,
                               mkPtr(&syscallInsnSeq),
@@ -769,7 +929,7 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
                insnSeqNx++;
                pcFlagsNx = get_pc_flags(pcNx);
                break;
-             }
+            }
             case Ist_Put:
                if (pcFlagsNx & AR_REGS) {
                   IRExpr* data = stmtNx->Ist.Put.data;
@@ -907,8 +1067,6 @@ static void mt_pre_clo_init(void)
    VG_(track_pre_reg_read)(mt_track_pre_reg_read);
    VG_(track_post_reg_write)(mt_track_post_reg_write);
    VG_(track_new_mem_mmap)(mt_track_new_mem_mmap);
-
-   open_trace_file();
 }
 
 VG_DETERMINE_INTERFACE_VERSION(mt_pre_clo_init)

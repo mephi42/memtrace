@@ -1,0 +1,6 @@
+BasedOnStyle: Google
+IndentWidth: 3
+BreakBeforeBraces: Linux
+IndentCaseLabels: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
