@@ -1,18 +1,18 @@
 #+STARTUP: indent
-* <<InsnInTrace:9>> 0x000000000040102f setne dil in _start+0x2f (.text) at {testdir}/x86_64.S:17
-** <<InsnInTrace:8>> 0x0000000000401028 cmp byte ptr [rip + 0xfd1], 0x2a in _start+0x28 (.text) at {testdir}/x86_64.S:16
-Reason: [       159] 0x00000009: MT_GET_REG guest_CC_OP 0x5
-Reason: [       160] 0x00000009: MT_GET_REG guest_CC_DEP1 0x2a
-Reason: [       161] 0x00000009: MT_GET_REG guest_CC_DEP2 0x2a
-*** <<InsnInTrace:5>> 0x000000000040101c syscall  in _start+0x1c (.text) at {testdir}/x86_64.S:12
-Reason: [       153] 0x00000008: MT_LOAD uint8_t [0x402000] 0x2a
-**** <<InsnInTrace:1>> 0x0000000000401000 mov rax, 0 in _start (.text) at {testdir}/x86_64.S:8
-Reason: [       135] 0x00000005: MT_GET_REG rax 0x0
-**** <<InsnInTrace:2>> 0x0000000000401007 mov rdi, 0 in _start+0x7 (.text) at {testdir}/x86_64.S:9
-Reason: [       136] 0x00000005: MT_GET_REG edi 0x0
-**** <<InsnInTrace:3>> 0x000000000040100e lea rsi, [rip + 0xfeb] in _start+0xe (.text) at {testdir}/x86_64.S:10
-Reason: [       137] 0x00000005: MT_GET_REG rsi 0x402000
-**** <<InsnInTrace:4>> 0x0000000000401015 mov rdx, 1 in _start+0x15 (.text) at {testdir}/x86_64.S:11
-Reason: [       138] 0x00000005: MT_GET_REG rdx 0x1
+* <<InsnInTrace:10>> 0x0000000000401037 setne dil in _taintme (.text) at {testdir}/x86_64.S:20
+** <<InsnInTrace:9>> 0x0000000000401030 cmp byte ptr [rip + 0xfc9], 0x2a in _start+0x30 (.text) at {testdir}/x86_64.S:18
+Reason: [       161] 0x0000000a: MT_GET_REG guest_CC_OP 0x5
+Reason: [       162] 0x0000000a: MT_GET_REG guest_CC_DEP1 0x2a
+Reason: [       163] 0x0000000a: MT_GET_REG guest_CC_DEP2 0x2a
+*** <<InsnInTrace:6>> 0x0000000000401024 syscall  in _start+0x24 (.text) at {testdir}/x86_64.S:14
+Reason: [       155] 0x00000009: MT_LOAD uint8_t [0x402000] 0x2a
+**** <<InsnInTrace:2>> 0x0000000000401008 mov rax, 0 in _start+0x8 (.text) at {testdir}/x86_64.S:10
+Reason: [       137] 0x00000006: MT_GET_REG rax 0x0
+**** <<InsnInTrace:3>> 0x000000000040100f mov rdi, 0 in _start+0xf (.text) at {testdir}/x86_64.S:11
+Reason: [       138] 0x00000006: MT_GET_REG edi 0x0
+**** <<InsnInTrace:4>> 0x0000000000401016 lea rsi, [rip + 0xfe3] in _start+0x16 (.text) at {testdir}/x86_64.S:12
+Reason: [       139] 0x00000006: MT_GET_REG rsi 0x402000
+**** <<InsnInTrace:5>> 0x000000000040101d mov rdx, 1 in _start+0x1d (.text) at {testdir}/x86_64.S:13
+Reason: [       140] 0x00000006: MT_GET_REG rdx 0x1
 ** <<InsnInTrace:0>> 0x0000000000000000 <unknown> in ?? at ??:0
-Reason: [       162] 0x00000009: MT_GET_REG guest_CC_NDEP 0x0
+Reason: [       164] 0x0000000a: MT_GET_REG guest_CC_NDEP 0x0

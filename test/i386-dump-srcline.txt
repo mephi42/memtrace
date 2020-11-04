@@ -1,12 +1,13 @@
-{testdir}/i386.S:8
+{testdir}/i386.S:9
 {testdir}/i386.S:10
-{testdir}/i386.S:11
 {testdir}/i386.S:12
 {testdir}/i386.S:13
 {testdir}/i386.S:14
 {testdir}/i386.S:15
+{testdir}/i386.S:16
 {testdir}/i386.S:17
-{testdir}/i386.S:18
 {testdir}/i386.S:19
 {testdir}/i386.S:20
 {testdir}/i386.S:21
+{testdir}/i386.S:23
+{testdir}/i386.S:24

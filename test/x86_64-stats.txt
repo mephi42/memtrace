@@ -1,10 +1,10 @@
 MT_GET_REG count=10 size=240
 MT_HEADER64 count=1 size=8
-MT_INSN count=10 size=240
-MT_INSN_EXEC count=10 size=80
+MT_INSN count=11 size=264
+MT_INSN_EXEC count=11 size=88
 MT_LOAD count=1 size=24
-MT_MMAP count=5 size=
-MT_PUT_REG count=19 size=456
+MT_MMAP count=4 size=
+MT_PUT_REG count=20 size=480
 MT_REGMETA count=115 size=2184
 MT_STORE count=1 size=24
-total count=172 size=3608
+total count=174 size=3584

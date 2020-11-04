@@ -1,5 +1,6 @@
 click
 dataclasses; python_version < '3.7'
+flake8
 scikit-build
 sortedcontainers
 twine

@@ -4,7 +4,6 @@ import glob
 import multiprocessing
 import os
 import platform
-import shutil
 import subprocess
 import tempfile
 
@@ -62,6 +61,53 @@ def dist_tracer():
         raise subprocess.CalledProcessError(ret, untar.args)
 
 
+def get_python_binary(python_version):
+    return os.path.join('/opt', 'python', python_version, 'bin', 'python')
+
+
+def setup_build_venv(python_version):
+    venv = os.path.join(build, python_version)
+    subprocess.check_call(
+        [get_python_binary(python_version), '-m', 'venv', venv])
+    subprocess.check_call([
+        run_in_venv, venv,
+        'pip', 'install',
+        '--disable-pip-version-check',
+        '--requirement=requirements.txt',
+        '--upgrade',
+    ], cwd=basedir)
+    return venv
+
+
+def repair_wheel(whl, wheel_dir):
+    with tempfile.TemporaryDirectory(dir=wheel_dir) as tmp_wheel_dir:
+        subprocess.check_call([
+            'auditwheel', 'repair',
+            f'--wheel-dir={tmp_wheel_dir}',
+            whl,
+        ])
+        tmp_manylinux_whl_name, = os.listdir(tmp_wheel_dir)
+        manylinux_whl = os.path.join(wheel_dir, tmp_manylinux_whl_name)
+        os.rename(
+            os.path.join(tmp_wheel_dir, tmp_manylinux_whl_name),
+            manylinux_whl,
+        )
+        return manylinux_whl
+
+
+def build_wheel(venv, build_type, build_args, wheel_dir):
+    with tempfile.TemporaryDirectory() as dist_dir:
+        subprocess.check_call([
+            run_in_venv, venv,
+            'python', 'setup.py', 'bdist_wheel',
+            f'--build-type={build_type}',
+            f'--dist-dir={dist_dir}',
+            *build_args,
+        ], cwd=basedir)
+        whl_name, = os.listdir(dist_dir)
+        return repair_wheel(os.path.join(dist_dir, whl_name), wheel_dir)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--build-type', default='Release')
@@ -70,7 +116,7 @@ def main():
         '--wheel-dir',
         default=os.path.join(basedir, 'dist', 'wheelhouse'),
     )
-    args, rest = parser.parse_known_args()
+    args, build_args = parser.parse_known_args()
     if args.python_version is None:
         args.python_version = ('cp36-cp36m', 'cp37-cp37m', 'cp38-cp38')
     patch_valgrind()
@@ -82,36 +128,16 @@ def main():
         f'BUILD_TYPE={args.build_type}',
     ])
     dist_tracer()
-    workdir = tempfile.TemporaryDirectory()
-    try:
-        for python_version in args.python_version:
-            python = os.path.join(
-                '/opt', 'python', python_version, 'bin', 'python')
-            venv = os.path.join(build, python_version)
-            subprocess.check_call([python, '-m', 'venv', venv])
-            subprocess.check_call([
-                run_in_venv, venv,
-                'pip', 'install',
-                '--disable-pip-version-check',
-                '--requirement=requirements.txt',
-                '--upgrade',
-            ], cwd=basedir)
-            dist_dir = os.path.join(workdir.name, python_version)
-            subprocess.check_call([
-                run_in_venv, venv,
-                'python', 'setup.py', 'bdist_wheel',
-                f'--build-type={args.build_type}',
-                f'--dist-dir={dist_dir}',
-                *rest,
-            ], cwd=basedir)
-            whl, = os.listdir(dist_dir)
-            subprocess.check_call([
-                'auditwheel', 'repair',
-                f'--wheel-dir={args.wheel_dir}',
-                os.path.join(dist_dir, whl),
-            ])
-    finally:
-        shutil.rmtree(workdir.name)
+    for python_version in args.python_version:
+        venv = setup_build_venv(python_version)
+        subprocess.check_call([run_in_venv, venv, 'flake8'], cwd=basedir)
+        subprocess.check_call([
+            run_in_venv, venv,
+            'python', 'setup.py', 'test',
+            f'--build-type={args.build_type}',
+            *build_args,
+        ], cwd=basedir)
+        build_wheel(venv, args.build_type, build_args, args.wheel_dir)
 
 
 if __name__ == '__main__':

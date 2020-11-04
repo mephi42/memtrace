@@ -322,16 +322,17 @@ class MachineTest(CommonTest):
         self._seek(with_index=True)
 
     def test_taint(self) -> None:
-        taint_pc_txt = os.path.join(
-            self.basedir, f'{self.get_target()}-taint-pc.txt')
         taint_org = f'{self.get_target()}-taint.org'
         actual_taint_org = os.path.join(self.workdir.name, taint_org)
         expected_taint_org = os.path.join(self.basedir, taint_org)
-        with open(taint_pc_txt) as fp:
-            pc = int(fp.read(), 0)
         with Analysis(
                 trace_path=os.path.join(self.workdir.name, 'memtrace.out'),
         ) as analysis:
+            analysis.init_insn_index()
+            analysis.trace.seek_end()
+            pc = analysis.symbolizer.resolve('_taintme')
+            self.assertIsNotNone(pc)
+            analysis.trace.seek_start()
             backward = BackwardAnalysis(
                 analysis=analysis,
                 trace_index0=analysis.get_last_trace_for_pc(pc),
@@ -362,7 +363,11 @@ class TestX86_64(MachineTest):
 
     @classmethod
     def get_cflags(cls) -> List[str]:
-        return super().get_cflags() + ['-m64']
+        return super().get_cflags() + [
+            '-m64',
+            '-Wl,--build-id=none',
+            '-Wl,--script=x86_64.lds',
+        ]
 
 
 class TestI386(MachineTest):
@@ -372,7 +377,11 @@ class TestI386(MachineTest):
 
     @classmethod
     def get_cflags(cls) -> List[str]:
-        return super().get_cflags() + ['-m32']
+        return super().get_cflags() + [
+            '-m32',
+            '-Wl,--build-id=none',
+            '-Wl,--script=i386.lds',
+        ]
 
 
 class TestCat(CommonTest):
@@ -429,7 +438,7 @@ class TestCat(CommonTest):
             trace.seek_end()
             cat_buf_start = symbolizer.resolve('cat_buf')
             self.assertIsNotNone(cat_buf_start)
-            trace.seek_insn(0)
+            trace.seek_start()
         cat_buf_end = cat_buf_start + len(cat_buf)
         for entry in trace:
             if (entry.tag == Tag.MT_STORE and

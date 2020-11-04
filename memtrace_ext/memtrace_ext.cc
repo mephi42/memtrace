@@ -567,6 +567,7 @@ class TraceBase {
   virtual MachineType GetMachineType() = 0;
   virtual std::uint16_t GetRegsSize() = 0;
   virtual boost::python::object Next() = 0;
+  virtual int SeekStart() = 0;
   virtual int SeekInsn(std::uint32_t index) = 0;
   virtual int SeekEnd() = 0;
   virtual Stats GatherStats() = 0;
@@ -833,6 +834,11 @@ class Trace : public TraceBase {
         break;
       }
     }
+    return 0;
+  }
+
+  int SeekStart() override {
+    Rewind();
     return 0;
   }
 
@@ -2307,6 +2313,7 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def("get_regs_size", &TraceBase::GetRegsSize)
       .def("__iter__", bp::objects::identity_function())
       .def("__next__", &TraceBase::Next)
+      .def("seek_start", &TraceBase::SeekStart)
       .def("seek_insn", &TraceBase::SeekInsn)
       .def("seek_end", &TraceBase::SeekEnd)
       .def("gather_stats", &TraceBase::GatherStats)
