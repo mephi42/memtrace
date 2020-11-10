@@ -154,7 +154,8 @@ class MmVector {
   }
 
  private:
-  static constexpr size_t kGrowAmount = 1024 * 1024 * 1024;
+  static constexpr size_t kGrowAmount =
+      (sizeof(void*) == 8 ? 1024 : 64) * 1024 * 1024;
 
   void Grow(size_t bytes = kGrowAmount) {
     reserve(capacity_ + bytes / sizeof(T));
