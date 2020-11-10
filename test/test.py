@@ -163,8 +163,9 @@ class MachineTest(CommonTest):
     def setUpClass(cls) -> None:
         if cls == MachineTest:
             raise unittest.SkipTest('Subclasses only')
-        if platform.machine() not in cls.get_machines():
-            raise unittest.SkipTest(f'{cls.get_machines()} only')
+        machine = platform.machine()
+        if machine not in cls.get_machines():
+            raise unittest.SkipTest(f'{machine} not in {cls.get_machines()}')
         super().setUpClass()
 
     def _filter_line(
@@ -373,7 +374,7 @@ class TestX86_64(MachineTest):
 class TestI386(MachineTest):
     @staticmethod
     def get_machines() -> List[str]:
-        return ['i386', 'x86_64']
+        return ['i386', 'i686', 'x86_64']
 
     @classmethod
     def get_cflags(cls) -> List[str]:
