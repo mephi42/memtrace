@@ -60,6 +60,11 @@ def main():
             '-DBoost_USE_STATIC_LIBS=ON',
             *rest,
         ]
+        if platform.machine() not in (
+                arch.strip()
+                for arch in config[name]['native'].split('\n')
+        ):
+            docker_run_args.append('--skip-tests')
         subprocess.check_call(docker_run_args)
 
 

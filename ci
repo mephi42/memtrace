@@ -112,6 +112,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--build-type', default='Release')
     parser.add_argument('--python-version', action='append')
+    parser.add_argument('--skip-tests', action='store_true')
     parser.add_argument(
         '--wheel-dir',
         default=os.path.join(basedir, 'dist', 'wheelhouse'),
@@ -131,12 +132,13 @@ def main():
     for python_version in args.python_version:
         venv = setup_build_venv(python_version)
         subprocess.check_call([run_in_venv, venv, 'flake8'], cwd=basedir)
-        subprocess.check_call([
-            run_in_venv, venv,
-            'python', 'setup.py', 'test',
-            f'--build-type={args.build_type}',
-            *build_args,
-        ], cwd=basedir)
+        if not args.skip_tests:
+            subprocess.check_call([
+                run_in_venv, venv,
+                'python', 'setup.py', 'test',
+                f'--build-type={args.build_type}',
+                *build_args,
+            ], cwd=basedir)
         build_wheel(venv, args.build_type, build_args, args.wheel_dir)
 
 
