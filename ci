@@ -109,6 +109,30 @@ def build_wheel(venv, build_type, build_args, wheel_dir):
         return repair_wheel(os.path.join(dist_dir, whl_name), wheel_dir)
 
 
+def git_ls_files():
+    p = subprocess.Popen(['git', 'ls-files'], stdout=subprocess.PIPE)
+    try:
+        for line in p.stdout:
+            yield line.strip().decode()
+    finally:
+        if p.wait() != 0:
+            raise subprocess.CalledProcessError(p.returncode, p.args)
+
+
+def git_ls_py_files():
+    for path in git_ls_files():
+        if path.endswith('.py'):
+            yield path
+        else:
+            try:
+                with open(path, 'rb') as fp:
+                    if fp.read(2) == b'#!' and \
+                            fp.readline() == b'/usr/bin/env python3\n':
+                        yield path
+            except (FileNotFoundError, IsADirectoryError):
+                pass
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--build-type', default='Release')
@@ -132,7 +156,10 @@ def main():
     dist_tracer()
     for python_version in args.python_version:
         venv = setup_build_venv(python_version)
-        subprocess.check_call([run_in_venv, venv, 'flake8'], cwd=basedir)
+        subprocess.check_call(
+            [run_in_venv, venv, 'flake8'] + list(git_ls_py_files()),
+            cwd=basedir,
+        )
         if not args.skip_tests:
             subprocess.check_call([
                 run_in_venv, venv,
