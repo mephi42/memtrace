@@ -80,6 +80,7 @@ def setup_build_venv(python_version):
 
 
 def repair_wheel(whl, wheel_dir):
+    os.makedirs(wheel_dir, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=wheel_dir) as tmp_wheel_dir:
         subprocess.check_call([
             'auditwheel', 'repair',
