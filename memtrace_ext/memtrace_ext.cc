@@ -173,6 +173,17 @@ template <Endianness E, typename W>
 class Trace;
 
 template <Endianness E, typename W>
+void DisasmInsnEntry(FILE* f, Disasm& disasmEngine, InsnEntry<E, W> entry) {
+  HexDump(f, entry.GetValue(), entry.GetSize());
+  std::unique_ptr<cs_insn, CsFree> insn = disasmEngine.DoDisasm(
+      entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
+  if (insn)
+    std::fprintf(f, " %s %s\n", insn->mnemonic, insn->op_str);
+  else
+    std::fprintf(f, " <unknown>\n");
+}
+
+template <Endianness E, typename W>
 class Dumper {
  public:
   explicit Dumper(std::FILE* f, Trace<E, W>* trace)
@@ -213,13 +224,7 @@ class Dumper {
     std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s 0x%016" PRIx64 " ", i,
                  entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
                  static_cast<std::uint64_t>(entry.GetPc()));
-    HexDump(f_, entry.GetValue(), entry.GetSize());
-    std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
-        entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
-    if (insn)
-      std::fprintf(f_, " %s %s\n", insn->mnemonic, insn->op_str);
-    else
-      std::fprintf(f_, " <unknown>\n");
+    DisasmInsnEntry(f_, disasmEngine_, entry);
     return 0;
   }
 
@@ -284,8 +289,8 @@ class SourceDumper {
   SourceDumper(std::FILE* f, Trace<E, W>* trace)
       : f_(f), trace_(trace), prevFile_(nullptr), prevLinep_(-1) {}
 
-  int Init(HeaderEntry<E, W> /* entry */, size_t /* expectedInsnCount */) {
-    return 0;
+  int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
+    return disasmEngine_.Init(entry.GetMachineType(), E, sizeof(W));
   }
 
   int operator()(size_t /* i */, InsnEntry<E, W> entry) {
@@ -302,13 +307,14 @@ class SourceDumper {
     if (insnIndex >= insns_.size()) return -EINVAL;
     int err;
     if ((err = trace_->UpdateDwfl()) < 0) return err;
-    const InsnEntry<E, W>* insn = &insns_[insnIndex];
-    Dwfl_Module* mod = dwfl_addrmodule(trace_->dwfl_.get(), insn->GetPc());
+    InsnEntry<E, W> insn = insns_[insnIndex];
+    Dwfl_Module* mod = dwfl_addrmodule(trace_->dwfl_.get(), insn.GetPc());
     Dwfl_Line* line =
-        mod == nullptr ? nullptr : dwfl_module_getsrc(mod, insn->GetPc());
+        mod == nullptr ? nullptr : dwfl_module_getsrc(mod, insn.GetPc());
     if (line == nullptr) {
-      PrintAddr(f_, mod, insn->GetPc());
-      fprintf(f_, "\n");
+      PrintAddr(f_, mod, insn.GetPc());
+      std::fprintf(f_, ": ");
+      DisasmInsnEntry(f_, disasmEngine_, insn);
       prevFile_ = nullptr;
       prevLinep_ = -1;
       return 0;
@@ -318,7 +324,7 @@ class SourceDumper {
         dwfl_lineinfo(line, nullptr, &linep, nullptr, nullptr, nullptr);
     if (linep != prevLinep_ || prevFile_ == nullptr ||
         (prevFile_ != file && strcmp(prevFile_, file) != 0))
-      fprintf(f_, "%s:%d\n", file, linep);
+      std::fprintf(f_, "%s:%d\n", file, linep);
     prevFile_ = file;
     prevLinep_ = linep;
     return 0;
@@ -338,6 +344,7 @@ class SourceDumper {
   std::vector<InsnEntry<E, W>> insns_;
   const char* prevFile_;
   int prevLinep_;
+  Disasm disasmEngine_;
 };
 
 struct TagStats {
@@ -1238,9 +1245,9 @@ struct PartialUse {
 };
 
 template <typename W>
-static const PartialUse<W>* ScanPartialUses(const PartialUse<W>* partialUses,
-                                            size_t partialUseCount,
-                                            std::uint32_t useIndex) {
+const PartialUse<W>* ScanPartialUses(const PartialUse<W>* partialUses,
+                                     size_t partialUseCount,
+                                     std::uint32_t useIndex) {
   for (size_t entryIndex = 0; entryIndex < partialUseCount; entryIndex++) {
     const PartialUse<W>& partialUse = partialUses[entryIndex];
     if (partialUse.first == useIndex ||
@@ -1251,9 +1258,9 @@ static const PartialUse<W>* ScanPartialUses(const PartialUse<W>* partialUses,
 }
 
 template <typename W>
-static const PartialUse<W>& FindPartialUse(const PartialUse<W>* hashTable,
-                                           size_t hashTableSize,
-                                           std::uint32_t useIndex) {
+const PartialUse<W>& FindPartialUse(const PartialUse<W>* hashTable,
+                                    size_t hashTableSize,
+                                    std::uint32_t useIndex) {
   size_t entryIndex = useIndex % hashTableSize;
   const PartialUse<W>* use = ScanPartialUses(
       hashTable + entryIndex, hashTableSize - entryIndex, useIndex);
@@ -2198,7 +2205,7 @@ UdBase* UdBase::Analyze(const char* path, std::shared_ptr<TraceBase> trace,
 }
 
 template <Endianness E, typename W>
-static std::string MangleName(const char* name) {
+std::string MangleName(const char* name) {
   return std::string(name) + GetEndiannessStr(E) +
          std::to_string(sizeof(W) * 8);
 }
