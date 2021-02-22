@@ -72,6 +72,7 @@ RUN yum install -y \
     elfutils \
     flex \
     gawk \
+    gettext-devel \
     openssl-devel \
     $([ "$(uname -m)" != "x86_64" ] || echo glibc-devel.i686 libgcc.i686)
 RUN yum remove -y cmake cmake28
