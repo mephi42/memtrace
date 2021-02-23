@@ -61,14 +61,19 @@ def dist_tracer():
         raise subprocess.CalledProcessError(ret, untar.args)
 
 
-def get_python_binary(python_version):
-    return os.path.join('/opt', 'python', python_version, 'bin', 'python')
+def get_python_version(python):
+    hexversion = int(subprocess.check_output([
+        python, '-c', 'import sys; print(sys.hexversion)']))
+    return '{}.{}.{}'.format(
+        (hexversion >> 24) & 0xff,
+        (hexversion >> 16) & 0xff,
+        (hexversion >> 8) & 0xff,
+    )
 
 
-def setup_build_venv(python_version):
-    venv = os.path.join(build, python_version)
-    subprocess.check_call(
-        [get_python_binary(python_version), '-m', 'venv', venv])
+def setup_build_venv(python):
+    venv = os.path.join(build, get_python_version(python))
+    subprocess.check_call([python, '-m', 'venv', venv])
     subprocess.check_call([
         run_in_venv, venv,
         'pip', 'install',
@@ -136,15 +141,15 @@ def git_ls_py_files():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--build-type', default='Release')
-    parser.add_argument('--python-version', action='append')
+    parser.add_argument('--python', action='append')
     parser.add_argument('--skip-tests', action='store_true')
     parser.add_argument(
         '--wheel-dir',
         default=os.path.join(basedir, 'dist', 'wheelhouse'),
     )
     args, build_args = parser.parse_known_args()
-    if args.python_version is None:
-        args.python_version = ('cp36-cp36m', 'cp37-cp37m', 'cp38-cp38')
+    if args.python is None:
+        args.python = ('python3',)
     patch_valgrind()
     subprocess.check_call([
         'make',
@@ -154,8 +159,8 @@ def main():
         f'BUILD_TYPE={args.build_type}',
     ])
     dist_tracer()
-    for python_version in args.python_version:
-        venv = setup_build_venv(python_version)
+    for python in args.python:
+        venv = setup_build_venv(python)
         subprocess.check_call(
             [run_in_venv, venv, 'flake8'] + list(git_ls_py_files()),
             cwd=basedir,

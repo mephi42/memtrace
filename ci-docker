@@ -14,7 +14,7 @@ def main():
         action='append',
         default=[],
     )
-    parser.add_argument('--version', default='2020-10-13-db8737d6d')
+    parser.add_argument('--version', default='2021-02-23-d5b3a497a')
     args, rest = parser.parse_known_args()
     if len(args.name) == 0:
         args.name.append('manylinux2014_' + platform.machine())
@@ -48,15 +48,18 @@ def main():
             '--rm',
             '--tty',
             f'--user={os.getuid()}:{os.getgid()}',
-            f'--volume={basedir}:{basedir}',
-            f'--volume={local_build}:{container_build}',
-            f'--volume={local_ccache}:{container_ccache}',
-            f'--volume={local_pip_cache}:{container_pip_cache}',
-            f'--volume={local_skbuild}:{container_skbuild}',
+            f'--volume={basedir}:{basedir}:z',
+            f'--volume={local_build}:{container_build}:z',
+            f'--volume={local_ccache}:{container_ccache}:z',
+            f'--volume={local_pip_cache}:{container_pip_cache}:z',
+            f'--volume={local_skbuild}:{container_skbuild}:z',
             f'--workdir={basedir}',
             f'mephi42/memtrace-build-{name}:{args.version}',
             '/opt/python/cp38-cp38/bin/python3',
             'ci',
+            '--python=/opt/python/cp36-cp36m/bin/python',
+            '--python=/opt/python/cp37-cp37m/bin/python',
+            '--python=/opt/python/cp38-cp38/bin/python',
             '-DBoost_USE_STATIC_LIBS=ON',
             *rest,
         ]
