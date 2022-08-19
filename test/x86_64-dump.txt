@@ -154,25 +154,27 @@ Regs size         : 928
 [       149] 0x00000008: MT_PUT_REG guest_CC_OP 0x14
 [       150] 0x00000008: MT_PUT_REG guest_CC_DEP1 0x0
 [       151] 0x00000008: MT_PUT_REG guest_CC_DEP2 0x0
-[       152] 0x00000008: MT_PUT_REG rdi 0x0
-[       153] 0x00000009: MT_INSN 0x0000000000401030 803dc90f00002a cmp byte ptr [rip + 0xfc9], 0x2a
-[       154] 0x00000009: MT_INSN_EXEC
-[       155] 0x00000009: MT_LOAD uint8_t [0x402000] 0x2a
-[       156] 0x00000009: MT_PUT_REG guest_CC_OP 0x5
-[       157] 0x00000009: MT_PUT_REG guest_CC_DEP1 0x2a
-[       158] 0x00000009: MT_PUT_REG guest_CC_DEP2 0x2a
-[       159] 0x0000000a: MT_INSN 0x0000000000401037 400f95c7 setne dil
-[       160] 0x0000000a: MT_INSN_EXEC
-[       161] 0x0000000a: MT_GET_REG guest_CC_OP 0x5
-[       162] 0x0000000a: MT_GET_REG guest_CC_DEP1 0x2a
-[       163] 0x0000000a: MT_GET_REG guest_CC_DEP2 0x2a
-[       164] 0x0000000a: MT_GET_REG guest_CC_NDEP 0x0
-[       165] 0x0000000a: MT_PUT_REG dil 0x0
-[       166] 0x0000000b: MT_INSN 0x000000000040103b 0f05 syscall 
-[       167] 0x0000000b: MT_INSN_EXEC
-[       168] 0x0000000b: MT_PUT_REG rcx 0x40103d
-[       169] 0x0000000b: MT_GET_REG rax 0x3c
-[       170] 0x0000000b: MT_GET_REG edi 0x0
-[       171] 0x0000000b: MT_PUT_REG rax 0x0
-[       172] 0x0000000b: MT_PUT_REG rax 0x0
+[       152] 0x00000008: MT_PUT_REG guest_CC_NDEP 0x0
+[       153] 0x00000008: MT_PUT_REG rdi 0x0
+[       154] 0x00000009: MT_INSN 0x0000000000401030 803dc90f00002a cmp byte ptr [rip + 0xfc9], 0x2a
+[       155] 0x00000009: MT_INSN_EXEC
+[       156] 0x00000009: MT_LOAD uint8_t [0x402000] 0x2a
+[       157] 0x00000009: MT_PUT_REG guest_CC_OP 0x5
+[       158] 0x00000009: MT_PUT_REG guest_CC_DEP1 0x2a
+[       159] 0x00000009: MT_PUT_REG guest_CC_DEP2 0x2a
+[       160] 0x00000009: MT_PUT_REG guest_CC_NDEP 0x0
+[       161] 0x0000000a: MT_INSN 0x0000000000401037 400f95c7 setne dil
+[       162] 0x0000000a: MT_INSN_EXEC
+[       163] 0x0000000a: MT_GET_REG guest_CC_OP 0x5
+[       164] 0x0000000a: MT_GET_REG guest_CC_DEP1 0x2a
+[       165] 0x0000000a: MT_GET_REG guest_CC_DEP2 0x2a
+[       166] 0x0000000a: MT_GET_REG guest_CC_NDEP 0x0
+[       167] 0x0000000a: MT_PUT_REG dil 0x0
+[       168] 0x0000000b: MT_INSN 0x000000000040103b 0f05 syscall 
+[       169] 0x0000000b: MT_INSN_EXEC
+[       170] 0x0000000b: MT_PUT_REG rcx 0x40103d
+[       171] 0x0000000b: MT_GET_REG rax 0x3c
+[       172] 0x0000000b: MT_GET_REG edi 0x0
+[       173] 0x0000000b: MT_PUT_REG rax 0x0
+[       174] 0x0000000b: MT_PUT_REG rax 0x0
 Insns             : 11

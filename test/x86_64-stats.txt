@@ -4,7 +4,7 @@ MT_INSN count=11 size=264
 MT_INSN_EXEC count=11 size=88
 MT_LOAD count=1 size=24
 MT_MMAP count=4 size=
-MT_PUT_REG count=20 size=480
+MT_PUT_REG count=22 size=528
 MT_REGMETA count=115 size=2184
 MT_STORE count=1 size=24
-total count=174 size=3584
+total count=176 size=3632

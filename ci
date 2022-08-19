@@ -37,8 +37,8 @@ def dist_tracer():
     files = []
     for pattern in (
             'bin/valgrind',
-            'lib/valgrind/memtrace-*',
-            'lib/valgrind/vgpreload_core-*.so',
+            'libexec/valgrind/memtrace-*',
+            'libexec/valgrind/vgpreload_core-*.so',
     ):
         for file in glob.glob(os.path.join(tracer_install, pattern)):
             files.append(os.path.relpath(file, tracer_install))

@@ -9,7 +9,7 @@ def popen(argv, **kwargs):
     tracer = os.path.join(
         basedir, 'tracer', f'{uname.sysname}-{uname.machine}')
     valgrind = os.path.join(tracer, 'bin', 'valgrind')
-    valgrind_lib = os.path.join(tracer, 'lib', 'valgrind')
+    valgrind_lib = os.path.join(tracer, 'libexec', 'valgrind')
     kwargs['env'] = kwargs.get('env', os.environ).copy()
     kwargs['env']['VALGRIND_LIB'] = valgrind_lib
     return subprocess.Popen(
