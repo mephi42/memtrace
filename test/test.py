@@ -65,7 +65,7 @@ class CommonTest(unittest.TestCase):
             '-Wconversion',
             '-pedantic',
             '-O3',
-            '-g',
+            '-gdwarf-4',
         ]
 
     @staticmethod
