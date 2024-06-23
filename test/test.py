@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from contextlib import contextmanager
 import ctypes
+from fcntl import fcntl
 import os
 import platform
 import re
@@ -26,6 +27,7 @@ from memtrace.ud import Ud
 from memtrace._memtrace import Disasm, DumpKind, get_endianness_str, Tag
 
 ADDR_NO_RANDOMIZE = 0x0040000
+F_SETPIPE_SZ = 1031
 
 
 def diff_files(expected, actual):
@@ -408,6 +410,10 @@ class TestCat(CommonTest):
         )
         try:
             expected = cls.get_input()
+            # Check that TLV chunking works by increasing the pipe capacity,
+            # so that it exceeds the maximum TLV length. This will allow
+            # individual read() calls in cat.c to return that much data.
+            fcntl(p.stdin.fileno(), F_SETPIPE_SZ, 128 * 1024)
             p.stdin.write(expected)
             p.stdin.flush()
             actual = bytearray()
