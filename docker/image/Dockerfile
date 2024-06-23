@@ -10,7 +10,7 @@ FROM ${base} AS base
 FROM base AS boost
 ARG boost_version
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -L https://dl.bintray.com/boostorg/release/"$(echo ${boost_version} | tr _ .)"/source/boost_${boost_version}.tar.bz2 | tar -C /usr/src -xjv
+RUN curl -L https://archives.boost.io/release/$(echo ${boost_version} | tr _ .)/source/boost_1_73_0.tar.bz2 | tar -C /usr/src -xjv
 WORKDIR /usr/src/boost_${boost_version}
 COPY CXXABI_LDBL.patch .
 RUN patch -p1 -d libs/python <CXXABI_LDBL.patch
