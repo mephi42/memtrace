@@ -1,0 +1,4 @@
+using gcc : x86_64 : x86_64-unknown-linux-gnu-g++ ;
+using python : 3.6 : /usr/x86_64-unknown-linux-gnu/cp36-cp36m/bin/python3 : /usr/x86_64-unknown-linux-gnu/cp36-cp36m/include/python3.6m : /usr/x86_64-unknown-linux-gnu/cp36-cp36m/lib ;
+using python : 3.7 : /usr/x86_64-unknown-linux-gnu/cp37-cp37m/bin/python3 : /usr/x86_64-unknown-linux-gnu/cp37-cp37m/include/python3.7m : /usr/x86_64-unknown-linux-gnu/cp37-cp37m/lib ;
+using python : 3.8 : /usr/x86_64-unknown-linux-gnu/cp38-cp38/bin/python3 : /usr/x86_64-unknown-linux-gnu/cp38-cp38/include/python3.8 : /usr/x86_64-unknown-linux-gnu/cp38-cp38/lib ;

@@ -1,0 +1,270 @@
+# https://github.com/benfogle/crossenv
+# https://github.com/rust-cross/manylinux-cross
+
+ARG boost_version=1_73_0
+ARG capstone_version=4.0.2
+ARG elfutils_version=0.188
+ARG zlib_ng_version=2.2.1
+
+# https://hub.docker.com/_/debian/tags?page=&page_size=&ordering=&name=bookworm
+FROM debian:bookworm-20240701-slim AS base
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive
+
+FROM base AS crosstool-ng-base
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        autoconf \
+        automake \
+        bison \
+        bzip2 \
+        ca-certificates \
+        curl \
+        file \
+        flex \
+        g++ \
+        gawk \
+        gcc \
+        git \
+        help2man \
+        libncurses-dev \
+        libstdc++-12-dev \
+        libtool-bin \
+        make \
+        patch \
+        texinfo \
+        unzip \
+        xz-utils
+RUN git clone \
+        --branch=crosstool-ng-1.26.0 \
+        --depth=1 \
+        https://github.com/crosstool-ng/crosstool-ng.git \
+        /usr/src/crosstool-ng
+WORKDIR /usr/src/crosstool-ng
+RUN ./bootstrap
+RUN ./configure
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+{%- for arch, triple in arches %}
+
+FROM crosstool-ng-base AS crosstool-ng-{{ arch }}
+WORKDIR /usr/src
+RUN mkdir crosstool-ng-{{ arch }}
+WORKDIR crosstool-ng-{{ arch }}
+COPY crosstool-ng/common .
+COPY crosstool-ng/{{ arch }} .
+RUN cat common.config arch.config >.config
+RUN ct-ng olddefconfig
+ENV CT_ALLOW_BUILD_AS_ROOT_SURE=1
+RUN ct-ng source
+RUN ct-ng build || { err=$?; tail -n 500 build.log; exit $err; }
+ENV PATH=/usr/{{ triple }}/bin:$PATH
+# https://stackoverflow.com/questions/77895008
+RUN apt-get remove --yes libc6-dev
+{%- endfor %}
+
+{%- for _, name_tag, git_tag, _, _ in pythons %}
+
+FROM crosstool-ng-base AS {{ name_tag }}
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        libffi-dev \
+        libssl-dev \
+        zlib1g-dev
+RUN git clone \
+        --branch={{ git_tag }} \
+        --filter=tree:0 \
+        https://github.com/python/cpython.git \
+        /usr/src/{{ name_tag }}
+WORKDIR /usr/src/{{ name_tag }}
+{%- set git = "git -c user.name=mephi42 -c user.email=mephi42@gmail.com" %}
+# https://bugs.python.org/issue46513
+RUN {{ git }} cherry-pick 04772cd6f164
+{%- if name_tag == "cp36-cp36m" %}
+# https://github.com/python/cpython/issues/89863
+RUN {{ git }} cherry-pick 8766cb74e186 f0be4bbb9b3c
+{%- endif %}
+WORKDIR /tmp/{{ name_tag }}-build
+RUN /usr/src/{{ name_tag }}/configure --prefix=/opt/{{ name_tag }}
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+{%- endfor %}
+
+{%- for _, name_tag, _, configure_flags, _ in pythons %}
+{%- for arch, triple in arches %}
+
+FROM crosstool-ng-{{ arch }} AS {{ name_tag }}-{{ arch }}
+COPY --from={{ name_tag }} /usr/src/{{ name_tag }} /usr/src/{{ name_tag }}
+COPY --from={{ name_tag }} /opt/{{ name_tag }} /opt/{{ name_tag }}
+ENV PATH=/opt/{{ name_tag }}/bin:$PATH
+WORKDIR /usr/src/{{ name_tag }}
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host={{ triple }} \
+        --prefix=/usr/{{ triple }}/{{ name_tag }} \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no{% for configure_flag in configure_flags %} \
+        {{ configure_flag }}{%- endfor %}
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+{%- endfor %}
+{%- endfor %}
+
+FROM base AS boost-base
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        ca-certificates \
+        bzip2 \
+        curl \
+        g++ \
+        patch
+ARG boost_version
+RUN curl -L https://archives.boost.io/release/$(echo ${boost_version} | tr _ .)/source/boost_${boost_version}.tar.bz2 | tar -C /usr/src -xjv
+RUN mv /usr/src/boost_${boost_version} /usr/src/boost
+WORKDIR /usr/src/boost
+RUN ./bootstrap.sh || { err=$?; tail -n 500 bootstrap.log; exit $err; }
+COPY boost/common .
+RUN patch -p1 -d libs/python <CXXABI_LDBL.patch
+
+{%- for arch, triple in arches %}
+
+FROM crosstool-ng-{{ arch }} AS boost-{{ arch }}
+COPY --from=boost-base /usr/src/boost /usr/src/boost
+{%- for _, name_tag, _, _, _ in pythons %}
+COPY --from={{ name_tag }}-{{ arch }} \
+     /usr/{{ triple }}/{{ name_tag }} \
+     /usr/{{ triple }}/{{ name_tag }}
+{%- endfor %}
+WORKDIR /usr/src/boost
+COPY boost/{{ arch }} .
+RUN ./b2 \
+        --prefix=/opt/boost-{{ arch }}/usr/{{ triple }}/{{ triple }}/sysroot/usr \
+        --with-python \
+        cxxflags=-fPIC \
+        link=static \
+        python={{ pythons|map(attribute=0)|join(",") }} \
+        runtime-link=shared \
+        threading=multi \
+        toolset=gcc-{{ arch }} \
+        variant=release \
+        install
+{%- endfor %}
+
+FROM crosstool-ng-base AS capstone-base
+ARG capstone_version
+RUN git clone \
+        --branch=${capstone_version} \
+        --depth=1 \
+        https://github.com/capstone-engine/capstone.git \
+        /usr/src/capstone
+
+{%- for arch, triple in arches %}
+
+FROM crosstool-ng-{{ arch }} AS capstone-{{ arch }}
+COPY --from=capstone-base /usr/src/capstone /usr/src/capstone
+WORKDIR /usr/src/capstone
+RUN make \
+        CAPSTONE_BUILD_CORE_ONLY=yes \
+        CAPSTONE_SHARED=no \
+        CAPSTONE_STATIC=yes \
+        CROSS={{ triple }}- \
+        DESTDIR=/opt/capstone-{{ arch }} \
+        PREFIX=/usr/{{ triple }}/{{ triple }}/sysroot/usr \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+{%- endfor %}
+
+FROM crosstool-ng-base AS zlib-ng-base
+ARG zlib_ng_version
+RUN git clone \
+        --branch=${zlib_ng_version} \
+        --depth=1 \
+        https://github.com/zlib-ng/zlib-ng.git \
+        /usr/src/zlib-ng
+WORKDIR /usr/src/zlib-ng
+COPY zlib-ng/common .
+RUN patch -p1 <hwcap-s390-vx.patch
+
+{%- for arch, triple in arches %}
+
+FROM crosstool-ng-{{ arch }} AS zlib-ng-{{ arch }}
+COPY --from=zlib-ng-base /usr/src/zlib-ng /usr/src/zlib-ng
+WORKDIR /usr/src/zlib-ng
+RUN CHOST={{ triple }} CFLAGS=-fPIC ./configure \
+        --prefix=/usr/{{ triple }}/{{ triple }}/sysroot/usr \
+        --static \
+        --zlib-compat
+RUN make \
+        DESTDIR=/opt/zlib-ng-{{ arch }} \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+{%- endfor %}
+
+FROM crosstool-ng-base AS elfutils-base
+ARG elfutils_version
+RUN curl https://sourceware.org/pub/elfutils/${elfutils_version}/elfutils-${elfutils_version}.tar.bz2 | tar -C /usr/src -xjv
+
+{%- for arch, triple in arches %}
+
+FROM crosstool-ng-{{ arch }} AS elfutils-{{ arch }}
+ARG elfutils_version
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        autopoint \
+        pkg-config
+COPY --from=zlib-ng-{{ arch }} /opt/zlib-ng-{{ arch }}/ /
+COPY --from=elfutils-base /usr/src/elfutils-${elfutils_version} /usr/src/elfutils
+WORKDIR /usr/src/elfutils
+RUN autoreconf -i
+RUN CFLAGS=-fPIC ./configure \
+        --disable-debuginfod \
+        --disable-libdebuginfod \
+        --host={{ triple }} \
+        --prefix=/usr/{{ triple }}/{{ triple }}/sysroot/usr
+RUN make \
+        DESTDIR=/opt/elfutils-{{ arch }} \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install V=1
+WORKDIR /opt/elfutils-{{ arch }}/usr/{{ triple }}/{{ triple }}/sysroot/usr/lib
+RUN rm *.so *.so.*
+{%- endfor %}
+
+FROM base
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        automake \
+        ccache \
+        cmake \
+        git \
+        make \
+        ninja-build \
+        patchelf \
+        quilt
+{%- for arch, triple in arches %}
+COPY --from=crosstool-ng-{{ arch }} \
+     /usr/{{ triple }} \
+     /usr/{{ triple }}
+ENV PATH=/usr/{{ triple }}/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-gcc
+{%- endfor %}
+ENV PATH=/usr/lib/ccache:$PATH
+{%- for _, name_tag, _, _, _ in pythons %}
+COPY --from={{ name_tag }} /opt/{{ name_tag }} /opt/{{ name_tag }}
+{%- endfor %}
+{%- for arch, triple in arches %}
+{%- for _, name_tag, _, _, _ in pythons %}
+COPY --from={{ name_tag }}-{{ arch }} \
+     /usr/{{ triple }}/{{ name_tag }} \
+     /usr/{{ triple }}/{{ name_tag }}
+{%- endfor %}
+{%- endfor %}
+{%- for arch, triple in arches %}
+COPY --from=boost-{{ arch }} /opt/boost-{{ arch }}/ /
+{%- endfor %}
+{%- for arch, triple in arches %}
+COPY --from=capstone-{{ arch }} /opt/capstone-{{ arch }}/ /
+{%- endfor %}
+{%- for arch, triple in arches %}
+COPY --from=zlib-ng-{{ arch }} /opt/zlib-ng-{{ arch }}/ /
+{%- endfor %}
+{%- for arch, triple in arches %}
+COPY --from=elfutils-{{ arch }} /opt/elfutils-{{ arch }}/ /
+{%- endfor %}

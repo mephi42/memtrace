@@ -1,93 +1,915 @@
-ARG base
-ARG capstone_version=4.0.1
+# https://github.com/benfogle/crossenv
+# https://github.com/rust-cross/manylinux-cross
+
 ARG boost_version=1_73_0
-ARG cmake_version=3.11.4
-ARG ninja_version=1.10.0
-ARG quilt_version=0.66
-ARG ccache_version=3.7.12
-FROM ${base} AS base
+ARG capstone_version=4.0.2
+ARG elfutils_version=0.188
+ARG zlib_ng_version=2.2.1
 
-FROM base AS boost
+# https://hub.docker.com/_/debian/tags?page=&page_size=&ordering=&name=bookworm
+FROM debian:bookworm-20240701-slim AS base
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive
+
+FROM base AS crosstool-ng-base
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        autoconf \
+        automake \
+        bison \
+        bzip2 \
+        ca-certificates \
+        curl \
+        file \
+        flex \
+        g++ \
+        gawk \
+        gcc \
+        git \
+        help2man \
+        libncurses-dev \
+        libstdc++-12-dev \
+        libtool-bin \
+        make \
+        patch \
+        texinfo \
+        unzip \
+        xz-utils
+RUN git clone \
+        --branch=crosstool-ng-1.26.0 \
+        --depth=1 \
+        https://github.com/crosstool-ng/crosstool-ng.git \
+        /usr/src/crosstool-ng
+WORKDIR /usr/src/crosstool-ng
+RUN ./bootstrap
+RUN ./configure
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-base AS crosstool-ng-aarch64
+WORKDIR /usr/src
+RUN mkdir crosstool-ng-aarch64
+WORKDIR crosstool-ng-aarch64
+COPY crosstool-ng/common .
+COPY crosstool-ng/aarch64 .
+RUN cat common.config arch.config >.config
+RUN ct-ng olddefconfig
+ENV CT_ALLOW_BUILD_AS_ROOT_SURE=1
+RUN ct-ng source
+RUN ct-ng build || { err=$?; tail -n 500 build.log; exit $err; }
+ENV PATH=/usr/aarch64-unknown-linux-gnu/bin:$PATH
+# https://stackoverflow.com/questions/77895008
+RUN apt-get remove --yes libc6-dev
+
+FROM crosstool-ng-base AS crosstool-ng-i686
+WORKDIR /usr/src
+RUN mkdir crosstool-ng-i686
+WORKDIR crosstool-ng-i686
+COPY crosstool-ng/common .
+COPY crosstool-ng/i686 .
+RUN cat common.config arch.config >.config
+RUN ct-ng olddefconfig
+ENV CT_ALLOW_BUILD_AS_ROOT_SURE=1
+RUN ct-ng source
+RUN ct-ng build || { err=$?; tail -n 500 build.log; exit $err; }
+ENV PATH=/usr/i686-unknown-linux-gnu/bin:$PATH
+# https://stackoverflow.com/questions/77895008
+RUN apt-get remove --yes libc6-dev
+
+FROM crosstool-ng-base AS crosstool-ng-ppc64le
+WORKDIR /usr/src
+RUN mkdir crosstool-ng-ppc64le
+WORKDIR crosstool-ng-ppc64le
+COPY crosstool-ng/common .
+COPY crosstool-ng/ppc64le .
+RUN cat common.config arch.config >.config
+RUN ct-ng olddefconfig
+ENV CT_ALLOW_BUILD_AS_ROOT_SURE=1
+RUN ct-ng source
+RUN ct-ng build || { err=$?; tail -n 500 build.log; exit $err; }
+ENV PATH=/usr/powerpc64le-unknown-linux-gnu/bin:$PATH
+# https://stackoverflow.com/questions/77895008
+RUN apt-get remove --yes libc6-dev
+
+FROM crosstool-ng-base AS crosstool-ng-s390x
+WORKDIR /usr/src
+RUN mkdir crosstool-ng-s390x
+WORKDIR crosstool-ng-s390x
+COPY crosstool-ng/common .
+COPY crosstool-ng/s390x .
+RUN cat common.config arch.config >.config
+RUN ct-ng olddefconfig
+ENV CT_ALLOW_BUILD_AS_ROOT_SURE=1
+RUN ct-ng source
+RUN ct-ng build || { err=$?; tail -n 500 build.log; exit $err; }
+ENV PATH=/usr/s390x-ibm-linux-gnu/bin:$PATH
+# https://stackoverflow.com/questions/77895008
+RUN apt-get remove --yes libc6-dev
+
+FROM crosstool-ng-base AS crosstool-ng-x86_64
+WORKDIR /usr/src
+RUN mkdir crosstool-ng-x86_64
+WORKDIR crosstool-ng-x86_64
+COPY crosstool-ng/common .
+COPY crosstool-ng/x86_64 .
+RUN cat common.config arch.config >.config
+RUN ct-ng olddefconfig
+ENV CT_ALLOW_BUILD_AS_ROOT_SURE=1
+RUN ct-ng source
+RUN ct-ng build || { err=$?; tail -n 500 build.log; exit $err; }
+ENV PATH=/usr/x86_64-unknown-linux-gnu/bin:$PATH
+# https://stackoverflow.com/questions/77895008
+RUN apt-get remove --yes libc6-dev
+
+FROM crosstool-ng-base AS cp36-cp36m
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        libffi-dev \
+        libssl-dev \
+        zlib1g-dev
+RUN git clone \
+        --branch=v3.6.15 \
+        --filter=tree:0 \
+        https://github.com/python/cpython.git \
+        /usr/src/cp36-cp36m
+WORKDIR /usr/src/cp36-cp36m
+# https://bugs.python.org/issue46513
+RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 04772cd6f164
+# https://github.com/python/cpython/issues/89863
+RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 8766cb74e186 f0be4bbb9b3c
+WORKDIR /tmp/cp36-cp36m-build
+RUN /usr/src/cp36-cp36m/configure --prefix=/opt/cp36-cp36m
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-base AS cp37-cp37m
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        libffi-dev \
+        libssl-dev \
+        zlib1g-dev
+RUN git clone \
+        --branch=v3.7.17 \
+        --filter=tree:0 \
+        https://github.com/python/cpython.git \
+        /usr/src/cp37-cp37m
+WORKDIR /usr/src/cp37-cp37m
+# https://bugs.python.org/issue46513
+RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 04772cd6f164
+WORKDIR /tmp/cp37-cp37m-build
+RUN /usr/src/cp37-cp37m/configure --prefix=/opt/cp37-cp37m
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-base AS cp38-cp38
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        libffi-dev \
+        libssl-dev \
+        zlib1g-dev
+RUN git clone \
+        --branch=v3.8.19 \
+        --filter=tree:0 \
+        https://github.com/python/cpython.git \
+        /usr/src/cp38-cp38
+WORKDIR /usr/src/cp38-cp38
+# https://bugs.python.org/issue46513
+RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 04772cd6f164
+WORKDIR /tmp/cp38-cp38-build
+RUN /usr/src/cp38-cp38/configure --prefix=/opt/cp38-cp38
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-aarch64 AS cp36-cp36m-aarch64
+COPY --from=cp36-cp36m /usr/src/cp36-cp36m /usr/src/cp36-cp36m
+COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
+ENV PATH=/opt/cp36-cp36m/bin:$PATH
+WORKDIR /usr/src/cp36-cp36m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=aarch64-unknown-linux-gnu \
+        --prefix=/usr/aarch64-unknown-linux-gnu/cp36-cp36m \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-i686 AS cp36-cp36m-i686
+COPY --from=cp36-cp36m /usr/src/cp36-cp36m /usr/src/cp36-cp36m
+COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
+ENV PATH=/opt/cp36-cp36m/bin:$PATH
+WORKDIR /usr/src/cp36-cp36m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=i686-unknown-linux-gnu \
+        --prefix=/usr/i686-unknown-linux-gnu/cp36-cp36m \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64le AS cp36-cp36m-ppc64le
+COPY --from=cp36-cp36m /usr/src/cp36-cp36m /usr/src/cp36-cp36m
+COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
+ENV PATH=/opt/cp36-cp36m/bin:$PATH
+WORKDIR /usr/src/cp36-cp36m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64le-unknown-linux-gnu \
+        --prefix=/usr/powerpc64le-unknown-linux-gnu/cp36-cp36m \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-s390x AS cp36-cp36m-s390x
+COPY --from=cp36-cp36m /usr/src/cp36-cp36m /usr/src/cp36-cp36m
+COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
+ENV PATH=/opt/cp36-cp36m/bin:$PATH
+WORKDIR /usr/src/cp36-cp36m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=s390x-ibm-linux-gnu \
+        --prefix=/usr/s390x-ibm-linux-gnu/cp36-cp36m \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-x86_64 AS cp36-cp36m-x86_64
+COPY --from=cp36-cp36m /usr/src/cp36-cp36m /usr/src/cp36-cp36m
+COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
+ENV PATH=/opt/cp36-cp36m/bin:$PATH
+WORKDIR /usr/src/cp36-cp36m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=x86_64-unknown-linux-gnu \
+        --prefix=/usr/x86_64-unknown-linux-gnu/cp36-cp36m \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-aarch64 AS cp37-cp37m-aarch64
+COPY --from=cp37-cp37m /usr/src/cp37-cp37m /usr/src/cp37-cp37m
+COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
+ENV PATH=/opt/cp37-cp37m/bin:$PATH
+WORKDIR /usr/src/cp37-cp37m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=aarch64-unknown-linux-gnu \
+        --prefix=/usr/aarch64-unknown-linux-gnu/cp37-cp37m \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-i686 AS cp37-cp37m-i686
+COPY --from=cp37-cp37m /usr/src/cp37-cp37m /usr/src/cp37-cp37m
+COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
+ENV PATH=/opt/cp37-cp37m/bin:$PATH
+WORKDIR /usr/src/cp37-cp37m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=i686-unknown-linux-gnu \
+        --prefix=/usr/i686-unknown-linux-gnu/cp37-cp37m \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64le AS cp37-cp37m-ppc64le
+COPY --from=cp37-cp37m /usr/src/cp37-cp37m /usr/src/cp37-cp37m
+COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
+ENV PATH=/opt/cp37-cp37m/bin:$PATH
+WORKDIR /usr/src/cp37-cp37m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64le-unknown-linux-gnu \
+        --prefix=/usr/powerpc64le-unknown-linux-gnu/cp37-cp37m \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-s390x AS cp37-cp37m-s390x
+COPY --from=cp37-cp37m /usr/src/cp37-cp37m /usr/src/cp37-cp37m
+COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
+ENV PATH=/opt/cp37-cp37m/bin:$PATH
+WORKDIR /usr/src/cp37-cp37m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=s390x-ibm-linux-gnu \
+        --prefix=/usr/s390x-ibm-linux-gnu/cp37-cp37m \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-x86_64 AS cp37-cp37m-x86_64
+COPY --from=cp37-cp37m /usr/src/cp37-cp37m /usr/src/cp37-cp37m
+COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
+ENV PATH=/opt/cp37-cp37m/bin:$PATH
+WORKDIR /usr/src/cp37-cp37m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=x86_64-unknown-linux-gnu \
+        --prefix=/usr/x86_64-unknown-linux-gnu/cp37-cp37m \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-aarch64 AS cp38-cp38-aarch64
+COPY --from=cp38-cp38 /usr/src/cp38-cp38 /usr/src/cp38-cp38
+COPY --from=cp38-cp38 /opt/cp38-cp38 /opt/cp38-cp38
+ENV PATH=/opt/cp38-cp38/bin:$PATH
+WORKDIR /usr/src/cp38-cp38
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=aarch64-unknown-linux-gnu \
+        --prefix=/usr/aarch64-unknown-linux-gnu/cp38-cp38 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-i686 AS cp38-cp38-i686
+COPY --from=cp38-cp38 /usr/src/cp38-cp38 /usr/src/cp38-cp38
+COPY --from=cp38-cp38 /opt/cp38-cp38 /opt/cp38-cp38
+ENV PATH=/opt/cp38-cp38/bin:$PATH
+WORKDIR /usr/src/cp38-cp38
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=i686-unknown-linux-gnu \
+        --prefix=/usr/i686-unknown-linux-gnu/cp38-cp38 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64le AS cp38-cp38-ppc64le
+COPY --from=cp38-cp38 /usr/src/cp38-cp38 /usr/src/cp38-cp38
+COPY --from=cp38-cp38 /opt/cp38-cp38 /opt/cp38-cp38
+ENV PATH=/opt/cp38-cp38/bin:$PATH
+WORKDIR /usr/src/cp38-cp38
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64le-unknown-linux-gnu \
+        --prefix=/usr/powerpc64le-unknown-linux-gnu/cp38-cp38 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-s390x AS cp38-cp38-s390x
+COPY --from=cp38-cp38 /usr/src/cp38-cp38 /usr/src/cp38-cp38
+COPY --from=cp38-cp38 /opt/cp38-cp38 /opt/cp38-cp38
+ENV PATH=/opt/cp38-cp38/bin:$PATH
+WORKDIR /usr/src/cp38-cp38
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=s390x-ibm-linux-gnu \
+        --prefix=/usr/s390x-ibm-linux-gnu/cp38-cp38 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-x86_64 AS cp38-cp38-x86_64
+COPY --from=cp38-cp38 /usr/src/cp38-cp38 /usr/src/cp38-cp38
+COPY --from=cp38-cp38 /opt/cp38-cp38 /opt/cp38-cp38
+ENV PATH=/opt/cp38-cp38/bin:$PATH
+WORKDIR /usr/src/cp38-cp38
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=x86_64-unknown-linux-gnu \
+        --prefix=/usr/x86_64-unknown-linux-gnu/cp38-cp38 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM base AS boost-base
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        ca-certificates \
+        bzip2 \
+        curl \
+        g++ \
+        patch
 ARG boost_version
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -L https://archives.boost.io/release/$(echo ${boost_version} | tr _ .)/source/boost_1_73_0.tar.bz2 | tar -C /usr/src -xjv
-WORKDIR /usr/src/boost_${boost_version}
-COPY CXXABI_LDBL.patch .
+RUN curl -L https://archives.boost.io/release/$(echo ${boost_version} | tr _ .)/source/boost_${boost_version}.tar.bz2 | tar -C /usr/src -xjv
+RUN mv /usr/src/boost_${boost_version} /usr/src/boost
+WORKDIR /usr/src/boost
+RUN ./bootstrap.sh || { err=$?; tail -n 500 bootstrap.log; exit $err; }
+COPY boost/common .
 RUN patch -p1 -d libs/python <CXXABI_LDBL.patch
-RUN ./bootstrap.sh
-COPY user-config.jam tools/build/src/
-RUN ./b2 cxxflags=-fPIC --with-python python=3.6,3.7,3.8 variant=release link=static threading=multi runtime-link=shared --prefix=/opt/boost/usr install
 
-FROM base AS capstone
+FROM crosstool-ng-aarch64 AS boost-aarch64
+COPY --from=boost-base /usr/src/boost /usr/src/boost
+COPY --from=cp36-cp36m-aarch64 \
+     /usr/aarch64-unknown-linux-gnu/cp36-cp36m \
+     /usr/aarch64-unknown-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-aarch64 \
+     /usr/aarch64-unknown-linux-gnu/cp37-cp37m \
+     /usr/aarch64-unknown-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-aarch64 \
+     /usr/aarch64-unknown-linux-gnu/cp38-cp38 \
+     /usr/aarch64-unknown-linux-gnu/cp38-cp38
+WORKDIR /usr/src/boost
+COPY boost/aarch64 .
+RUN ./b2 \
+        --prefix=/opt/boost-aarch64/usr/aarch64-unknown-linux-gnu/aarch64-unknown-linux-gnu/sysroot/usr \
+        --with-python \
+        cxxflags=-fPIC \
+        link=static \
+        python=3.6,3.7,3.8 \
+        runtime-link=shared \
+        threading=multi \
+        toolset=gcc-aarch64 \
+        variant=release \
+        install
+
+FROM crosstool-ng-i686 AS boost-i686
+COPY --from=boost-base /usr/src/boost /usr/src/boost
+COPY --from=cp36-cp36m-i686 \
+     /usr/i686-unknown-linux-gnu/cp36-cp36m \
+     /usr/i686-unknown-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-i686 \
+     /usr/i686-unknown-linux-gnu/cp37-cp37m \
+     /usr/i686-unknown-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-i686 \
+     /usr/i686-unknown-linux-gnu/cp38-cp38 \
+     /usr/i686-unknown-linux-gnu/cp38-cp38
+WORKDIR /usr/src/boost
+COPY boost/i686 .
+RUN ./b2 \
+        --prefix=/opt/boost-i686/usr/i686-unknown-linux-gnu/i686-unknown-linux-gnu/sysroot/usr \
+        --with-python \
+        cxxflags=-fPIC \
+        link=static \
+        python=3.6,3.7,3.8 \
+        runtime-link=shared \
+        threading=multi \
+        toolset=gcc-i686 \
+        variant=release \
+        install
+
+FROM crosstool-ng-ppc64le AS boost-ppc64le
+COPY --from=boost-base /usr/src/boost /usr/src/boost
+COPY --from=cp36-cp36m-ppc64le \
+     /usr/powerpc64le-unknown-linux-gnu/cp36-cp36m \
+     /usr/powerpc64le-unknown-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-ppc64le \
+     /usr/powerpc64le-unknown-linux-gnu/cp37-cp37m \
+     /usr/powerpc64le-unknown-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-ppc64le \
+     /usr/powerpc64le-unknown-linux-gnu/cp38-cp38 \
+     /usr/powerpc64le-unknown-linux-gnu/cp38-cp38
+WORKDIR /usr/src/boost
+COPY boost/ppc64le .
+RUN ./b2 \
+        --prefix=/opt/boost-ppc64le/usr/powerpc64le-unknown-linux-gnu/powerpc64le-unknown-linux-gnu/sysroot/usr \
+        --with-python \
+        cxxflags=-fPIC \
+        link=static \
+        python=3.6,3.7,3.8 \
+        runtime-link=shared \
+        threading=multi \
+        toolset=gcc-ppc64le \
+        variant=release \
+        install
+
+FROM crosstool-ng-s390x AS boost-s390x
+COPY --from=boost-base /usr/src/boost /usr/src/boost
+COPY --from=cp36-cp36m-s390x \
+     /usr/s390x-ibm-linux-gnu/cp36-cp36m \
+     /usr/s390x-ibm-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-s390x \
+     /usr/s390x-ibm-linux-gnu/cp37-cp37m \
+     /usr/s390x-ibm-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-s390x \
+     /usr/s390x-ibm-linux-gnu/cp38-cp38 \
+     /usr/s390x-ibm-linux-gnu/cp38-cp38
+WORKDIR /usr/src/boost
+COPY boost/s390x .
+RUN ./b2 \
+        --prefix=/opt/boost-s390x/usr/s390x-ibm-linux-gnu/s390x-ibm-linux-gnu/sysroot/usr \
+        --with-python \
+        cxxflags=-fPIC \
+        link=static \
+        python=3.6,3.7,3.8 \
+        runtime-link=shared \
+        threading=multi \
+        toolset=gcc-s390x \
+        variant=release \
+        install
+
+FROM crosstool-ng-x86_64 AS boost-x86_64
+COPY --from=boost-base /usr/src/boost /usr/src/boost
+COPY --from=cp36-cp36m-x86_64 \
+     /usr/x86_64-unknown-linux-gnu/cp36-cp36m \
+     /usr/x86_64-unknown-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-x86_64 \
+     /usr/x86_64-unknown-linux-gnu/cp37-cp37m \
+     /usr/x86_64-unknown-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-x86_64 \
+     /usr/x86_64-unknown-linux-gnu/cp38-cp38 \
+     /usr/x86_64-unknown-linux-gnu/cp38-cp38
+WORKDIR /usr/src/boost
+COPY boost/x86_64 .
+RUN ./b2 \
+        --prefix=/opt/boost-x86_64/usr/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr \
+        --with-python \
+        cxxflags=-fPIC \
+        link=static \
+        python=3.6,3.7,3.8 \
+        runtime-link=shared \
+        threading=multi \
+        toolset=gcc-x86_64 \
+        variant=release \
+        install
+
+FROM crosstool-ng-base AS capstone-base
 ARG capstone_version
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -L https://github.com/aquynh/capstone/archive/${capstone_version}.tar.gz | tar -C /usr/src -xzv
-WORKDIR /usr/src/capstone-${capstone_version}
-ENV CAPSTONE_STATIC=yes
-ENV CAPSTONE_SHARED=no
-RUN make
-RUN make install DESTDIR=/opt/capstone
+RUN git clone \
+        --branch=${capstone_version} \
+        --depth=1 \
+        https://github.com/capstone-engine/capstone.git \
+        /usr/src/capstone
 
-FROM base as cmake
-ARG cmake_version
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -L https://github.com/Kitware/CMake/archive/v${cmake_version}.tar.gz | tar -C /usr/src -xvz
-WORKDIR /usr/src/CMake-${cmake_version}
-RUN ./configure --prefix=/usr --parallel="$(getconf _NPROCESSORS_ONLN)"
-RUN make -j"$(getconf _NPROCESSORS_ONLN)"
-RUN make install DESTDIR=/opt/cmake
+FROM crosstool-ng-aarch64 AS capstone-aarch64
+COPY --from=capstone-base /usr/src/capstone /usr/src/capstone
+WORKDIR /usr/src/capstone
+RUN make \
+        CAPSTONE_BUILD_CORE_ONLY=yes \
+        CAPSTONE_SHARED=no \
+        CAPSTONE_STATIC=yes \
+        CROSS=aarch64-unknown-linux-gnu- \
+        DESTDIR=/opt/capstone-aarch64 \
+        PREFIX=/usr/aarch64-unknown-linux-gnu/aarch64-unknown-linux-gnu/sysroot/usr \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
 
-FROM base as ninja
-ARG ninja_version
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -L https://github.com/ninja-build/ninja/archive/v${ninja_version}.tar.gz | tar -C /usr/src -xvz
-WORKDIR /usr/src/ninja-${ninja_version}
-RUN ./configure.py --bootstrap
-RUN mkdir -p /opt/ninja/usr/bin
-RUN cp ninja /opt/ninja/usr/bin/
+FROM crosstool-ng-i686 AS capstone-i686
+COPY --from=capstone-base /usr/src/capstone /usr/src/capstone
+WORKDIR /usr/src/capstone
+RUN make \
+        CAPSTONE_BUILD_CORE_ONLY=yes \
+        CAPSTONE_SHARED=no \
+        CAPSTONE_STATIC=yes \
+        CROSS=i686-unknown-linux-gnu- \
+        DESTDIR=/opt/capstone-i686 \
+        PREFIX=/usr/i686-unknown-linux-gnu/i686-unknown-linux-gnu/sysroot/usr \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
 
-FROM base as quilt
-ARG quilt_version
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -L http://download.savannah.gnu.org/releases/quilt/quilt-${quilt_version}.tar.gz | tar -C /usr/src -xvz
-WORKDIR /usr/src/quilt-${quilt_version}
-# quilt's build system does not support DESTDIR
-RUN ./configure --prefix=/opt/quilt
-RUN make -j"$(getconf _NPROCESSORS_ONLN)"
-RUN make install
+FROM crosstool-ng-ppc64le AS capstone-ppc64le
+COPY --from=capstone-base /usr/src/capstone /usr/src/capstone
+WORKDIR /usr/src/capstone
+RUN make \
+        CAPSTONE_BUILD_CORE_ONLY=yes \
+        CAPSTONE_SHARED=no \
+        CAPSTONE_STATIC=yes \
+        CROSS=powerpc64le-unknown-linux-gnu- \
+        DESTDIR=/opt/capstone-ppc64le \
+        PREFIX=/usr/powerpc64le-unknown-linux-gnu/powerpc64le-unknown-linux-gnu/sysroot/usr \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
 
-FROM base as ccache
-ARG ccache_version
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -L https://github.com/ccache/ccache/releases/download/v${ccache_version}/ccache-${ccache_version}.tar.xz | tar -C /usr/src -xvJ
-WORKDIR /usr/src/ccache-${ccache_version}
-RUN ./configure --prefix=/opt/ccache
-RUN make -j"$(getconf _NPROCESSORS_ONLN)"
-RUN make install
+FROM crosstool-ng-s390x AS capstone-s390x
+COPY --from=capstone-base /usr/src/capstone /usr/src/capstone
+WORKDIR /usr/src/capstone
+RUN make \
+        CAPSTONE_BUILD_CORE_ONLY=yes \
+        CAPSTONE_SHARED=no \
+        CAPSTONE_STATIC=yes \
+        CROSS=s390x-ibm-linux-gnu- \
+        DESTDIR=/opt/capstone-s390x \
+        PREFIX=/usr/s390x-ibm-linux-gnu/s390x-ibm-linux-gnu/sysroot/usr \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
+FROM crosstool-ng-x86_64 AS capstone-x86_64
+COPY --from=capstone-base /usr/src/capstone /usr/src/capstone
+WORKDIR /usr/src/capstone
+RUN make \
+        CAPSTONE_BUILD_CORE_ONLY=yes \
+        CAPSTONE_SHARED=no \
+        CAPSTONE_STATIC=yes \
+        CROSS=x86_64-unknown-linux-gnu- \
+        DESTDIR=/opt/capstone-x86_64 \
+        PREFIX=/usr/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
+FROM crosstool-ng-base AS zlib-ng-base
+ARG zlib_ng_version
+RUN git clone \
+        --branch=${zlib_ng_version} \
+        --depth=1 \
+        https://github.com/zlib-ng/zlib-ng.git \
+        /usr/src/zlib-ng
+WORKDIR /usr/src/zlib-ng
+COPY zlib-ng/common .
+RUN patch -p1 <hwcap-s390-vx.patch
+
+FROM crosstool-ng-aarch64 AS zlib-ng-aarch64
+COPY --from=zlib-ng-base /usr/src/zlib-ng /usr/src/zlib-ng
+WORKDIR /usr/src/zlib-ng
+RUN CHOST=aarch64-unknown-linux-gnu CFLAGS=-fPIC ./configure \
+        --prefix=/usr/aarch64-unknown-linux-gnu/aarch64-unknown-linux-gnu/sysroot/usr \
+        --static \
+        --zlib-compat
+RUN make \
+        DESTDIR=/opt/zlib-ng-aarch64 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
+FROM crosstool-ng-i686 AS zlib-ng-i686
+COPY --from=zlib-ng-base /usr/src/zlib-ng /usr/src/zlib-ng
+WORKDIR /usr/src/zlib-ng
+RUN CHOST=i686-unknown-linux-gnu CFLAGS=-fPIC ./configure \
+        --prefix=/usr/i686-unknown-linux-gnu/i686-unknown-linux-gnu/sysroot/usr \
+        --static \
+        --zlib-compat
+RUN make \
+        DESTDIR=/opt/zlib-ng-i686 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
+FROM crosstool-ng-ppc64le AS zlib-ng-ppc64le
+COPY --from=zlib-ng-base /usr/src/zlib-ng /usr/src/zlib-ng
+WORKDIR /usr/src/zlib-ng
+RUN CHOST=powerpc64le-unknown-linux-gnu CFLAGS=-fPIC ./configure \
+        --prefix=/usr/powerpc64le-unknown-linux-gnu/powerpc64le-unknown-linux-gnu/sysroot/usr \
+        --static \
+        --zlib-compat
+RUN make \
+        DESTDIR=/opt/zlib-ng-ppc64le \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
+FROM crosstool-ng-s390x AS zlib-ng-s390x
+COPY --from=zlib-ng-base /usr/src/zlib-ng /usr/src/zlib-ng
+WORKDIR /usr/src/zlib-ng
+RUN CHOST=s390x-ibm-linux-gnu CFLAGS=-fPIC ./configure \
+        --prefix=/usr/s390x-ibm-linux-gnu/s390x-ibm-linux-gnu/sysroot/usr \
+        --static \
+        --zlib-compat
+RUN make \
+        DESTDIR=/opt/zlib-ng-s390x \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
+FROM crosstool-ng-x86_64 AS zlib-ng-x86_64
+COPY --from=zlib-ng-base /usr/src/zlib-ng /usr/src/zlib-ng
+WORKDIR /usr/src/zlib-ng
+RUN CHOST=x86_64-unknown-linux-gnu CFLAGS=-fPIC ./configure \
+        --prefix=/usr/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr \
+        --static \
+        --zlib-compat
+RUN make \
+        DESTDIR=/opt/zlib-ng-x86_64 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
+FROM crosstool-ng-base AS elfutils-base
+ARG elfutils_version
+RUN curl https://sourceware.org/pub/elfutils/${elfutils_version}/elfutils-${elfutils_version}.tar.bz2 | tar -C /usr/src -xjv
+
+FROM crosstool-ng-aarch64 AS elfutils-aarch64
+ARG elfutils_version
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        autopoint \
+        pkg-config
+COPY --from=zlib-ng-aarch64 /opt/zlib-ng-aarch64/ /
+COPY --from=elfutils-base /usr/src/elfutils-${elfutils_version} /usr/src/elfutils
+WORKDIR /usr/src/elfutils
+RUN autoreconf -i
+RUN CFLAGS=-fPIC ./configure \
+        --disable-debuginfod \
+        --disable-libdebuginfod \
+        --host=aarch64-unknown-linux-gnu \
+        --prefix=/usr/aarch64-unknown-linux-gnu/aarch64-unknown-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/elfutils-aarch64 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install V=1
+WORKDIR /opt/elfutils-aarch64/usr/aarch64-unknown-linux-gnu/aarch64-unknown-linux-gnu/sysroot/usr/lib
+RUN rm *.so *.so.*
+
+FROM crosstool-ng-i686 AS elfutils-i686
+ARG elfutils_version
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        autopoint \
+        pkg-config
+COPY --from=zlib-ng-i686 /opt/zlib-ng-i686/ /
+COPY --from=elfutils-base /usr/src/elfutils-${elfutils_version} /usr/src/elfutils
+WORKDIR /usr/src/elfutils
+RUN autoreconf -i
+RUN CFLAGS=-fPIC ./configure \
+        --disable-debuginfod \
+        --disable-libdebuginfod \
+        --host=i686-unknown-linux-gnu \
+        --prefix=/usr/i686-unknown-linux-gnu/i686-unknown-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/elfutils-i686 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install V=1
+WORKDIR /opt/elfutils-i686/usr/i686-unknown-linux-gnu/i686-unknown-linux-gnu/sysroot/usr/lib
+RUN rm *.so *.so.*
+
+FROM crosstool-ng-ppc64le AS elfutils-ppc64le
+ARG elfutils_version
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        autopoint \
+        pkg-config
+COPY --from=zlib-ng-ppc64le /opt/zlib-ng-ppc64le/ /
+COPY --from=elfutils-base /usr/src/elfutils-${elfutils_version} /usr/src/elfutils
+WORKDIR /usr/src/elfutils
+RUN autoreconf -i
+RUN CFLAGS=-fPIC ./configure \
+        --disable-debuginfod \
+        --disable-libdebuginfod \
+        --host=powerpc64le-unknown-linux-gnu \
+        --prefix=/usr/powerpc64le-unknown-linux-gnu/powerpc64le-unknown-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/elfutils-ppc64le \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install V=1
+WORKDIR /opt/elfutils-ppc64le/usr/powerpc64le-unknown-linux-gnu/powerpc64le-unknown-linux-gnu/sysroot/usr/lib
+RUN rm *.so *.so.*
+
+FROM crosstool-ng-s390x AS elfutils-s390x
+ARG elfutils_version
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        autopoint \
+        pkg-config
+COPY --from=zlib-ng-s390x /opt/zlib-ng-s390x/ /
+COPY --from=elfutils-base /usr/src/elfutils-${elfutils_version} /usr/src/elfutils
+WORKDIR /usr/src/elfutils
+RUN autoreconf -i
+RUN CFLAGS=-fPIC ./configure \
+        --disable-debuginfod \
+        --disable-libdebuginfod \
+        --host=s390x-ibm-linux-gnu \
+        --prefix=/usr/s390x-ibm-linux-gnu/s390x-ibm-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/elfutils-s390x \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install V=1
+WORKDIR /opt/elfutils-s390x/usr/s390x-ibm-linux-gnu/s390x-ibm-linux-gnu/sysroot/usr/lib
+RUN rm *.so *.so.*
+
+FROM crosstool-ng-x86_64 AS elfutils-x86_64
+ARG elfutils_version
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        autopoint \
+        pkg-config
+COPY --from=zlib-ng-x86_64 /opt/zlib-ng-x86_64/ /
+COPY --from=elfutils-base /usr/src/elfutils-${elfutils_version} /usr/src/elfutils
+WORKDIR /usr/src/elfutils
+RUN autoreconf -i
+RUN CFLAGS=-fPIC ./configure \
+        --disable-debuginfod \
+        --disable-libdebuginfod \
+        --host=x86_64-unknown-linux-gnu \
+        --prefix=/usr/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/elfutils-x86_64 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install V=1
+WORKDIR /opt/elfutils-x86_64/usr/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr/lib
+RUN rm *.so *.so.*
 
 FROM base
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN yum install -y \
-    bison \
-    elfutils \
-    flex \
-    gawk \
-    gettext-devel \
-    libffi-devel \
-    openssl-devel \
-    $([ "$(uname -m)" != "x86_64" ] || echo glibc-devel.i686 libgcc.i686)
-RUN yum remove -y cmake cmake28
-# https://stackoverflow.com/a/35163779
-RUN echo /usr/share/aclocal >>/usr/local/share/aclocal/dirlist
-COPY --from=boost /opt/boost/ /
-COPY --from=capstone /opt/capstone/ /
-COPY --from=cmake /opt/cmake/ /
-COPY --from=ninja /opt/ninja/ /
-COPY --from=quilt /opt/quilt/ /opt/quilt/
-RUN ln -s /opt/quilt/bin/quilt /usr/bin/quilt
-COPY --from=ccache /opt/ccache/ /opt/ccache/
-RUN ln -s ccache /opt/ccache/bin/c++
-RUN ln -s ccache /opt/ccache/bin/cc
-RUN ln -s ccache /opt/ccache/bin/gcc
-RUN ln -s ccache /opt/ccache/bin/g++
-ENV PATH=/opt/ccache/bin:$PATH
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        automake \
+        ccache \
+        cmake \
+        git \
+        make \
+        ninja-build \
+        patchelf \
+        quilt
+COPY --from=crosstool-ng-aarch64 \
+     /usr/aarch64-unknown-linux-gnu \
+     /usr/aarch64-unknown-linux-gnu
+ENV PATH=/usr/aarch64-unknown-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-gcc
+COPY --from=crosstool-ng-i686 \
+     /usr/i686-unknown-linux-gnu \
+     /usr/i686-unknown-linux-gnu
+ENV PATH=/usr/i686-unknown-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-gcc
+COPY --from=crosstool-ng-ppc64le \
+     /usr/powerpc64le-unknown-linux-gnu \
+     /usr/powerpc64le-unknown-linux-gnu
+ENV PATH=/usr/powerpc64le-unknown-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64le-unknown-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64le-unknown-linux-gnu-gcc
+COPY --from=crosstool-ng-s390x \
+     /usr/s390x-ibm-linux-gnu \
+     /usr/s390x-ibm-linux-gnu
+ENV PATH=/usr/s390x-ibm-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/s390x-ibm-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/s390x-ibm-linux-gnu-gcc
+COPY --from=crosstool-ng-x86_64 \
+     /usr/x86_64-unknown-linux-gnu \
+     /usr/x86_64-unknown-linux-gnu
+ENV PATH=/usr/x86_64-unknown-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/x86_64-unknown-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/x86_64-unknown-linux-gnu-gcc
+ENV PATH=/usr/lib/ccache:$PATH
+COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
+COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
+COPY --from=cp38-cp38 /opt/cp38-cp38 /opt/cp38-cp38
+COPY --from=cp36-cp36m-aarch64 \
+     /usr/aarch64-unknown-linux-gnu/cp36-cp36m \
+     /usr/aarch64-unknown-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-aarch64 \
+     /usr/aarch64-unknown-linux-gnu/cp37-cp37m \
+     /usr/aarch64-unknown-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-aarch64 \
+     /usr/aarch64-unknown-linux-gnu/cp38-cp38 \
+     /usr/aarch64-unknown-linux-gnu/cp38-cp38
+COPY --from=cp36-cp36m-i686 \
+     /usr/i686-unknown-linux-gnu/cp36-cp36m \
+     /usr/i686-unknown-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-i686 \
+     /usr/i686-unknown-linux-gnu/cp37-cp37m \
+     /usr/i686-unknown-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-i686 \
+     /usr/i686-unknown-linux-gnu/cp38-cp38 \
+     /usr/i686-unknown-linux-gnu/cp38-cp38
+COPY --from=cp36-cp36m-ppc64le \
+     /usr/powerpc64le-unknown-linux-gnu/cp36-cp36m \
+     /usr/powerpc64le-unknown-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-ppc64le \
+     /usr/powerpc64le-unknown-linux-gnu/cp37-cp37m \
+     /usr/powerpc64le-unknown-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-ppc64le \
+     /usr/powerpc64le-unknown-linux-gnu/cp38-cp38 \
+     /usr/powerpc64le-unknown-linux-gnu/cp38-cp38
+COPY --from=cp36-cp36m-s390x \
+     /usr/s390x-ibm-linux-gnu/cp36-cp36m \
+     /usr/s390x-ibm-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-s390x \
+     /usr/s390x-ibm-linux-gnu/cp37-cp37m \
+     /usr/s390x-ibm-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-s390x \
+     /usr/s390x-ibm-linux-gnu/cp38-cp38 \
+     /usr/s390x-ibm-linux-gnu/cp38-cp38
+COPY --from=cp36-cp36m-x86_64 \
+     /usr/x86_64-unknown-linux-gnu/cp36-cp36m \
+     /usr/x86_64-unknown-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-x86_64 \
+     /usr/x86_64-unknown-linux-gnu/cp37-cp37m \
+     /usr/x86_64-unknown-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-x86_64 \
+     /usr/x86_64-unknown-linux-gnu/cp38-cp38 \
+     /usr/x86_64-unknown-linux-gnu/cp38-cp38
+COPY --from=boost-aarch64 /opt/boost-aarch64/ /
+COPY --from=boost-i686 /opt/boost-i686/ /
+COPY --from=boost-ppc64le /opt/boost-ppc64le/ /
+COPY --from=boost-s390x /opt/boost-s390x/ /
+COPY --from=boost-x86_64 /opt/boost-x86_64/ /
+COPY --from=capstone-aarch64 /opt/capstone-aarch64/ /
+COPY --from=capstone-i686 /opt/capstone-i686/ /
+COPY --from=capstone-ppc64le /opt/capstone-ppc64le/ /
+COPY --from=capstone-s390x /opt/capstone-s390x/ /
+COPY --from=capstone-x86_64 /opt/capstone-x86_64/ /
+COPY --from=zlib-ng-aarch64 /opt/zlib-ng-aarch64/ /
+COPY --from=zlib-ng-i686 /opt/zlib-ng-i686/ /
+COPY --from=zlib-ng-ppc64le /opt/zlib-ng-ppc64le/ /
+COPY --from=zlib-ng-s390x /opt/zlib-ng-s390x/ /
+COPY --from=zlib-ng-x86_64 /opt/zlib-ng-x86_64/ /
+COPY --from=elfutils-aarch64 /opt/elfutils-aarch64/ /
+COPY --from=elfutils-i686 /opt/elfutils-i686/ /
+COPY --from=elfutils-ppc64le /opt/elfutils-ppc64le/ /
+COPY --from=elfutils-s390x /opt/elfutils-s390x/ /
+COPY --from=elfutils-x86_64 /opt/elfutils-x86_64/ /

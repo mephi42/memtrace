@@ -1,0 +1,24 @@
+diff --git a/arch/s390/s390_features.c b/arch/s390/s390_features.c
+--- a/arch/s390/s390_features.c
++++ b/arch/s390/s390_features.c
+@@ -6,7 +6,7 @@
+ #endif
+ 
+ #ifndef HWCAP_S390_VXRS
+-#define HWCAP_S390_VXRS HWCAP_S390_VX
++#define HWCAP_S390_VXRS (1 << 11)
+ #endif
+ 
+ void Z_INTERNAL s390_check_features(struct s390_cpu_features *features) {
+diff --git a/cmake/detect-intrinsics.cmake b/cmake/detect-intrinsics.cmake
+--- a/cmake/detect-intrinsics.cmake
++++ b/cmake/detect-intrinsics.cmake
+@@ -433,7 +433,7 @@ macro(check_s390_intrinsics)
+     check_c_source_compiles(
+         "#include <sys/auxv.h>
+         #ifndef HWCAP_S390_VXRS
+-        #define HWCAP_S390_VXRS HWCAP_S390_VX
++        #define HWCAP_S390_VXRS (1 << 11)
+         #endif
+         int main() {
+             return (getauxval(AT_HWCAP) & HWCAP_S390_VXRS);
