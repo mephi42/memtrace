@@ -28,7 +28,6 @@ target_include_directories(
     PRIVATE ${elfutils_install}/include
 )
 target_link_directories(_memtrace PRIVATE ${elfutils_install}/lib)
-target_link_libraries(_memtrace ${Boost_LIBRARIES} dw)
-target_link_libraries(_memtrace capstone)
+target_link_libraries(_memtrace ${Boost_LIBRARIES} capstone dw elf z)
 python_extension_module(_memtrace)
 install(TARGETS _memtrace LIBRARY DESTINATION memtrace)

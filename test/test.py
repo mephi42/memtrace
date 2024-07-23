@@ -97,14 +97,14 @@ class CommonTest(unittest.TestCase):
     def _compile(cls) -> None:
         path = os.path.join(cls.workdir.name, cls.get_target())
         args = [
-            'cc',
+            os.environ.get('CC', 'cc'),
             '-o', path,
             *cls.get_cflags(),
             f'{cls.get_target()}{cls.get_source_ext()}',
         ]
         sys.stderr.write('{}\n'.format(' '.join(args)))
         subprocess.check_call(args, cwd=cls.basedir)
-        args = ['objdump', '-x', path]
+        args = [os.environ.get('OBJDUMP', 'objdump'), '-x', path]
         sys.stderr.write('{}\n'.format(' '.join(args)))
         subprocess.check_call(args, cwd=cls.basedir)
 
