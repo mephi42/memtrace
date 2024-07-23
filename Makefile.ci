@@ -8,11 +8,6 @@ basedir=$(CURDIR)
 uname_m=$(shell uname -m)
 uname=$(shell uname -s)-$(shell uname -m)
 build=$(basedir)/build/$(uname)
-elfutils_src=$(basedir)/elfutils
-elfutils_build=$(build)/elfutils
-elfutils_install=$(elfutils_build)/install
-libdw_a=$(elfutils_install)/lib/libdw.a
-elfutils_source_files=$(call ls_files,$(elfutils_src))
 valgrind_src=$(basedir)/valgrind
 valgrind_build=$(build)/valgrind
 valgrind_install=$(valgrind_build)/install
@@ -24,24 +19,7 @@ valgrind_source_files=\
 valgrind_CFLAGS_Release=-g0
 
 .PHONY: all
-all: $(libdw_a) $(valgrind)
-
-$(libdw_a): $(elfutils_build)/Makefile $(elfutils_source_files)
-	cd $(elfutils_build) && $(MAKE) install
-
-$(elfutils_build)/Makefile: $(elfutils_src)/configure
-	mkdir -p $(elfutils_build) && \
-		cd $(elfutils_build) && \
-		CFLAGS=-fPIC $(elfutils_src)/configure \
-			--disable-debuginfod \
-			--disable-libdebuginfod \
-			--enable-maintainer-mode \
-			--prefix=$(elfutils_install)
-
-$(elfutils_src)/configure: \
-		$(elfutils_src)/configure.ac \
-		$(elfutils_src)/Makefile.am
-	cd $(elfutils_src) && autoreconf -i
+all: $(valgrind)
 
 $(valgrind): $(valgrind_build)/Makefile $(valgrind_source_files)
 	cd $(valgrind_build) && $(MAKE) install
@@ -51,9 +29,10 @@ $(valgrind_build)/Makefile: \
 		$(valgrind_tracer_src)/Makefile.in
 	mkdir -p $(valgrind_build) && \
 		cd $(valgrind_build) && \
-		CFLAGS=$(valgrind_CFLAGS_$(BUILD_TYPE)) $(valgrind_src)/configure \
+		CFLAGS=$(valgrind_CFLAGS_$(BUILD_TYPE)) AR=x86_64-unknown-linux-gnu-ar $(valgrind_src)/configure \
 			--prefix=$(valgrind_install) \
-			--with-mpicc=false
+			--with-mpicc=false \
+			--host=x86_64-unknown-linux-gnu
 
 $(valgrind_src)/configure $(valgrind_tracer_src)/Makefile.in: \
 		$(valgrind_tracer_src)/Makefile.am \

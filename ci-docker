@@ -1,76 +1,15 @@
-#!/usr/bin/env python3
-import sys
-from argparse import ArgumentParser
-from configparser import ConfigParser
-import os
-import platform
-import subprocess
-
-
-def main():
-    parser = ArgumentParser()
-    parser.add_argument('--all', action='store_true')
-    parser.add_argument(
-        '--name',
-        action='append',
-        default=[],
-    )
-    parser.add_argument('--version', default='2024-06-23-90cb4ee7e')
-    args, rest = parser.parse_known_args()
-    if len(args.name) == 0:
-        args.name.append('manylinux2014_' + platform.machine())
-    basedir = os.path.dirname(os.path.realpath(__file__))
-    config = ConfigParser()
-    config.read(os.path.join(basedir, 'docker', 'images.ini'))
-    local_build = os.path.join(basedir, 'build.docker')
-    container_build = os.path.join(basedir, 'build')
-    os.makedirs(local_build, exist_ok=True)
-    # Create directory at container path as well, otherwise docker will create
-    # it for us with root:root ownership.
-    os.makedirs(container_build, exist_ok=True)
-    local_ccache = os.path.expanduser('~/.ccache')
-    container_ccache = '/var/cache/ccache'
-    os.makedirs(local_ccache, exist_ok=True)
-    local_pip_cache = os.path.expanduser('~/.cache/pip')
-    container_pip_cache = '/var/cache/pip'
-    os.makedirs(local_pip_cache, exist_ok=True)
-    local_skbuild = os.path.join(basedir, '_skbuild.docker')
-    container_skbuild = os.path.join(basedir, '_skbuild')
-    os.makedirs(local_skbuild, exist_ok=True)
-    os.makedirs(container_skbuild, exist_ok=True)
-    for name in config.sections():
-        if not args.all and name not in args.name:
-            continue
-        docker_run_args = [
-            'docker', 'run',
-            f'--env=CCACHE_DIR={container_ccache}',
-            f'--env=PIP_CACHE_DIR={container_pip_cache}',
-            '--interactive',
-            '--rm',
-            *(('--tty',) if os.isatty(sys.stdin.fileno()) else ()),
-            f'--user={os.getuid()}:{os.getgid()}',
-            f'--volume={basedir}:{basedir}:z',
-            f'--volume={local_build}:{container_build}:z',
-            f'--volume={local_ccache}:{container_ccache}:z',
-            f'--volume={local_pip_cache}:{container_pip_cache}:z',
-            f'--volume={local_skbuild}:{container_skbuild}:z',
-            f'--workdir={basedir}',
-            f'mephi42/memtrace-build-{name}:{args.version}',
-            '/opt/python/cp38-cp38/bin/python3',
-            'ci',
-            '--python=/opt/python/cp36-cp36m/bin/python',
-            '--python=/opt/python/cp37-cp37m/bin/python',
-            '--python=/opt/python/cp38-cp38/bin/python',
-            '-DBoost_USE_STATIC_LIBS=ON',
-            *rest,
-        ]
-        if platform.machine() not in (
-                arch.strip()
-                for arch in config[name]['native'].split('\n')
-        ):
-            docker_run_args.append('--skip-tests')
-        subprocess.check_call(docker_run_args)
-
-
-if __name__ == '__main__':
-    main()
+#!/bin/sh
+set -e -u -x
+cd "$(dirname "$0")"
+./in-docker \
+    env \
+    CC=x86_64-unknown-linux-gnu-gcc \
+    OBJDUMP=x86_64-unknown-linux-gnu-objdump \
+    /opt/cp38-cp38/bin/python3 \
+    ci \
+    --python=/opt/cp36-cp36m/bin/python3 \
+    --python=/opt/cp37-cp37m/bin/python3 \
+    --python=/opt/cp38-cp38/bin/python3 \
+    -DBoost_USE_STATIC_LIBS=ON \
+    -DCMAKE_MODULE_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
+    "$@"

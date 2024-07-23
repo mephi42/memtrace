@@ -8,24 +8,24 @@ import subprocess
 import tempfile
 
 basedir = os.path.dirname(os.path.realpath(__file__))
-valgrind_src = os.path.join(basedir, 'valgrind')
+valgrind_src = os.path.join(basedir, "valgrind")
 uname_m = platform.machine()
-uname = f'{platform.system()}-{uname_m}'
-build = os.path.join(basedir, 'build', uname)
-tracer_build = os.path.join(build, 'valgrind')
-tracer_install = os.path.join(tracer_build, 'install')
-tracer_dist = os.path.join(basedir, 'memtrace', 'tracer', uname)
+uname = f"{platform.system()}-{uname_m}"
+build = os.path.join(basedir, "build", uname)
+tracer_build = os.path.join(build, "valgrind")
+tracer_install = os.path.join(tracer_build, "install")
+tracer_dist = os.path.join(basedir, "memtrace", "tracer", uname)
 nproc = multiprocessing.cpu_count()
-run_in_venv = os.path.join(basedir, 'run-in-venv')
+run_in_venv = os.path.join(basedir, "run-in-venv")
 
 
 def patch_valgrind():
-    quilt = ['quilt', 'push', '-a']
+    quilt = ["quilt", "push", "-a"]
     returncode = subprocess.call(
         quilt,
         env={
             **os.environ,
-            'QUILT_PATCHES': os.path.join(basedir, 'valgrind-patches'),
+            "QUILT_PATCHES": os.path.join(basedir, "valgrind-patches"),
         },
         cwd=valgrind_src,
     )
@@ -36,20 +36,20 @@ def patch_valgrind():
 def dist_tracer():
     files = []
     for pattern in (
-            'bin/valgrind',
-            'libexec/valgrind/memtrace-*',
-            'libexec/valgrind/vgpreload_core-*.so',
+        "bin/valgrind",
+        "libexec/valgrind/memtrace-*",
+        "libexec/valgrind/vgpreload_core-*.so",
     ):
         for file in glob.glob(os.path.join(tracer_install, pattern)):
             files.append(os.path.relpath(file, tracer_install))
     os.makedirs(tracer_dist, exist_ok=True)
     tar = subprocess.Popen(
-        args=['tar', '-c', *files],
+        args=["tar", "-c", *files],
         cwd=tracer_install,
         stdout=subprocess.PIPE,
     )
     untar = subprocess.Popen(
-        args=['tar', '-x'],
+        args=["tar", "-x"],
         cwd=tracer_dist,
         stdin=tar.stdout,
     )
@@ -62,37 +62,49 @@ def dist_tracer():
 
 
 def get_python_version(python):
-    hexversion = int(subprocess.check_output([
-        python, '-c', 'import sys; print(sys.hexversion)']))
-    return '{}.{}.{}'.format(
-        (hexversion >> 24) & 0xff,
-        (hexversion >> 16) & 0xff,
-        (hexversion >> 8) & 0xff,
+    hexversion = int(
+        subprocess.check_output([python, "-c", "import sys; print(sys.hexversion)"])
+    )
+    return "{}.{}.{}".format(
+        (hexversion >> 24) & 0xFF,
+        (hexversion >> 16) & 0xFF,
+        (hexversion >> 8) & 0xFF,
     )
 
 
 def setup_build_venv(python):
     venv = os.path.join(build, get_python_version(python))
-    subprocess.check_call([python, '-m', 'venv', venv])
-    subprocess.check_call([
-        run_in_venv, venv,
-        'pip', 'install',
-        '--disable-pip-version-check',
-        '--requirement=requirements.txt',
-        '--upgrade',
-    ], cwd=basedir)
+    subprocess.check_call([python, "-m", "venv", venv])
+    subprocess.check_call(
+        [
+            run_in_venv,
+            venv,
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--requirement=requirements.txt",
+            "--upgrade",
+        ],
+        cwd=basedir,
+    )
     return venv
 
 
-def repair_wheel(whl, wheel_dir):
+def repair_wheel(venv, whl, wheel_dir):
     os.makedirs(wheel_dir, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=wheel_dir) as tmp_wheel_dir:
-        subprocess.check_call([
-            'auditwheel', 'repair',
-            f'--wheel-dir={tmp_wheel_dir}',
-            whl,
-        ])
-        tmp_manylinux_whl_name, = os.listdir(tmp_wheel_dir)
+        subprocess.check_call(
+            [
+                run_in_venv,
+                venv,
+                "auditwheel",
+                "repair",
+                "--plat=manylinux2014_x86_64",
+                f"--wheel-dir={tmp_wheel_dir}",
+                whl,
+            ]
+        )
+        (tmp_manylinux_whl_name,) = os.listdir(tmp_wheel_dir)
         manylinux_whl = os.path.join(wheel_dir, tmp_manylinux_whl_name)
         os.rename(
             os.path.join(tmp_wheel_dir, tmp_manylinux_whl_name),
@@ -103,19 +115,25 @@ def repair_wheel(whl, wheel_dir):
 
 def build_wheel(venv, build_type, build_args, wheel_dir):
     with tempfile.TemporaryDirectory() as dist_dir:
-        subprocess.check_call([
-            run_in_venv, venv,
-            'python', 'setup.py', 'bdist_wheel',
-            f'--build-type={build_type}',
-            f'--dist-dir={dist_dir}',
-            *build_args,
-        ], cwd=basedir)
-        whl_name, = os.listdir(dist_dir)
-        return repair_wheel(os.path.join(dist_dir, whl_name), wheel_dir)
+        subprocess.check_call(
+            [
+                run_in_venv,
+                venv,
+                "python",
+                "setup.py",
+                "bdist_wheel",
+                f"--build-type={build_type}",
+                f"--dist-dir={dist_dir}",
+                *build_args,
+            ],
+            cwd=basedir,
+        )
+        (whl_name,) = os.listdir(dist_dir)
+        return repair_wheel(venv, os.path.join(dist_dir, whl_name), wheel_dir)
 
 
 def git_ls_files():
-    p = subprocess.Popen(['git', 'ls-files'], stdout=subprocess.PIPE)
+    p = subprocess.Popen(["git", "ls-files"], stdout=subprocess.PIPE)
     try:
         for line in p.stdout:
             yield line.strip().decode()
@@ -126,13 +144,15 @@ def git_ls_files():
 
 def git_ls_py_files():
     for path in git_ls_files():
-        if path.endswith('.py'):
+        if path.endswith(".py"):
             yield path
         else:
             try:
-                with open(path, 'rb') as fp:
-                    if fp.read(2) == b'#!' and \
-                            fp.readline() == b'/usr/bin/env python3\n':
+                with open(path, "rb") as fp:
+                    if (
+                        fp.read(2) == b"#!"
+                        and fp.readline() == b"/usr/bin/env python3\n"
+                    ):
                         yield path
             except (FileNotFoundError, IsADirectoryError):
                 pass
@@ -140,41 +160,55 @@ def git_ls_py_files():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--build-type', default='Release')
-    parser.add_argument('--python', action='append')
-    parser.add_argument('--skip-tests', action='store_true')
+    parser.add_argument("--build-type", default="Release")
+    parser.add_argument("--python", action="append")
+    parser.add_argument("--skip-tests", action="store_true")
     parser.add_argument(
-        '--wheel-dir',
-        default=os.path.join(basedir, 'dist', 'wheelhouse'),
+        "--wheel-dir",
+        default=os.path.join(basedir, "dist", "wheelhouse"),
     )
     args, build_args = parser.parse_known_args()
     if args.python is None:
-        args.python = ('python3',)
+        args.python = ("python3",)
     patch_valgrind()
-    subprocess.check_call([
-        'make',
-        '--file=Makefile.ci',
-        f'--jobs={nproc}',
-        '--no-builtin-rules',
-        f'BUILD_TYPE={args.build_type}',
-    ])
+    subprocess.check_call(
+        [
+            "make",
+            "--file=Makefile.ci",
+            f"--jobs={nproc}",
+            "--no-builtin-rules",
+            f"BUILD_TYPE={args.build_type}",
+        ]
+    )
     dist_tracer()
     for python in args.python:
         venv = setup_build_venv(python)
         subprocess.check_call(
-            [run_in_venv, venv, 'flake8'] + list(git_ls_py_files()),
+            [
+                run_in_venv,
+                venv,
+                "flake8",
+                "--ignore=E226,W504,E126,E121,W503,E24,E123,E704,E501",
+            ]
+            + list(git_ls_py_files()),
             cwd=basedir,
         )
         if not args.skip_tests:
-            for verb in ('build', 'test'):
-                subprocess.check_call([
-                    run_in_venv, venv,
-                    'python', 'setup.py', verb,
-                    f'--build-type={args.build_type}',
-                    *build_args,
-                ], cwd=basedir)
+            for verb in ("build", "test"):
+                subprocess.check_call(
+                    [
+                        run_in_venv,
+                        venv,
+                        "python",
+                        "setup.py",
+                        verb,
+                        f"--build-type={args.build_type}",
+                        *build_args,
+                    ],
+                    cwd=basedir,
+                )
         build_wheel(venv, args.build_type, build_args, args.wheel_dir)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
