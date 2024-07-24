@@ -2,3 +2,7 @@ using gcc : s390x : s390x-ibm-linux-gnu-g++ ;
 using python : 3.6 : /usr/s390x-ibm-linux-gnu/cp36-cp36m/bin/python3 : /usr/s390x-ibm-linux-gnu/cp36-cp36m/include/python3.6m : /usr/s390x-ibm-linux-gnu/cp36-cp36m/lib ;
 using python : 3.7 : /usr/s390x-ibm-linux-gnu/cp37-cp37m/bin/python3 : /usr/s390x-ibm-linux-gnu/cp37-cp37m/include/python3.7m : /usr/s390x-ibm-linux-gnu/cp37-cp37m/lib ;
 using python : 3.8 : /usr/s390x-ibm-linux-gnu/cp38-cp38/bin/python3 : /usr/s390x-ibm-linux-gnu/cp38-cp38/include/python3.8 : /usr/s390x-ibm-linux-gnu/cp38-cp38/lib ;
+using python : 3.9 : /usr/s390x-ibm-linux-gnu/cp39-cp39/bin/python3 : /usr/s390x-ibm-linux-gnu/cp39-cp39/include/python3.9 : /usr/s390x-ibm-linux-gnu/cp39-cp39/lib ;
+using python : 3.10 : /usr/s390x-ibm-linux-gnu/cp310-cp310/bin/python3 : /usr/s390x-ibm-linux-gnu/cp310-cp310/include/python3.10 : /usr/s390x-ibm-linux-gnu/cp310-cp310/lib ;
+using python : 3.11 : /usr/s390x-ibm-linux-gnu/cp311-cp311/bin/python3 : /usr/s390x-ibm-linux-gnu/cp311-cp311/include/python3.11 : /usr/s390x-ibm-linux-gnu/cp311-cp311/lib ;
+using python : 3.12 : /usr/s390x-ibm-linux-gnu/cp312-cp312/bin/python3 : /usr/s390x-ibm-linux-gnu/cp312-cp312/include/python3.12 : /usr/s390x-ibm-linux-gnu/cp312-cp312/lib ;

@@ -1,7 +1,7 @@
 # https://github.com/benfogle/crossenv
 # https://github.com/rust-cross/manylinux-cross
 
-ARG boost_version=1_73_0
+ARG boost_version=1_85_0
 ARG capstone_version=4.0.2
 ARG elfutils_version=0.188
 ARG zlib_ng_version=2.2.1
@@ -63,7 +63,7 @@ ENV PATH=/usr/{{ triple }}/bin:$PATH
 RUN apt-get remove --yes libc6-dev
 {%- endfor %}
 
-{%- for _, name_tag, git_tag, _, _ in pythons %}
+{%- for _, name_tag, git_tag, _, _, commits in pythons %}
 
 FROM crosstool-ng-base AS {{ name_tag }}
 RUN apt-get update && apt-get install --no-install-recommends --yes \
@@ -77,11 +77,8 @@ RUN git clone \
         /usr/src/{{ name_tag }}
 WORKDIR /usr/src/{{ name_tag }}
 {%- set git = "git -c user.name=mephi42 -c user.email=mephi42@gmail.com" %}
-# https://bugs.python.org/issue46513
-RUN {{ git }} cherry-pick 04772cd6f164
-{%- if name_tag == "cp36-cp36m" %}
-# https://github.com/python/cpython/issues/89863
-RUN {{ git }} cherry-pick 8766cb74e186 f0be4bbb9b3c
+{%- if commits|length > 0 %}
+RUN {{ git }} cherry-pick {{ commits|join(" ") }}
 {%- endif %}
 WORKDIR /tmp/{{ name_tag }}-build
 RUN /usr/src/{{ name_tag }}/configure --prefix=/opt/{{ name_tag }}
@@ -89,7 +86,7 @@ RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 {%- endfor %}
 
-{%- for _, name_tag, _, configure_flags, _ in pythons %}
+{%- for _, name_tag, _, configure_flags, _, _ in pythons %}
 {%- for arch, triple in arches %}
 
 FROM crosstool-ng-{{ arch }} AS {{ name_tag }}-{{ arch }}
@@ -101,6 +98,7 @@ RUN ./configure \
         --build="$(uname -m)" \
         --host={{ triple }} \
         --prefix=/usr/{{ triple }}/{{ name_tag }} \
+        --with-build-python=/opt/{{ name_tag }}/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no{% for configure_flag in configure_flags %} \
@@ -129,7 +127,7 @@ RUN patch -p1 -d libs/python <CXXABI_LDBL.patch
 
 FROM crosstool-ng-{{ arch }} AS boost-{{ arch }}
 COPY --from=boost-base /usr/src/boost /usr/src/boost
-{%- for _, name_tag, _, _, _ in pythons %}
+{%- for _, name_tag, _, _, _, _ in pythons %}
 COPY --from={{ name_tag }}-{{ arch }} \
      /usr/{{ triple }}/{{ name_tag }} \
      /usr/{{ triple }}/{{ name_tag }}
@@ -246,11 +244,11 @@ RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-gcc
 {%- endfor %}
 ENV PATH=/usr/lib/ccache:$PATH
-{%- for _, name_tag, _, _, _ in pythons %}
+{%- for _, name_tag, _, _, _, _ in pythons %}
 COPY --from={{ name_tag }} /opt/{{ name_tag }} /opt/{{ name_tag }}
 {%- endfor %}
 {%- for arch, triple in arches %}
-{%- for _, name_tag, _, _, _ in pythons %}
+{%- for _, name_tag, _, _, _, _ in pythons %}
 COPY --from={{ name_tag }}-{{ arch }} \
      /usr/{{ triple }}/{{ name_tag }} \
      /usr/{{ triple }}/{{ name_tag }}
