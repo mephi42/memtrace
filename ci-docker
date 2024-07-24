@@ -10,6 +10,10 @@ cd "$(dirname "$0")"
     --python=/opt/cp36-cp36m/bin/python3 \
     --python=/opt/cp37-cp37m/bin/python3 \
     --python=/opt/cp38-cp38/bin/python3 \
+    --python=/opt/cp39-cp39/bin/python3 \
+    --python=/opt/cp310-cp310/bin/python3 \
+    --python=/opt/cp311-cp311/bin/python3 \
+    --python=/opt/cp312-cp312/bin/python3 \
     -DBoost_USE_STATIC_LIBS=ON \
     -DCMAKE_MODULE_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
     "$@"

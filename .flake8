@@ -3,7 +3,6 @@ exclude =
     build,
     build.docker,
     dist,
-    elfutils,
     .git,
     __pycache__,
     _skbuild,
