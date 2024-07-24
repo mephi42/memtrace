@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.11.0)
 project(_memtrace)
-find_package(Boost REQUIRED COMPONENTS python)
+string(REPLACE "." ";" _VERSION "${PYTHON_VERSION_STRING}")
+list(GET _VERSION 0 PYTHON_VERSION_MAJOR)
+list(GET _VERSION 1 PYTHON_VERSION_MINOR)
+find_package(
+    Boost
+    REQUIRED
+    COMPONENTS "python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}"
+)
 find_package(PythonExtensions REQUIRED)
 message(STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")
 message(STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
@@ -20,14 +27,6 @@ target_compile_options(
             -D_FORTIFY_SOURCE=2
 )
 set(uname ${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR})
-set(elfutils_build ${CMAKE_CURRENT_SOURCE_DIR}/build/${uname}/elfutils)
-set(elfutils_install ${elfutils_build}/install)
-target_include_directories(
-    _memtrace
-    SYSTEM
-    PRIVATE ${elfutils_install}/include
-)
-target_link_directories(_memtrace PRIVATE ${elfutils_install}/lib)
 target_link_libraries(_memtrace ${Boost_LIBRARIES} capstone dw elf z)
 python_extension_module(_memtrace)
 install(TARGETS _memtrace LIBRARY DESTINATION memtrace)

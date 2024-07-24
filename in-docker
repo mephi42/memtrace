@@ -7,7 +7,7 @@ import subprocess
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument('--version', default='2024-07-24-10c7dffd0')
+    parser.add_argument('--version', default='2024-07-24-2f35a2dc5')
     args, rest = parser.parse_known_args()
     basedir = os.path.dirname(os.path.realpath(__file__))
     local_build = os.path.join(basedir, 'build.docker')
