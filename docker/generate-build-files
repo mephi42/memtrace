@@ -8,6 +8,11 @@ def main():
     basedir = os.path.dirname(__file__)
     with open(os.path.join(basedir, "Dockerfile.j2")) as fp:
         template = jinja2.Template(fp.read(), keep_trailing_newline=True)
+    # https://github.com/python/cpython/issues/89863
+    pymalloc_align = "f0be4bbb9b3c"
+    gc_head_align = "8766cb74e186"
+    # https://bugs.python.org/issue46513
+    char_unsigned = "6e5a193816e1"
     arches = (
         ("aarch64", "aarch64-unknown-linux-gnu"),
         ("i686", "i686-unknown-linux-gnu"),
@@ -16,9 +21,27 @@ def main():
         ("x86_64", "x86_64-unknown-linux-gnu"),
     )
     pythons = (
-        ("3.6", "cp36-cp36m", "v3.6.15", ("--with-pymalloc",), "python3.6m"),
-        ("3.7", "cp37-cp37m", "v3.7.17", ("--with-pymalloc",), "python3.7m"),
-        ("3.8", "cp38-cp38", "v3.8.19", (), "python3.8"),
+        (
+            "3.6",
+            "cp36-cp36m",
+            "v3.6.15",
+            ("--with-pymalloc",),
+            "python3.6m",
+            (pymalloc_align, gc_head_align, char_unsigned),
+        ),
+        (
+            "3.7",
+            "cp37-cp37m",
+            "v3.7.17",
+            ("--with-pymalloc",),
+            "python3.7m",
+            (char_unsigned,),
+        ),
+        ("3.8", "cp38-cp38", "v3.8.19", (), "python3.8", (char_unsigned,)),
+        ("3.9", "cp39-cp39", "v3.9.19", (), "python3.9", (char_unsigned,)),
+        ("3.10", "cp310-cp310", "v3.10.14", (), "python3.10", (char_unsigned,)),
+        ("3.11", "cp311-cp311", "v3.11.9", (), "python3.11", ()),
+        ("3.12", "cp312-cp312", "v3.12.4", (), "python3.12", ()),
     )
     with open(os.path.join(basedir, "image", "Dockerfile"), "w") as fp:
         fp.write(template.render(arches=arches, pythons=pythons))
@@ -33,7 +56,7 @@ def main():
             fp.write(" : {}".format(arch))
             fp.write(" : {}-g++".format(triple))
             fp.write(" ;\n")
-            for version, name_tag, _, _, includes in pythons:
+            for version, name_tag, _, _, includes, _ in pythons:
                 fp.write("using python")
                 # version
                 fp.write(" : {}".format(version))
