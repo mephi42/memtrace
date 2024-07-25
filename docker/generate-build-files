@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
+from configparser import ConfigParser
 import os
 
 import jinja2
+
+ARCH_PREFIX = "arch."
 
 
 def main():
@@ -13,15 +16,14 @@ def main():
     gc_head_align = "8766cb74e186"
     # https://bugs.python.org/issue46513
     char_unsigned = "6e5a193816e1"
-    arches = (
-        ("aarch64", "aarch64-unknown-linux-gnu"),
-        ("arm", "arm-unknown-linux-gnueabi"),
-        ("i686", "i686-unknown-linux-gnu"),
-        ("ppc64", "powerpc64-unknown-linux-gnu"),
-        ("ppc64le", "powerpc64le-unknown-linux-gnu"),
-        ("s390x", "s390x-ibm-linux-gnu"),
-        ("x86_64", "x86_64-unknown-linux-gnu"),
-    )
+    arches = []
+    config = ConfigParser()
+    config.read(os.path.join(basedir, "images.ini"))
+    for section_name in config.sections():
+        if section_name.startswith(ARCH_PREFIX):
+            section = config[section_name]
+            arch = section_name[len(ARCH_PREFIX) :]
+            arches.append((arch, section["triple"]))
     pythons = (
         (
             "3.6",
