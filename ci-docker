@@ -5,7 +5,9 @@ cd "$(dirname "$0")"
     env \
     CC=x86_64-unknown-linux-gnu-gcc \
     OBJDUMP=x86_64-unknown-linux-gnu-objdump \
-    /opt/cp38-cp38/bin/python3 \
+    LC_ALL=C.UTF-8 \
+    LANG=C.UTF-8 \
+    /opt/cp36-cp36m/bin/python3 \
     ci \
     --python=/opt/cp36-cp36m/bin/python3 \
     --python=/opt/cp37-cp37m/bin/python3 \
