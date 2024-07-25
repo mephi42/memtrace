@@ -60,6 +60,21 @@ ENV PATH=/usr/aarch64-unknown-linux-gnu/bin:$PATH
 # https://stackoverflow.com/questions/77895008
 RUN apt-get remove --yes libc6-dev
 
+FROM crosstool-ng-base AS crosstool-ng-arm
+WORKDIR /usr/src
+RUN mkdir crosstool-ng-arm
+WORKDIR crosstool-ng-arm
+COPY crosstool-ng/common .
+COPY crosstool-ng/arm .
+RUN cat common.config arch.config >.config
+RUN ct-ng olddefconfig
+ENV CT_ALLOW_BUILD_AS_ROOT_SURE=1
+RUN ct-ng source
+RUN ct-ng build || { err=$?; tail -n 500 build.log; exit $err; }
+ENV PATH=/usr/arm-unknown-linux-gnueabi/bin:$PATH
+# https://stackoverflow.com/questions/77895008
+RUN apt-get remove --yes libc6-dev
+
 FROM crosstool-ng-base AS crosstool-ng-i686
 WORKDIR /usr/src
 RUN mkdir crosstool-ng-i686
@@ -72,6 +87,21 @@ ENV CT_ALLOW_BUILD_AS_ROOT_SURE=1
 RUN ct-ng source
 RUN ct-ng build || { err=$?; tail -n 500 build.log; exit $err; }
 ENV PATH=/usr/i686-unknown-linux-gnu/bin:$PATH
+# https://stackoverflow.com/questions/77895008
+RUN apt-get remove --yes libc6-dev
+
+FROM crosstool-ng-base AS crosstool-ng-ppc64
+WORKDIR /usr/src
+RUN mkdir crosstool-ng-ppc64
+WORKDIR crosstool-ng-ppc64
+COPY crosstool-ng/common .
+COPY crosstool-ng/ppc64 .
+RUN cat common.config arch.config >.config
+RUN ct-ng olddefconfig
+ENV CT_ALLOW_BUILD_AS_ROOT_SURE=1
+RUN ct-ng source
+RUN ct-ng build || { err=$?; tail -n 500 build.log; exit $err; }
+ENV PATH=/usr/powerpc64-unknown-linux-gnu/bin:$PATH
 # https://stackoverflow.com/questions/77895008
 RUN apt-get remove --yes libc6-dev
 
@@ -254,6 +284,23 @@ RUN ./configure \
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
+FROM crosstool-ng-arm AS cp36-cp36m-arm
+COPY --from=cp36-cp36m /usr/src/cp36-cp36m /usr/src/cp36-cp36m
+COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
+ENV PATH=/opt/cp36-cp36m/bin:$PATH
+WORKDIR /usr/src/cp36-cp36m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=arm-unknown-linux-gnueabi \
+        --prefix=/usr/arm-unknown-linux-gnueabi/cp36-cp36m \
+        --with-build-python=/opt/cp36-cp36m/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
 FROM crosstool-ng-i686 AS cp36-cp36m-i686
 COPY --from=cp36-cp36m /usr/src/cp36-cp36m /usr/src/cp36-cp36m
 COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
@@ -263,6 +310,23 @@ RUN ./configure \
         --build="$(uname -m)" \
         --host=i686-unknown-linux-gnu \
         --prefix=/usr/i686-unknown-linux-gnu/cp36-cp36m \
+        --with-build-python=/opt/cp36-cp36m/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64 AS cp36-cp36m-ppc64
+COPY --from=cp36-cp36m /usr/src/cp36-cp36m /usr/src/cp36-cp36m
+COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
+ENV PATH=/opt/cp36-cp36m/bin:$PATH
+WORKDIR /usr/src/cp36-cp36m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64-unknown-linux-gnu \
+        --prefix=/usr/powerpc64-unknown-linux-gnu/cp36-cp36m \
         --with-build-python=/opt/cp36-cp36m/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -339,6 +403,23 @@ RUN ./configure \
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
+FROM crosstool-ng-arm AS cp37-cp37m-arm
+COPY --from=cp37-cp37m /usr/src/cp37-cp37m /usr/src/cp37-cp37m
+COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
+ENV PATH=/opt/cp37-cp37m/bin:$PATH
+WORKDIR /usr/src/cp37-cp37m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=arm-unknown-linux-gnueabi \
+        --prefix=/usr/arm-unknown-linux-gnueabi/cp37-cp37m \
+        --with-build-python=/opt/cp37-cp37m/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
 FROM crosstool-ng-i686 AS cp37-cp37m-i686
 COPY --from=cp37-cp37m /usr/src/cp37-cp37m /usr/src/cp37-cp37m
 COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
@@ -348,6 +429,23 @@ RUN ./configure \
         --build="$(uname -m)" \
         --host=i686-unknown-linux-gnu \
         --prefix=/usr/i686-unknown-linux-gnu/cp37-cp37m \
+        --with-build-python=/opt/cp37-cp37m/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --with-pymalloc
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64 AS cp37-cp37m-ppc64
+COPY --from=cp37-cp37m /usr/src/cp37-cp37m /usr/src/cp37-cp37m
+COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
+ENV PATH=/opt/cp37-cp37m/bin:$PATH
+WORKDIR /usr/src/cp37-cp37m
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64-unknown-linux-gnu \
+        --prefix=/usr/powerpc64-unknown-linux-gnu/cp37-cp37m \
         --with-build-python=/opt/cp37-cp37m/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -423,6 +521,22 @@ RUN ./configure \
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
+FROM crosstool-ng-arm AS cp38-cp38-arm
+COPY --from=cp38-cp38 /usr/src/cp38-cp38 /usr/src/cp38-cp38
+COPY --from=cp38-cp38 /opt/cp38-cp38 /opt/cp38-cp38
+ENV PATH=/opt/cp38-cp38/bin:$PATH
+WORKDIR /usr/src/cp38-cp38
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=arm-unknown-linux-gnueabi \
+        --prefix=/usr/arm-unknown-linux-gnueabi/cp38-cp38 \
+        --with-build-python=/opt/cp38-cp38/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
 FROM crosstool-ng-i686 AS cp38-cp38-i686
 COPY --from=cp38-cp38 /usr/src/cp38-cp38 /usr/src/cp38-cp38
 COPY --from=cp38-cp38 /opt/cp38-cp38 /opt/cp38-cp38
@@ -432,6 +546,22 @@ RUN ./configure \
         --build="$(uname -m)" \
         --host=i686-unknown-linux-gnu \
         --prefix=/usr/i686-unknown-linux-gnu/cp38-cp38 \
+        --with-build-python=/opt/cp38-cp38/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64 AS cp38-cp38-ppc64
+COPY --from=cp38-cp38 /usr/src/cp38-cp38 /usr/src/cp38-cp38
+COPY --from=cp38-cp38 /opt/cp38-cp38 /opt/cp38-cp38
+ENV PATH=/opt/cp38-cp38/bin:$PATH
+WORKDIR /usr/src/cp38-cp38
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64-unknown-linux-gnu \
+        --prefix=/usr/powerpc64-unknown-linux-gnu/cp38-cp38 \
         --with-build-python=/opt/cp38-cp38/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -503,6 +633,22 @@ RUN ./configure \
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
+FROM crosstool-ng-arm AS cp39-cp39-arm
+COPY --from=cp39-cp39 /usr/src/cp39-cp39 /usr/src/cp39-cp39
+COPY --from=cp39-cp39 /opt/cp39-cp39 /opt/cp39-cp39
+ENV PATH=/opt/cp39-cp39/bin:$PATH
+WORKDIR /usr/src/cp39-cp39
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=arm-unknown-linux-gnueabi \
+        --prefix=/usr/arm-unknown-linux-gnueabi/cp39-cp39 \
+        --with-build-python=/opt/cp39-cp39/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
 FROM crosstool-ng-i686 AS cp39-cp39-i686
 COPY --from=cp39-cp39 /usr/src/cp39-cp39 /usr/src/cp39-cp39
 COPY --from=cp39-cp39 /opt/cp39-cp39 /opt/cp39-cp39
@@ -512,6 +658,22 @@ RUN ./configure \
         --build="$(uname -m)" \
         --host=i686-unknown-linux-gnu \
         --prefix=/usr/i686-unknown-linux-gnu/cp39-cp39 \
+        --with-build-python=/opt/cp39-cp39/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64 AS cp39-cp39-ppc64
+COPY --from=cp39-cp39 /usr/src/cp39-cp39 /usr/src/cp39-cp39
+COPY --from=cp39-cp39 /opt/cp39-cp39 /opt/cp39-cp39
+ENV PATH=/opt/cp39-cp39/bin:$PATH
+WORKDIR /usr/src/cp39-cp39
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64-unknown-linux-gnu \
+        --prefix=/usr/powerpc64-unknown-linux-gnu/cp39-cp39 \
         --with-build-python=/opt/cp39-cp39/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -583,6 +745,22 @@ RUN ./configure \
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
+FROM crosstool-ng-arm AS cp310-cp310-arm
+COPY --from=cp310-cp310 /usr/src/cp310-cp310 /usr/src/cp310-cp310
+COPY --from=cp310-cp310 /opt/cp310-cp310 /opt/cp310-cp310
+ENV PATH=/opt/cp310-cp310/bin:$PATH
+WORKDIR /usr/src/cp310-cp310
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=arm-unknown-linux-gnueabi \
+        --prefix=/usr/arm-unknown-linux-gnueabi/cp310-cp310 \
+        --with-build-python=/opt/cp310-cp310/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
 FROM crosstool-ng-i686 AS cp310-cp310-i686
 COPY --from=cp310-cp310 /usr/src/cp310-cp310 /usr/src/cp310-cp310
 COPY --from=cp310-cp310 /opt/cp310-cp310 /opt/cp310-cp310
@@ -592,6 +770,22 @@ RUN ./configure \
         --build="$(uname -m)" \
         --host=i686-unknown-linux-gnu \
         --prefix=/usr/i686-unknown-linux-gnu/cp310-cp310 \
+        --with-build-python=/opt/cp310-cp310/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64 AS cp310-cp310-ppc64
+COPY --from=cp310-cp310 /usr/src/cp310-cp310 /usr/src/cp310-cp310
+COPY --from=cp310-cp310 /opt/cp310-cp310 /opt/cp310-cp310
+ENV PATH=/opt/cp310-cp310/bin:$PATH
+WORKDIR /usr/src/cp310-cp310
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64-unknown-linux-gnu \
+        --prefix=/usr/powerpc64-unknown-linux-gnu/cp310-cp310 \
         --with-build-python=/opt/cp310-cp310/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -663,6 +857,22 @@ RUN ./configure \
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
+FROM crosstool-ng-arm AS cp311-cp311-arm
+COPY --from=cp311-cp311 /usr/src/cp311-cp311 /usr/src/cp311-cp311
+COPY --from=cp311-cp311 /opt/cp311-cp311 /opt/cp311-cp311
+ENV PATH=/opt/cp311-cp311/bin:$PATH
+WORKDIR /usr/src/cp311-cp311
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=arm-unknown-linux-gnueabi \
+        --prefix=/usr/arm-unknown-linux-gnueabi/cp311-cp311 \
+        --with-build-python=/opt/cp311-cp311/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
 FROM crosstool-ng-i686 AS cp311-cp311-i686
 COPY --from=cp311-cp311 /usr/src/cp311-cp311 /usr/src/cp311-cp311
 COPY --from=cp311-cp311 /opt/cp311-cp311 /opt/cp311-cp311
@@ -672,6 +882,22 @@ RUN ./configure \
         --build="$(uname -m)" \
         --host=i686-unknown-linux-gnu \
         --prefix=/usr/i686-unknown-linux-gnu/cp311-cp311 \
+        --with-build-python=/opt/cp311-cp311/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64 AS cp311-cp311-ppc64
+COPY --from=cp311-cp311 /usr/src/cp311-cp311 /usr/src/cp311-cp311
+COPY --from=cp311-cp311 /opt/cp311-cp311 /opt/cp311-cp311
+ENV PATH=/opt/cp311-cp311/bin:$PATH
+WORKDIR /usr/src/cp311-cp311
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64-unknown-linux-gnu \
+        --prefix=/usr/powerpc64-unknown-linux-gnu/cp311-cp311 \
         --with-build-python=/opt/cp311-cp311/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -743,6 +969,22 @@ RUN ./configure \
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
+FROM crosstool-ng-arm AS cp312-cp312-arm
+COPY --from=cp312-cp312 /usr/src/cp312-cp312 /usr/src/cp312-cp312
+COPY --from=cp312-cp312 /opt/cp312-cp312 /opt/cp312-cp312
+ENV PATH=/opt/cp312-cp312/bin:$PATH
+WORKDIR /usr/src/cp312-cp312
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=arm-unknown-linux-gnueabi \
+        --prefix=/usr/arm-unknown-linux-gnueabi/cp312-cp312 \
+        --with-build-python=/opt/cp312-cp312/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
 FROM crosstool-ng-i686 AS cp312-cp312-i686
 COPY --from=cp312-cp312 /usr/src/cp312-cp312 /usr/src/cp312-cp312
 COPY --from=cp312-cp312 /opt/cp312-cp312 /opt/cp312-cp312
@@ -752,6 +994,22 @@ RUN ./configure \
         --build="$(uname -m)" \
         --host=i686-unknown-linux-gnu \
         --prefix=/usr/i686-unknown-linux-gnu/cp312-cp312 \
+        --with-build-python=/opt/cp312-cp312/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64 AS cp312-cp312-ppc64
+COPY --from=cp312-cp312 /usr/src/cp312-cp312 /usr/src/cp312-cp312
+COPY --from=cp312-cp312 /opt/cp312-cp312 /opt/cp312-cp312
+ENV PATH=/opt/cp312-cp312/bin:$PATH
+WORKDIR /usr/src/cp312-cp312
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64-unknown-linux-gnu \
+        --prefix=/usr/powerpc64-unknown-linux-gnu/cp312-cp312 \
         --with-build-python=/opt/cp312-cp312/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -859,6 +1117,43 @@ RUN ./b2 \
         variant=release \
         install
 
+FROM crosstool-ng-arm AS boost-arm
+COPY --from=boost-base /usr/src/boost /usr/src/boost
+COPY --from=cp36-cp36m-arm \
+     /usr/arm-unknown-linux-gnueabi/cp36-cp36m \
+     /usr/arm-unknown-linux-gnueabi/cp36-cp36m
+COPY --from=cp37-cp37m-arm \
+     /usr/arm-unknown-linux-gnueabi/cp37-cp37m \
+     /usr/arm-unknown-linux-gnueabi/cp37-cp37m
+COPY --from=cp38-cp38-arm \
+     /usr/arm-unknown-linux-gnueabi/cp38-cp38 \
+     /usr/arm-unknown-linux-gnueabi/cp38-cp38
+COPY --from=cp39-cp39-arm \
+     /usr/arm-unknown-linux-gnueabi/cp39-cp39 \
+     /usr/arm-unknown-linux-gnueabi/cp39-cp39
+COPY --from=cp310-cp310-arm \
+     /usr/arm-unknown-linux-gnueabi/cp310-cp310 \
+     /usr/arm-unknown-linux-gnueabi/cp310-cp310
+COPY --from=cp311-cp311-arm \
+     /usr/arm-unknown-linux-gnueabi/cp311-cp311 \
+     /usr/arm-unknown-linux-gnueabi/cp311-cp311
+COPY --from=cp312-cp312-arm \
+     /usr/arm-unknown-linux-gnueabi/cp312-cp312 \
+     /usr/arm-unknown-linux-gnueabi/cp312-cp312
+WORKDIR /usr/src/boost
+COPY boost/arm .
+RUN ./b2 \
+        --prefix=/opt/boost-arm/usr/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot/usr \
+        --with-python \
+        cxxflags=-fPIC \
+        link=static \
+        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12 \
+        runtime-link=shared \
+        threading=multi \
+        toolset=gcc-arm \
+        variant=release \
+        install
+
 FROM crosstool-ng-i686 AS boost-i686
 COPY --from=boost-base /usr/src/boost /usr/src/boost
 COPY --from=cp36-cp36m-i686 \
@@ -893,6 +1188,43 @@ RUN ./b2 \
         runtime-link=shared \
         threading=multi \
         toolset=gcc-i686 \
+        variant=release \
+        install
+
+FROM crosstool-ng-ppc64 AS boost-ppc64
+COPY --from=boost-base /usr/src/boost /usr/src/boost
+COPY --from=cp36-cp36m-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp36-cp36m \
+     /usr/powerpc64-unknown-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp37-cp37m \
+     /usr/powerpc64-unknown-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp38-cp38 \
+     /usr/powerpc64-unknown-linux-gnu/cp38-cp38
+COPY --from=cp39-cp39-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp39-cp39 \
+     /usr/powerpc64-unknown-linux-gnu/cp39-cp39
+COPY --from=cp310-cp310-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp310-cp310 \
+     /usr/powerpc64-unknown-linux-gnu/cp310-cp310
+COPY --from=cp311-cp311-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp311-cp311 \
+     /usr/powerpc64-unknown-linux-gnu/cp311-cp311
+COPY --from=cp312-cp312-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp312-cp312 \
+     /usr/powerpc64-unknown-linux-gnu/cp312-cp312
+WORKDIR /usr/src/boost
+COPY boost/ppc64 .
+RUN ./b2 \
+        --prefix=/opt/boost-ppc64/usr/powerpc64-unknown-linux-gnu/powerpc64-unknown-linux-gnu/sysroot/usr \
+        --with-python \
+        cxxflags=-fPIC \
+        link=static \
+        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12 \
+        runtime-link=shared \
+        threading=multi \
+        toolset=gcc-ppc64 \
         variant=release \
         install
 
@@ -1028,6 +1360,19 @@ RUN make \
         "-j$(getconf _NPROCESSORS_ONLN)" \
         install
 
+FROM crosstool-ng-arm AS capstone-arm
+COPY --from=capstone-base /usr/src/capstone /usr/src/capstone
+WORKDIR /usr/src/capstone
+RUN make \
+        CAPSTONE_BUILD_CORE_ONLY=yes \
+        CAPSTONE_SHARED=no \
+        CAPSTONE_STATIC=yes \
+        CROSS=arm-unknown-linux-gnueabi- \
+        DESTDIR=/opt/capstone-arm \
+        PREFIX=/usr/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot/usr \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
 FROM crosstool-ng-i686 AS capstone-i686
 COPY --from=capstone-base /usr/src/capstone /usr/src/capstone
 WORKDIR /usr/src/capstone
@@ -1038,6 +1383,19 @@ RUN make \
         CROSS=i686-unknown-linux-gnu- \
         DESTDIR=/opt/capstone-i686 \
         PREFIX=/usr/i686-unknown-linux-gnu/i686-unknown-linux-gnu/sysroot/usr \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
+FROM crosstool-ng-ppc64 AS capstone-ppc64
+COPY --from=capstone-base /usr/src/capstone /usr/src/capstone
+WORKDIR /usr/src/capstone
+RUN make \
+        CAPSTONE_BUILD_CORE_ONLY=yes \
+        CAPSTONE_SHARED=no \
+        CAPSTONE_STATIC=yes \
+        CROSS=powerpc64-unknown-linux-gnu- \
+        DESTDIR=/opt/capstone-ppc64 \
+        PREFIX=/usr/powerpc64-unknown-linux-gnu/powerpc64-unknown-linux-gnu/sysroot/usr \
         "-j$(getconf _NPROCESSORS_ONLN)" \
         install
 
@@ -1103,6 +1461,18 @@ RUN make \
         "-j$(getconf _NPROCESSORS_ONLN)" \
         install
 
+FROM crosstool-ng-arm AS zlib-ng-arm
+COPY --from=zlib-ng-base /usr/src/zlib-ng /usr/src/zlib-ng
+WORKDIR /usr/src/zlib-ng
+RUN CHOST=arm-unknown-linux-gnueabi CFLAGS=-fPIC ./configure \
+        --prefix=/usr/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot/usr \
+        --static \
+        --zlib-compat
+RUN make \
+        DESTDIR=/opt/zlib-ng-arm \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
 FROM crosstool-ng-i686 AS zlib-ng-i686
 COPY --from=zlib-ng-base /usr/src/zlib-ng /usr/src/zlib-ng
 WORKDIR /usr/src/zlib-ng
@@ -1112,6 +1482,18 @@ RUN CHOST=i686-unknown-linux-gnu CFLAGS=-fPIC ./configure \
         --zlib-compat
 RUN make \
         DESTDIR=/opt/zlib-ng-i686 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install
+
+FROM crosstool-ng-ppc64 AS zlib-ng-ppc64
+COPY --from=zlib-ng-base /usr/src/zlib-ng /usr/src/zlib-ng
+WORKDIR /usr/src/zlib-ng
+RUN CHOST=powerpc64-unknown-linux-gnu CFLAGS=-fPIC ./configure \
+        --prefix=/usr/powerpc64-unknown-linux-gnu/powerpc64-unknown-linux-gnu/sysroot/usr \
+        --static \
+        --zlib-compat
+RUN make \
+        DESTDIR=/opt/zlib-ng-ppc64 \
         "-j$(getconf _NPROCESSORS_ONLN)" \
         install
 
@@ -1176,6 +1558,27 @@ RUN make \
 WORKDIR /opt/elfutils-aarch64/usr/aarch64-unknown-linux-gnu/aarch64-unknown-linux-gnu/sysroot/usr/lib
 RUN rm *.so *.so.*
 
+FROM crosstool-ng-arm AS elfutils-arm
+ARG elfutils_version
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        autopoint \
+        pkg-config
+COPY --from=zlib-ng-arm /opt/zlib-ng-arm/ /
+COPY --from=elfutils-base /usr/src/elfutils-${elfutils_version} /usr/src/elfutils
+WORKDIR /usr/src/elfutils
+RUN autoreconf -i
+RUN CFLAGS=-fPIC ./configure \
+        --disable-debuginfod \
+        --disable-libdebuginfod \
+        --host=arm-unknown-linux-gnueabi \
+        --prefix=/usr/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot/usr
+RUN make \
+        DESTDIR=/opt/elfutils-arm \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install V=1
+WORKDIR /opt/elfutils-arm/usr/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot/usr/lib
+RUN rm *.so *.so.*
+
 FROM crosstool-ng-i686 AS elfutils-i686
 ARG elfutils_version
 RUN apt-get update && apt-get install --no-install-recommends --yes \
@@ -1195,6 +1598,27 @@ RUN make \
         "-j$(getconf _NPROCESSORS_ONLN)" \
         install V=1
 WORKDIR /opt/elfutils-i686/usr/i686-unknown-linux-gnu/i686-unknown-linux-gnu/sysroot/usr/lib
+RUN rm *.so *.so.*
+
+FROM crosstool-ng-ppc64 AS elfutils-ppc64
+ARG elfutils_version
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        autopoint \
+        pkg-config
+COPY --from=zlib-ng-ppc64 /opt/zlib-ng-ppc64/ /
+COPY --from=elfutils-base /usr/src/elfutils-${elfutils_version} /usr/src/elfutils
+WORKDIR /usr/src/elfutils
+RUN autoreconf -i
+RUN CFLAGS=-fPIC ./configure \
+        --disable-debuginfod \
+        --disable-libdebuginfod \
+        --host=powerpc64-unknown-linux-gnu \
+        --prefix=/usr/powerpc64-unknown-linux-gnu/powerpc64-unknown-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/elfutils-ppc64 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install V=1
+WORKDIR /opt/elfutils-ppc64/usr/powerpc64-unknown-linux-gnu/powerpc64-unknown-linux-gnu/sysroot/usr/lib
 RUN rm *.so *.so.*
 
 FROM crosstool-ng-ppc64le AS elfutils-ppc64le
@@ -1276,12 +1700,24 @@ COPY --from=crosstool-ng-aarch64 \
 ENV PATH=/usr/aarch64-unknown-linux-gnu/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-gcc
+COPY --from=crosstool-ng-arm \
+     /usr/arm-unknown-linux-gnueabi \
+     /usr/arm-unknown-linux-gnueabi
+ENV PATH=/usr/arm-unknown-linux-gnueabi/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabi-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabi-gcc
 COPY --from=crosstool-ng-i686 \
      /usr/i686-unknown-linux-gnu \
      /usr/i686-unknown-linux-gnu
 ENV PATH=/usr/i686-unknown-linux-gnu/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-gcc
+COPY --from=crosstool-ng-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu \
+     /usr/powerpc64-unknown-linux-gnu
+ENV PATH=/usr/powerpc64-unknown-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64-unknown-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64-unknown-linux-gnu-gcc
 COPY --from=crosstool-ng-ppc64le \
      /usr/powerpc64le-unknown-linux-gnu \
      /usr/powerpc64le-unknown-linux-gnu
@@ -1329,6 +1765,27 @@ COPY --from=cp311-cp311-aarch64 \
 COPY --from=cp312-cp312-aarch64 \
      /usr/aarch64-unknown-linux-gnu/cp312-cp312 \
      /usr/aarch64-unknown-linux-gnu/cp312-cp312
+COPY --from=cp36-cp36m-arm \
+     /usr/arm-unknown-linux-gnueabi/cp36-cp36m \
+     /usr/arm-unknown-linux-gnueabi/cp36-cp36m
+COPY --from=cp37-cp37m-arm \
+     /usr/arm-unknown-linux-gnueabi/cp37-cp37m \
+     /usr/arm-unknown-linux-gnueabi/cp37-cp37m
+COPY --from=cp38-cp38-arm \
+     /usr/arm-unknown-linux-gnueabi/cp38-cp38 \
+     /usr/arm-unknown-linux-gnueabi/cp38-cp38
+COPY --from=cp39-cp39-arm \
+     /usr/arm-unknown-linux-gnueabi/cp39-cp39 \
+     /usr/arm-unknown-linux-gnueabi/cp39-cp39
+COPY --from=cp310-cp310-arm \
+     /usr/arm-unknown-linux-gnueabi/cp310-cp310 \
+     /usr/arm-unknown-linux-gnueabi/cp310-cp310
+COPY --from=cp311-cp311-arm \
+     /usr/arm-unknown-linux-gnueabi/cp311-cp311 \
+     /usr/arm-unknown-linux-gnueabi/cp311-cp311
+COPY --from=cp312-cp312-arm \
+     /usr/arm-unknown-linux-gnueabi/cp312-cp312 \
+     /usr/arm-unknown-linux-gnueabi/cp312-cp312
 COPY --from=cp36-cp36m-i686 \
      /usr/i686-unknown-linux-gnu/cp36-cp36m \
      /usr/i686-unknown-linux-gnu/cp36-cp36m
@@ -1350,6 +1807,27 @@ COPY --from=cp311-cp311-i686 \
 COPY --from=cp312-cp312-i686 \
      /usr/i686-unknown-linux-gnu/cp312-cp312 \
      /usr/i686-unknown-linux-gnu/cp312-cp312
+COPY --from=cp36-cp36m-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp36-cp36m \
+     /usr/powerpc64-unknown-linux-gnu/cp36-cp36m
+COPY --from=cp37-cp37m-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp37-cp37m \
+     /usr/powerpc64-unknown-linux-gnu/cp37-cp37m
+COPY --from=cp38-cp38-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp38-cp38 \
+     /usr/powerpc64-unknown-linux-gnu/cp38-cp38
+COPY --from=cp39-cp39-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp39-cp39 \
+     /usr/powerpc64-unknown-linux-gnu/cp39-cp39
+COPY --from=cp310-cp310-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp310-cp310 \
+     /usr/powerpc64-unknown-linux-gnu/cp310-cp310
+COPY --from=cp311-cp311-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp311-cp311 \
+     /usr/powerpc64-unknown-linux-gnu/cp311-cp311
+COPY --from=cp312-cp312-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp312-cp312 \
+     /usr/powerpc64-unknown-linux-gnu/cp312-cp312
 COPY --from=cp36-cp36m-ppc64le \
      /usr/powerpc64le-unknown-linux-gnu/cp36-cp36m \
      /usr/powerpc64le-unknown-linux-gnu/cp36-cp36m
@@ -1414,22 +1892,30 @@ COPY --from=cp312-cp312-x86_64 \
      /usr/x86_64-unknown-linux-gnu/cp312-cp312 \
      /usr/x86_64-unknown-linux-gnu/cp312-cp312
 COPY --from=boost-aarch64 /opt/boost-aarch64/ /
+COPY --from=boost-arm /opt/boost-arm/ /
 COPY --from=boost-i686 /opt/boost-i686/ /
+COPY --from=boost-ppc64 /opt/boost-ppc64/ /
 COPY --from=boost-ppc64le /opt/boost-ppc64le/ /
 COPY --from=boost-s390x /opt/boost-s390x/ /
 COPY --from=boost-x86_64 /opt/boost-x86_64/ /
 COPY --from=capstone-aarch64 /opt/capstone-aarch64/ /
+COPY --from=capstone-arm /opt/capstone-arm/ /
 COPY --from=capstone-i686 /opt/capstone-i686/ /
+COPY --from=capstone-ppc64 /opt/capstone-ppc64/ /
 COPY --from=capstone-ppc64le /opt/capstone-ppc64le/ /
 COPY --from=capstone-s390x /opt/capstone-s390x/ /
 COPY --from=capstone-x86_64 /opt/capstone-x86_64/ /
 COPY --from=zlib-ng-aarch64 /opt/zlib-ng-aarch64/ /
+COPY --from=zlib-ng-arm /opt/zlib-ng-arm/ /
 COPY --from=zlib-ng-i686 /opt/zlib-ng-i686/ /
+COPY --from=zlib-ng-ppc64 /opt/zlib-ng-ppc64/ /
 COPY --from=zlib-ng-ppc64le /opt/zlib-ng-ppc64le/ /
 COPY --from=zlib-ng-s390x /opt/zlib-ng-s390x/ /
 COPY --from=zlib-ng-x86_64 /opt/zlib-ng-x86_64/ /
 COPY --from=elfutils-aarch64 /opt/elfutils-aarch64/ /
+COPY --from=elfutils-arm /opt/elfutils-arm/ /
 COPY --from=elfutils-i686 /opt/elfutils-i686/ /
+COPY --from=elfutils-ppc64 /opt/elfutils-ppc64/ /
 COPY --from=elfutils-ppc64le /opt/elfutils-ppc64le/ /
 COPY --from=elfutils-s390x /opt/elfutils-s390x/ /
 COPY --from=elfutils-x86_64 /opt/elfutils-x86_64/ /

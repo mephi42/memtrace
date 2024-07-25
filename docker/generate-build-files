@@ -15,7 +15,9 @@ def main():
     char_unsigned = "6e5a193816e1"
     arches = (
         ("aarch64", "aarch64-unknown-linux-gnu"),
+        ("arm", "arm-unknown-linux-gnueabi"),
         ("i686", "i686-unknown-linux-gnu"),
+        ("ppc64", "powerpc64-unknown-linux-gnu"),
         ("ppc64le", "powerpc64le-unknown-linux-gnu"),
         ("s390x", "s390x-ibm-linux-gnu"),
         ("x86_64", "x86_64-unknown-linux-gnu"),
