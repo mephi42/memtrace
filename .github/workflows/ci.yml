@@ -15,6 +15,16 @@ jobs:
       with:
         submodules: "true"
 
+    - name: Configure ccache
+      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.ccache
+        key: ${{ runner.os }}
+
     - name: Install packages
       run: export DEBIAN_FRONTEND=noninteractive &&
            sudo apt-get update &&
@@ -37,8 +47,21 @@ jobs:
                make
                ninja-build
 
+    - name: Show ccache stats
+      run: ccache --show-stats --verbose
+
     - name: Native build
       run: PATH=/usr/lib/ccache:$PATH ./ci --skip-repair
 
+    - name: Show ccache stats
+      run: ccache --show-stats --verbose
+
     - name: Cross build
       run: ./ci-docker
+
+    - name: Show ccache stats
+      run: ccache --show-stats --verbose
+
+    - uses: actions/upload-artifact@v4
+      with:
+        path: memtrace/dist/wheelhouse/
