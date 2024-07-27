@@ -91,7 +91,6 @@ def setup_build_venv(python):
 
 
 def repair_wheel(venv, whl, wheel_dir):
-    os.makedirs(wheel_dir, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=wheel_dir) as tmp_wheel_dir:
         subprocess.check_call(
             [
@@ -113,7 +112,7 @@ def repair_wheel(venv, whl, wheel_dir):
         return manylinux_whl
 
 
-def build_wheel(venv, build_type, build_args, wheel_dir):
+def build_wheel(venv, build_type, build_args, wheel_dir, skip_repair):
     with tempfile.TemporaryDirectory() as dist_dir:
         subprocess.check_call(
             [
@@ -129,7 +128,14 @@ def build_wheel(venv, build_type, build_args, wheel_dir):
             cwd=basedir,
         )
         (whl_name,) = os.listdir(dist_dir)
-        return repair_wheel(venv, os.path.join(dist_dir, whl_name), wheel_dir)
+        whl = os.path.join(dist_dir, whl_name)
+        os.makedirs(wheel_dir, exist_ok=True)
+        if skip_repair:
+            result = os.path.join(wheel_dir, whl_name)
+            os.rename(whl, result)
+            return result
+        else:
+            return repair_wheel(venv, whl, wheel_dir)
 
 
 def git_ls_files():
@@ -163,6 +169,7 @@ def main():
     parser.add_argument("--build-type", default="Release")
     parser.add_argument("--python", action="append")
     parser.add_argument("--skip-tests", action="store_true")
+    parser.add_argument("--skip-repair", action="store_true")
     parser.add_argument(
         "--wheel-dir",
         default=os.path.join(basedir, "dist", "wheelhouse"),
@@ -206,7 +213,7 @@ def main():
                     ],
                     cwd=basedir,
                 )
-        build_wheel(venv, args.build_type, build_args, args.wheel_dir)
+        build_wheel(venv, args.build_type, build_args, args.wheel_dir, args.skip_repair)
 
 
 if __name__ == "__main__":

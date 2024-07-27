@@ -15,5 +15,30 @@ jobs:
       with:
         submodules: "true"
 
-    - name: Build and test
+    - name: Install packages
+      run: export DEBIAN_FRONTEND=noninteractive &&
+           sudo apt-get update &&
+           sudo apt-get install -y
+               ccache
+               cmake
+               g++
+               gcc
+               git
+               libboost-dev
+               libboost-python-dev
+               libc6-dev-i386
+               libcapstone-dev
+               libdw-dev
+               python3
+               python3-flake8
+               python3-pip
+               python3-venv
+               quilt
+               make
+               ninja-build
+
+    - name: Native build
+      run: PATH=/usr/lib/ccache:$PATH ./ci --skip-repair
+
+    - name: Cross build
       run: ./ci-docker
