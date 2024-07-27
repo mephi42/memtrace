@@ -62,6 +62,9 @@ jobs:
     - name: Show ccache stats
       run: ccache --show-stats --verbose
 
+    - name: Reset ccache stats
+      run: ccache --zero-stats
+
     - uses: actions/upload-artifact@v4
       with:
         path: dist/wheelhouse/
