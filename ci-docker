@@ -4,6 +4,7 @@ cd "$(dirname "$0")"
 ./in-docker \
     env \
     CC=x86_64-unknown-linux-gnu-gcc \
+    HOST=x86_64-unknown-linux-gnu \
     OBJDUMP=x86_64-unknown-linux-gnu-objdump \
     LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \

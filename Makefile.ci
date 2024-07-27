@@ -5,7 +5,6 @@ define ls_files
 endef
 
 basedir=$(CURDIR)
-uname_m=$(shell uname -m)
 uname=$(shell uname -s)-$(shell uname -m)
 build=$(basedir)/build/$(uname)
 valgrind_src=$(basedir)/valgrind
@@ -18,23 +17,29 @@ valgrind_source_files=\
 	$(call ls_files,$(valgrind_tracer_src))
 valgrind_CFLAGS_Release=-g0
 
+ifeq ($(HOST),)
+configure_flags=
+configure_env=
+else
+configure_env=AR=$(HOST)-ar
+configure_flags=--host=$(HOST)
+endif
+
 .PHONY: all
 all: $(valgrind)
 
 $(valgrind): $(valgrind_build)/Makefile $(valgrind_source_files)
 	cd $(valgrind_build) && $(MAKE) install
 
-$(valgrind_build)/Makefile: \
-		$(valgrind_src)/configure \
-		$(valgrind_tracer_src)/Makefile.in
+$(valgrind_build)/Makefile: $(valgrind_src)/configure
 	mkdir -p $(valgrind_build) && \
 		cd $(valgrind_build) && \
-		CFLAGS=$(valgrind_CFLAGS_$(BUILD_TYPE)) AR=x86_64-unknown-linux-gnu-ar $(valgrind_src)/configure \
+		CFLAGS=$(valgrind_CFLAGS_$(BUILD_TYPE)) $(configure_env) $(valgrind_src)/configure \
 			--prefix=$(valgrind_install) \
 			--with-mpicc=false \
-			--host=x86_64-unknown-linux-gnu
+			$(configure_flags)
 
-$(valgrind_src)/configure $(valgrind_tracer_src)/Makefile.in: \
+$(valgrind_src)/configure: \
 		$(valgrind_tracer_src)/Makefile.am \
 		$(valgrind_src)/configure.ac \
 		$(valgrind_src)/Makefile.am
