@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e -u -x -o pipefail
+cd "$(dirname "$0")"/valgrind
+if QUILT_PATCHES=../valgrind-patches quilt push -a; then
+    :
+else
+    err=$?
+    if [ "$err" -ne 2 ]; then
+        exit "$err"
+    fi
+fi

@@ -42,5 +42,10 @@ $(valgrind_build)/Makefile: $(valgrind_src)/configure
 $(valgrind_src)/configure: \
 		$(valgrind_tracer_src)/Makefile.am \
 		$(valgrind_src)/configure.ac \
-		$(valgrind_src)/Makefile.am
+		$(valgrind_src)/Makefile.am | \
+		patch-valgrind
 	cd $(valgrind_src) && ./autogen.sh
+
+.PHONY: patch-valgrind
+patch-valgrind:
+	./patch-valgrind
