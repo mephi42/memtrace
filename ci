@@ -19,20 +19,6 @@ nproc = multiprocessing.cpu_count()
 run_in_venv = os.path.join(basedir, "run-in-venv")
 
 
-def patch_valgrind():
-    quilt = ["quilt", "push", "-a"]
-    returncode = subprocess.call(
-        quilt,
-        env={
-            **os.environ,
-            "QUILT_PATCHES": os.path.join(basedir, "valgrind-patches"),
-        },
-        cwd=valgrind_src,
-    )
-    if returncode != 0 and returncode != 2:
-        raise subprocess.CalledProcessError(returncode=returncode, cmd=quilt)
-
-
 def dist_tracer():
     files = []
     for pattern in (
@@ -177,7 +163,6 @@ def main():
     args, build_args = parser.parse_known_args()
     if args.python is None:
         args.python = ("python3",)
-    patch_valgrind()
     subprocess.check_call(
         [
             "make",
