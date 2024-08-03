@@ -31,10 +31,3 @@ diff --git a/configure.ac b/configure.ac
  ])
  AC_CONFIG_FILES([coregrind/link_tool_exe_linux],
                  [chmod +x coregrind/link_tool_exe_linux])
-diff --git a/memtrace b/memtrace
-new file mode 120000
---- /dev/null
-+++ b/memtrace
-@@ -0,0 +1 @@
-+../valgrind-tracer
-\ No newline at end of file
