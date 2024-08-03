@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.11.0)
+cmake_minimum_required(VERSION 3.12)
 project(_memtrace)
 string(REPLACE "." ";" _VERSION "${PYTHON_VERSION_STRING}")
 list(GET _VERSION 0 PYTHON_VERSION_MAJOR)
@@ -26,7 +26,69 @@ target_compile_options(
             -fstack-protector-strong
             -D_FORTIFY_SOURCE=2
 )
-set(uname ${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR})
 target_link_libraries(_memtrace ${Boost_LIBRARIES} capstone dw elf z)
 python_extension_module(_memtrace)
 install(TARGETS _memtrace LIBRARY DESTINATION memtrace)
+
+add_custom_target(
+    patch_valgrind
+    COMMAND ${CMAKE_SOURCE_DIR}/patch-valgrind
+)
+set(valgrind_src ${CMAKE_SOURCE_DIR}/valgrind)
+set(valgrind_tracer_src ${CMAKE_SOURCE_DIR}/valgrind-tracer)
+set(uname ${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR})
+set(build ${CMAKE_SOURCE_DIR}/build/${uname})
+set(valgrind_build ${build}/valgrind/${CMAKE_BUILD_TYPE})
+set(valgrind_install ${CMAKE_SOURCE_DIR}/memtrace/tracer/${uname})
+set(valgrind ${valgrind_install}/bin/valgrind)
+add_custom_command(
+    OUTPUT ${valgrind_src}/configure
+    COMMAND ./autogen.sh
+    DEPENDS patch_valgrind
+            ${valgrind_src}/configure.ac
+            ${valgrind_src}/Makefile.am
+            ${valgrind_tracer_src}/Makefile.am
+    WORKING_DIRECTORY ${valgrind_src}
+)
+execute_process(
+    COMMAND ${CMAKE_C_COMPILER} -dumpmachine
+    RESULT_VARIABLE err
+    OUTPUT_VARIABLE host_triple
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT err EQUAL 0)
+    message(SEND_ERROR "Could not determine the host triple")
+endif()
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(valgrind_cflags -g0)
+endif()
+add_custom_command(
+    OUTPUT ${valgrind_build}/Makefile
+    COMMAND env
+                AR=${CMAKE_AR}
+                CFLAGS=${valgrind_cflags}
+                ${valgrind_src}/configure
+                    --host=${host_triple}
+                    --prefix=${valgrind_install}
+                    --with-mpicc=false
+    DEPENDS ${valgrind_src}/configure
+    WORKING_DIRECTORY ${valgrind_build}
+)
+include(ProcessorCount)
+ProcessorCount(nproc)
+if(nproc EQUAL 0)
+  set(nproc 1)
+endif()
+file(
+    GLOB_RECURSE valgrind_source_files
+    LIST_DIRECTORIES false
+    ${valgrind_src}/*
+    ${valgrind_tracer_src}/*
+)
+add_custom_command(
+    OUTPUT ${valgrind}
+    COMMAND make -j${nproc} install
+    DEPENDS ${valgrind_build}/Makefile ${valgrind_source_files}
+    WORKING_DIRECTORY ${valgrind_build}
+)
+add_custom_target(valgrind ALL DEPENDS ${valgrind})
