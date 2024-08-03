@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import glob
 import multiprocessing
 import os
 import platform
@@ -13,38 +12,8 @@ uname_m = platform.machine()
 uname = f"{platform.system()}-{uname_m}"
 build = os.path.join(basedir, "build", uname)
 tracer_build = os.path.join(build, "valgrind")
-tracer_install = os.path.join(tracer_build, "install")
-tracer_dist = os.path.join(basedir, "memtrace", "tracer", uname)
 nproc = multiprocessing.cpu_count()
 run_in_venv = os.path.join(basedir, "run-in-venv")
-
-
-def dist_tracer():
-    files = []
-    for pattern in (
-        "bin/valgrind",
-        "libexec/valgrind/memtrace-*",
-        "libexec/valgrind/vgpreload_core-*.so",
-    ):
-        for file in glob.glob(os.path.join(tracer_install, pattern)):
-            files.append(os.path.relpath(file, tracer_install))
-    os.makedirs(tracer_dist, exist_ok=True)
-    tar = subprocess.Popen(
-        args=["tar", "-c", *files],
-        cwd=tracer_install,
-        stdout=subprocess.PIPE,
-    )
-    untar = subprocess.Popen(
-        args=["tar", "-x"],
-        cwd=tracer_dist,
-        stdin=tar.stdout,
-    )
-    ret = tar.wait()
-    if ret != 0:
-        raise subprocess.CalledProcessError(ret, tar.args)
-    ret = untar.wait()
-    if ret != 0:
-        raise subprocess.CalledProcessError(ret, untar.args)
 
 
 def get_python_version(python):
@@ -172,7 +141,6 @@ def main():
             f"BUILD_TYPE={args.build_type}",
         ]
     )
-    dist_tracer()
     for python in args.python:
         venv = setup_build_venv(python)
         subprocess.check_call(
