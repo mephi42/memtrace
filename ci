@@ -200,19 +200,21 @@ def main():
             cwd=basedir,
         )
         if not args.skip_tests:
-            for verb in ("build", "test"):
-                subprocess.check_call(
-                    [
-                        run_in_venv,
-                        venv,
-                        "python",
-                        "setup.py",
-                        verb,
-                        f"--build-type={args.build_type}",
-                        *build_args,
-                    ],
-                    cwd=basedir,
-                )
+            subprocess.check_call(
+                [
+                    run_in_venv,
+                    venv,
+                    "python",
+                    "setup.py",
+                    "build",
+                    f"--build-type={args.build_type}",
+                    *build_args,
+                ],
+                cwd=basedir,
+            )
+            subprocess.check_call(
+                [run_in_venv, venv, "python", "-m", "unittest", "discover"]
+            )
         build_wheel(venv, args.build_type, build_args, args.wheel_dir, args.skip_repair)
 
 
