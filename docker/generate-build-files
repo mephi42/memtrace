@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-from configparser import ConfigParser
 import os
-import shlex
 
 import jinja2
+
+from config import load_config
 
 ARCH_PREFIX = "arch."
 COMMIT_PREFIX = "commit."
@@ -14,37 +14,10 @@ def main():
     basedir = os.path.dirname(__file__)
     with open(os.path.join(basedir, "Dockerfile.j2")) as fp:
         template = jinja2.Template(fp.read(), keep_trailing_newline=True)
-    arches = []
-    commits = {}
-    pythons = []
-    config = ConfigParser()
-    config.read(os.path.join(basedir, "images.ini"))
-    for section_name in config.sections():
-        section = config[section_name]
-        if section_name.startswith(ARCH_PREFIX):
-            arch = section_name[len(ARCH_PREFIX) :]
-            arches.append((arch, section["triple"]))
-        elif section_name.startswith(COMMIT_PREFIX):
-            commits[section_name[len(COMMIT_PREFIX) :]] = section["id"]
-        elif section_name.startswith(PYTHON_PREFIX):
-            pythons.append(
-                (
-                    section_name[len(PYTHON_PREFIX) :],
-                    section["name_tag"],
-                    section["git_tag"],
-                    shlex.split(section.get("configure_flags", "")),
-                    section["includes"],
-                    [
-                        commits[commit_name]
-                        for commit_name in section.get("commits", "").split()
-                    ],
-                )
-            )
-        else:
-            raise RuntimeError("Unsupported section: {}".format(section_name))
+    config = load_config()
     with open(os.path.join(basedir, "image", "Dockerfile"), "w") as fp:
-        fp.write(template.render(arches=arches, pythons=pythons))
-    for arch, triple in arches:
+        fp.write(template.render(arches=config.arches, pythons=config.pythons))
+    for arch, triple in config.arches:
         user_config_dir = os.path.join(
             basedir, "image", "boost", arch, "tools", "build", "src"
         )
@@ -55,7 +28,7 @@ def main():
             fp.write(" : {}".format(arch))
             fp.write(" : {}-g++".format(triple))
             fp.write(" ;\n")
-            for version, name_tag, _, _, includes, _ in pythons:
+            for version, name_tag, _, _, includes, _ in config.pythons:
                 fp.write("using python")
                 # version
                 fp.write(" : {}".format(version))
