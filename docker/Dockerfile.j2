@@ -3,6 +3,7 @@
 
 ARG boost_version=1_85_0
 ARG capstone_version=4.0.2
+ARG crosstool_ng_version=1.26.0
 ARG elfutils_version=0.188
 ARG zlib_ng_version=2.2.1
 
@@ -34,8 +35,9 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         texinfo \
         unzip \
         xz-utils
+ARG crosstool_ng_version
 RUN git clone \
-        --branch=crosstool-ng-1.26.0 \
+        --branch=crosstool-ng-${crosstool_ng_version} \
         --depth=1 \
         https://github.com/crosstool-ng/crosstool-ng.git \
         /usr/src/crosstool-ng
@@ -225,7 +227,7 @@ WORKDIR /opt/elfutils-{{ arch }}/usr/{{ triple }}/{{ triple }}/sysroot/usr/lib
 RUN rm *.so *.so.*
 {%- endfor %}
 
-FROM base
+FROM base AS final-common
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         automake \
         ccache \
@@ -235,34 +237,27 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         ninja-build \
         patchelf \
         quilt
+ENV PATH=/usr/lib/ccache:$PATH
+{%- for _, name_tag, _, _, _, _ in pythons %}
+COPY --from={{ name_tag }} /opt/{{ name_tag }} /opt/{{ name_tag }}
+{%- endfor %}
+
 {%- for arch, triple in arches %}
+
+FROM final-common AS final-{{ arch }}
 COPY --from=crosstool-ng-{{ arch }} \
      /usr/{{ triple }} \
      /usr/{{ triple }}
 ENV PATH=/usr/{{ triple }}/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-gcc
-{%- endfor %}
-ENV PATH=/usr/lib/ccache:$PATH
-{%- for _, name_tag, _, _, _, _ in pythons %}
-COPY --from={{ name_tag }} /opt/{{ name_tag }} /opt/{{ name_tag }}
-{%- endfor %}
-{%- for arch, triple in arches %}
 {%- for _, name_tag, _, _, _, _ in pythons %}
 COPY --from={{ name_tag }}-{{ arch }} \
      /usr/{{ triple }}/{{ name_tag }} \
      /usr/{{ triple }}/{{ name_tag }}
 {%- endfor %}
-{%- endfor %}
-{%- for arch, triple in arches %}
 COPY --from=boost-{{ arch }} /opt/boost-{{ arch }}/ /
-{%- endfor %}
-{%- for arch, triple in arches %}
 COPY --from=capstone-{{ arch }} /opt/capstone-{{ arch }}/ /
-{%- endfor %}
-{%- for arch, triple in arches %}
 COPY --from=zlib-ng-{{ arch }} /opt/zlib-ng-{{ arch }}/ /
-{%- endfor %}
-{%- for arch, triple in arches %}
 COPY --from=elfutils-{{ arch }} /opt/elfutils-{{ arch }}/ /
 {%- endfor %}

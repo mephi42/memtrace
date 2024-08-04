@@ -3,6 +3,7 @@
 
 ARG boost_version=1_85_0
 ARG capstone_version=4.0.2
+ARG crosstool_ng_version=1.26.0
 ARG elfutils_version=0.188
 ARG zlib_ng_version=2.2.1
 
@@ -34,8 +35,9 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         texinfo \
         unzip \
         xz-utils
+ARG crosstool_ng_version
 RUN git clone \
-        --branch=crosstool-ng-1.26.0 \
+        --branch=crosstool-ng-${crosstool_ng_version} \
         --depth=1 \
         https://github.com/crosstool-ng/crosstool-ng.git \
         /usr/src/crosstool-ng
@@ -1684,7 +1686,7 @@ RUN make \
 WORKDIR /opt/elfutils-x86_64/usr/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr/lib
 RUN rm *.so *.so.*
 
-FROM base
+FROM base AS final-common
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         automake \
         ccache \
@@ -1694,48 +1696,6 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         ninja-build \
         patchelf \
         quilt
-COPY --from=crosstool-ng-aarch64 \
-     /usr/aarch64-unknown-linux-gnu \
-     /usr/aarch64-unknown-linux-gnu
-ENV PATH=/usr/aarch64-unknown-linux-gnu/bin:$PATH
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-g++
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-gcc
-COPY --from=crosstool-ng-arm \
-     /usr/arm-unknown-linux-gnueabi \
-     /usr/arm-unknown-linux-gnueabi
-ENV PATH=/usr/arm-unknown-linux-gnueabi/bin:$PATH
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabi-g++
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabi-gcc
-COPY --from=crosstool-ng-i686 \
-     /usr/i686-unknown-linux-gnu \
-     /usr/i686-unknown-linux-gnu
-ENV PATH=/usr/i686-unknown-linux-gnu/bin:$PATH
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-g++
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-gcc
-COPY --from=crosstool-ng-ppc64 \
-     /usr/powerpc64-unknown-linux-gnu \
-     /usr/powerpc64-unknown-linux-gnu
-ENV PATH=/usr/powerpc64-unknown-linux-gnu/bin:$PATH
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64-unknown-linux-gnu-g++
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64-unknown-linux-gnu-gcc
-COPY --from=crosstool-ng-ppc64le \
-     /usr/powerpc64le-unknown-linux-gnu \
-     /usr/powerpc64le-unknown-linux-gnu
-ENV PATH=/usr/powerpc64le-unknown-linux-gnu/bin:$PATH
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64le-unknown-linux-gnu-g++
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64le-unknown-linux-gnu-gcc
-COPY --from=crosstool-ng-s390x \
-     /usr/s390x-ibm-linux-gnu \
-     /usr/s390x-ibm-linux-gnu
-ENV PATH=/usr/s390x-ibm-linux-gnu/bin:$PATH
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/s390x-ibm-linux-gnu-g++
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/s390x-ibm-linux-gnu-gcc
-COPY --from=crosstool-ng-x86_64 \
-     /usr/x86_64-unknown-linux-gnu \
-     /usr/x86_64-unknown-linux-gnu
-ENV PATH=/usr/x86_64-unknown-linux-gnu/bin:$PATH
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/x86_64-unknown-linux-gnu-g++
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/x86_64-unknown-linux-gnu-gcc
 ENV PATH=/usr/lib/ccache:$PATH
 COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
 COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
@@ -1744,6 +1704,14 @@ COPY --from=cp39-cp39 /opt/cp39-cp39 /opt/cp39-cp39
 COPY --from=cp310-cp310 /opt/cp310-cp310 /opt/cp310-cp310
 COPY --from=cp311-cp311 /opt/cp311-cp311 /opt/cp311-cp311
 COPY --from=cp312-cp312 /opt/cp312-cp312 /opt/cp312-cp312
+
+FROM final-common AS final-aarch64
+COPY --from=crosstool-ng-aarch64 \
+     /usr/aarch64-unknown-linux-gnu \
+     /usr/aarch64-unknown-linux-gnu
+ENV PATH=/usr/aarch64-unknown-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-gcc
 COPY --from=cp36-cp36m-aarch64 \
      /usr/aarch64-unknown-linux-gnu/cp36-cp36m \
      /usr/aarch64-unknown-linux-gnu/cp36-cp36m
@@ -1765,6 +1733,18 @@ COPY --from=cp311-cp311-aarch64 \
 COPY --from=cp312-cp312-aarch64 \
      /usr/aarch64-unknown-linux-gnu/cp312-cp312 \
      /usr/aarch64-unknown-linux-gnu/cp312-cp312
+COPY --from=boost-aarch64 /opt/boost-aarch64/ /
+COPY --from=capstone-aarch64 /opt/capstone-aarch64/ /
+COPY --from=zlib-ng-aarch64 /opt/zlib-ng-aarch64/ /
+COPY --from=elfutils-aarch64 /opt/elfutils-aarch64/ /
+
+FROM final-common AS final-arm
+COPY --from=crosstool-ng-arm \
+     /usr/arm-unknown-linux-gnueabi \
+     /usr/arm-unknown-linux-gnueabi
+ENV PATH=/usr/arm-unknown-linux-gnueabi/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabi-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabi-gcc
 COPY --from=cp36-cp36m-arm \
      /usr/arm-unknown-linux-gnueabi/cp36-cp36m \
      /usr/arm-unknown-linux-gnueabi/cp36-cp36m
@@ -1786,6 +1766,18 @@ COPY --from=cp311-cp311-arm \
 COPY --from=cp312-cp312-arm \
      /usr/arm-unknown-linux-gnueabi/cp312-cp312 \
      /usr/arm-unknown-linux-gnueabi/cp312-cp312
+COPY --from=boost-arm /opt/boost-arm/ /
+COPY --from=capstone-arm /opt/capstone-arm/ /
+COPY --from=zlib-ng-arm /opt/zlib-ng-arm/ /
+COPY --from=elfutils-arm /opt/elfutils-arm/ /
+
+FROM final-common AS final-i686
+COPY --from=crosstool-ng-i686 \
+     /usr/i686-unknown-linux-gnu \
+     /usr/i686-unknown-linux-gnu
+ENV PATH=/usr/i686-unknown-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-gcc
 COPY --from=cp36-cp36m-i686 \
      /usr/i686-unknown-linux-gnu/cp36-cp36m \
      /usr/i686-unknown-linux-gnu/cp36-cp36m
@@ -1807,6 +1799,18 @@ COPY --from=cp311-cp311-i686 \
 COPY --from=cp312-cp312-i686 \
      /usr/i686-unknown-linux-gnu/cp312-cp312 \
      /usr/i686-unknown-linux-gnu/cp312-cp312
+COPY --from=boost-i686 /opt/boost-i686/ /
+COPY --from=capstone-i686 /opt/capstone-i686/ /
+COPY --from=zlib-ng-i686 /opt/zlib-ng-i686/ /
+COPY --from=elfutils-i686 /opt/elfutils-i686/ /
+
+FROM final-common AS final-ppc64
+COPY --from=crosstool-ng-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu \
+     /usr/powerpc64-unknown-linux-gnu
+ENV PATH=/usr/powerpc64-unknown-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64-unknown-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64-unknown-linux-gnu-gcc
 COPY --from=cp36-cp36m-ppc64 \
      /usr/powerpc64-unknown-linux-gnu/cp36-cp36m \
      /usr/powerpc64-unknown-linux-gnu/cp36-cp36m
@@ -1828,6 +1832,18 @@ COPY --from=cp311-cp311-ppc64 \
 COPY --from=cp312-cp312-ppc64 \
      /usr/powerpc64-unknown-linux-gnu/cp312-cp312 \
      /usr/powerpc64-unknown-linux-gnu/cp312-cp312
+COPY --from=boost-ppc64 /opt/boost-ppc64/ /
+COPY --from=capstone-ppc64 /opt/capstone-ppc64/ /
+COPY --from=zlib-ng-ppc64 /opt/zlib-ng-ppc64/ /
+COPY --from=elfutils-ppc64 /opt/elfutils-ppc64/ /
+
+FROM final-common AS final-ppc64le
+COPY --from=crosstool-ng-ppc64le \
+     /usr/powerpc64le-unknown-linux-gnu \
+     /usr/powerpc64le-unknown-linux-gnu
+ENV PATH=/usr/powerpc64le-unknown-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64le-unknown-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64le-unknown-linux-gnu-gcc
 COPY --from=cp36-cp36m-ppc64le \
      /usr/powerpc64le-unknown-linux-gnu/cp36-cp36m \
      /usr/powerpc64le-unknown-linux-gnu/cp36-cp36m
@@ -1849,6 +1865,18 @@ COPY --from=cp311-cp311-ppc64le \
 COPY --from=cp312-cp312-ppc64le \
      /usr/powerpc64le-unknown-linux-gnu/cp312-cp312 \
      /usr/powerpc64le-unknown-linux-gnu/cp312-cp312
+COPY --from=boost-ppc64le /opt/boost-ppc64le/ /
+COPY --from=capstone-ppc64le /opt/capstone-ppc64le/ /
+COPY --from=zlib-ng-ppc64le /opt/zlib-ng-ppc64le/ /
+COPY --from=elfutils-ppc64le /opt/elfutils-ppc64le/ /
+
+FROM final-common AS final-s390x
+COPY --from=crosstool-ng-s390x \
+     /usr/s390x-ibm-linux-gnu \
+     /usr/s390x-ibm-linux-gnu
+ENV PATH=/usr/s390x-ibm-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/s390x-ibm-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/s390x-ibm-linux-gnu-gcc
 COPY --from=cp36-cp36m-s390x \
      /usr/s390x-ibm-linux-gnu/cp36-cp36m \
      /usr/s390x-ibm-linux-gnu/cp36-cp36m
@@ -1870,6 +1898,18 @@ COPY --from=cp311-cp311-s390x \
 COPY --from=cp312-cp312-s390x \
      /usr/s390x-ibm-linux-gnu/cp312-cp312 \
      /usr/s390x-ibm-linux-gnu/cp312-cp312
+COPY --from=boost-s390x /opt/boost-s390x/ /
+COPY --from=capstone-s390x /opt/capstone-s390x/ /
+COPY --from=zlib-ng-s390x /opt/zlib-ng-s390x/ /
+COPY --from=elfutils-s390x /opt/elfutils-s390x/ /
+
+FROM final-common AS final-x86_64
+COPY --from=crosstool-ng-x86_64 \
+     /usr/x86_64-unknown-linux-gnu \
+     /usr/x86_64-unknown-linux-gnu
+ENV PATH=/usr/x86_64-unknown-linux-gnu/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/x86_64-unknown-linux-gnu-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/x86_64-unknown-linux-gnu-gcc
 COPY --from=cp36-cp36m-x86_64 \
      /usr/x86_64-unknown-linux-gnu/cp36-cp36m \
      /usr/x86_64-unknown-linux-gnu/cp36-cp36m
@@ -1891,31 +1931,7 @@ COPY --from=cp311-cp311-x86_64 \
 COPY --from=cp312-cp312-x86_64 \
      /usr/x86_64-unknown-linux-gnu/cp312-cp312 \
      /usr/x86_64-unknown-linux-gnu/cp312-cp312
-COPY --from=boost-aarch64 /opt/boost-aarch64/ /
-COPY --from=boost-arm /opt/boost-arm/ /
-COPY --from=boost-i686 /opt/boost-i686/ /
-COPY --from=boost-ppc64 /opt/boost-ppc64/ /
-COPY --from=boost-ppc64le /opt/boost-ppc64le/ /
-COPY --from=boost-s390x /opt/boost-s390x/ /
 COPY --from=boost-x86_64 /opt/boost-x86_64/ /
-COPY --from=capstone-aarch64 /opt/capstone-aarch64/ /
-COPY --from=capstone-arm /opt/capstone-arm/ /
-COPY --from=capstone-i686 /opt/capstone-i686/ /
-COPY --from=capstone-ppc64 /opt/capstone-ppc64/ /
-COPY --from=capstone-ppc64le /opt/capstone-ppc64le/ /
-COPY --from=capstone-s390x /opt/capstone-s390x/ /
 COPY --from=capstone-x86_64 /opt/capstone-x86_64/ /
-COPY --from=zlib-ng-aarch64 /opt/zlib-ng-aarch64/ /
-COPY --from=zlib-ng-arm /opt/zlib-ng-arm/ /
-COPY --from=zlib-ng-i686 /opt/zlib-ng-i686/ /
-COPY --from=zlib-ng-ppc64 /opt/zlib-ng-ppc64/ /
-COPY --from=zlib-ng-ppc64le /opt/zlib-ng-ppc64le/ /
-COPY --from=zlib-ng-s390x /opt/zlib-ng-s390x/ /
 COPY --from=zlib-ng-x86_64 /opt/zlib-ng-x86_64/ /
-COPY --from=elfutils-aarch64 /opt/elfutils-aarch64/ /
-COPY --from=elfutils-arm /opt/elfutils-arm/ /
-COPY --from=elfutils-i686 /opt/elfutils-i686/ /
-COPY --from=elfutils-ppc64 /opt/elfutils-ppc64/ /
-COPY --from=elfutils-ppc64le /opt/elfutils-ppc64le/ /
-COPY --from=elfutils-s390x /opt/elfutils-s390x/ /
 COPY --from=elfutils-x86_64 /opt/elfutils-x86_64/ /
