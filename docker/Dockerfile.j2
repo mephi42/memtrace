@@ -238,9 +238,6 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         patchelf \
         quilt
 ENV PATH=/usr/lib/ccache:$PATH
-{%- for _, name_tag, _, _, _, _ in pythons %}
-COPY --from={{ name_tag }} /opt/{{ name_tag }} /opt/{{ name_tag }}
-{%- endfor %}
 
 {%- for arch, triple in arches %}
 
@@ -251,13 +248,17 @@ COPY --from=crosstool-ng-{{ arch }} \
 ENV PATH=/usr/{{ triple }}/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-gcc
+COPY --from=boost-{{ arch }} /opt/boost-{{ arch }}/ /
+COPY --from=capstone-{{ arch }} /opt/capstone-{{ arch }}/ /
+COPY --from=elfutils-{{ arch }} /opt/elfutils-{{ arch }}/ /
+COPY --from=zlib-ng-{{ arch }} /opt/zlib-ng-{{ arch }}/ /
+
 {%- for _, name_tag, _, _, _, _ in pythons %}
+
+FROM final-{{ arch }} AS final-{{ arch }}-{{ name_tag }}
+COPY --from={{ name_tag }} /opt/{{ name_tag }} /opt/{{ name_tag }}
 COPY --from={{ name_tag }}-{{ arch }} \
      /usr/{{ triple }}/{{ name_tag }} \
      /usr/{{ triple }}/{{ name_tag }}
 {%- endfor %}
-COPY --from=boost-{{ arch }} /opt/boost-{{ arch }}/ /
-COPY --from=capstone-{{ arch }} /opt/capstone-{{ arch }}/ /
-COPY --from=zlib-ng-{{ arch }} /opt/zlib-ng-{{ arch }}/ /
-COPY --from=elfutils-{{ arch }} /opt/elfutils-{{ arch }}/ /
 {%- endfor %}
