@@ -9,7 +9,7 @@ from config import load_config
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument("--deploy")
+    parser.add_argument("--deploy", action="store_true")
     args, rest = parser.parse_known_args()
     basedir = os.path.dirname(__file__)
     rev = (
@@ -21,18 +21,20 @@ def main():
         .decode()
     )
     date = datetime.now().strftime("%Y-%m-%d")
-    for arch, _ in load_config().arches:
-        tag = f"mephi42/memtrace-build-{arch}:{date}-{rev}"
-        docker_build_args = [
-            "docker",
-            "build",
-            f"--tag={tag}",
-            f"--target=final-{arch}",
-            os.path.join(basedir, "image"),
-        ]
-        subprocess.check_call(docker_build_args + rest)
-        if args.deploy:
-            subprocess.check_call(["docker", "push", tag])
+    config = load_config()
+    for arch, _ in config.arches:
+        for _, name_tag, _, _, _, _ in config.pythons:
+            tag = f"mephi42/memtrace-build-{arch}-{name_tag}:{date}-{rev}"
+            docker_build_args = [
+                "docker",
+                "build",
+                f"--tag={tag}",
+                f"--target=final-{arch}-{name_tag}",
+                os.path.join(basedir, "image"),
+            ]
+            subprocess.check_call(docker_build_args + rest)
+            if args.deploy:
+                subprocess.check_call(["docker", "push", tag])
 
 
 if __name__ == "__main__":
