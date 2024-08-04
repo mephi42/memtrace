@@ -7,44 +7,49 @@ import subprocess
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument('--version', default='2024-07-24-2f35a2dc5')
+    parser.add_argument("--arch", default="x86_64")
+    parser.add_argument("--python-version", default="cp36-cp36m")
+    parser.add_argument("--version", default="2024-08-04-d7c79c819")
     args, rest = parser.parse_known_args()
+    if rest[:1] == ["--"]:
+        del rest[0]
     basedir = os.path.dirname(os.path.realpath(__file__))
-    local_build = os.path.join(basedir, 'build.docker')
-    container_build = os.path.join(basedir, 'build')
+    local_build = os.path.join(basedir, "build.docker")
+    container_build = os.path.join(basedir, "build")
     os.makedirs(local_build, exist_ok=True)
     # Create directory at container path as well, otherwise docker will create
     # it for us with root:root ownership.
     os.makedirs(container_build, exist_ok=True)
-    local_ccache = os.path.expanduser('~/.ccache')
-    container_ccache = '/var/cache/ccache'
+    local_ccache = os.path.expanduser("~/.ccache")
+    container_ccache = "/var/cache/ccache"
     os.makedirs(local_ccache, exist_ok=True)
-    local_pip_cache = os.path.expanduser('~/.cache/pip')
-    container_pip_cache = '/var/cache/pip'
+    local_pip_cache = os.path.expanduser("~/.cache/pip")
+    container_pip_cache = "/var/cache/pip"
     os.makedirs(local_pip_cache, exist_ok=True)
-    local_skbuild = os.path.join(basedir, '_skbuild.docker')
-    container_skbuild = os.path.join(basedir, '_skbuild')
+    local_skbuild = os.path.join(basedir, "_skbuild.docker")
+    container_skbuild = os.path.join(basedir, "_skbuild")
     os.makedirs(local_skbuild, exist_ok=True)
     os.makedirs(container_skbuild, exist_ok=True)
     docker_run_args = [
-        'docker', 'run',
-        f'--env=CCACHE_DIR={container_ccache}',
-        f'--env=PIP_CACHE_DIR={container_pip_cache}',
-        '--interactive',
-        '--rm',
-        *(('--tty',) if os.isatty(sys.stdin.fileno()) else ()),
-        f'--user={os.getuid()}:{os.getgid()}',
-        f'--volume={basedir}:{basedir}:z',
-        f'--volume={local_build}:{container_build}:z',
-        f'--volume={local_ccache}:{container_ccache}:z',
-        f'--volume={local_pip_cache}:{container_pip_cache}:z',
-        f'--volume={local_skbuild}:{container_skbuild}:z',
-        f'--workdir={basedir}',
-        f'mephi42/memtrace-build:{args.version}',
+        "docker",
+        "run",
+        f"--env=CCACHE_DIR={container_ccache}",
+        f"--env=PIP_CACHE_DIR={container_pip_cache}",
+        "--interactive",
+        "--rm",
+        *(("--tty",) if os.isatty(sys.stdin.fileno()) else ()),
+        f"--user={os.getuid()}:{os.getgid()}",
+        f"--volume={basedir}:{basedir}:z",
+        f"--volume={local_build}:{container_build}:z",
+        f"--volume={local_ccache}:{container_ccache}:z",
+        f"--volume={local_pip_cache}:{container_pip_cache}:z",
+        f"--volume={local_skbuild}:{container_skbuild}:z",
+        f"--workdir={basedir}",
+        f"mephi42/memtrace-build-{args.arch}-{args.python_version}:{args.version}",
         *rest,
     ]
     subprocess.check_call(docker_run_args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

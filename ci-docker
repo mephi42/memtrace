@@ -1,22 +1,39 @@
-#!/bin/sh
-set -e -u -x
-cd "$(dirname "$0")"
-./in-docker \
-    env \
-    CC=x86_64-unknown-linux-gnu-gcc \
-    HOST=x86_64-unknown-linux-gnu \
-    OBJDUMP=x86_64-unknown-linux-gnu-objdump \
-    LC_ALL=C.UTF-8 \
-    LANG=C.UTF-8 \
-    /opt/cp36-cp36m/bin/python3 \
-    ci \
-    --python=/opt/cp36-cp36m/bin/python3 \
-    --python=/opt/cp37-cp37m/bin/python3 \
-    --python=/opt/cp38-cp38/bin/python3 \
-    --python=/opt/cp39-cp39/bin/python3 \
-    --python=/opt/cp310-cp310/bin/python3 \
-    --python=/opt/cp311-cp311/bin/python3 \
-    --python=/opt/cp312-cp312/bin/python3 \
-    -DBoost_USE_STATIC_LIBS=ON \
-    -DCMAKE_MODULE_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
-    "$@"
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+import os
+import subprocess
+
+from docker.config import load_config
+
+
+def main():
+    parser = ArgumentParser()
+    _, rest = parser.parse_known_args()
+    basedir = os.path.dirname(__file__)
+    config = load_config()
+    for _, name_tag, _, _, _, _ in config.pythons:
+        subprocess.check_call(
+            [
+                "./in-docker",
+                "--arch=x86_64",
+                f"--python-version={name_tag}",
+                "--",
+                "env",
+                "CC=x86_64-unknown-linux-gnu-gcc",
+                "HOST=x86_64-unknown-linux-gnu",
+                "OBJDUMP=x86_64-unknown-linux-gnu-objdump",
+                "LC_ALL=C.UTF-8",
+                "LANG=C.UTF-8",
+                f"/opt/{name_tag}/bin/python3",
+                "ci",
+                f"--python=/opt/{name_tag}/bin/python3",
+                "-DBoost_USE_STATIC_LIBS=ON",
+                "-DCMAKE_MODULE_LINKER_FLAGS=-static-libgcc -static-libstdc++",
+            ]
+            + rest,
+            cwd=basedir,
+        )
+
+
+if __name__ == "__main__":
+    main()
