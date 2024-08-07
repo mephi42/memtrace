@@ -237,7 +237,6 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         ninja-build \
         patchelf \
         quilt
-ENV PATH=/usr/lib/ccache:$PATH
 
 {%- for arch, triple in arches %}
 
@@ -245,7 +244,7 @@ FROM final-common AS final-{{ arch }}
 COPY --from=crosstool-ng-{{ arch }} \
      /usr/{{ triple }} \
      /usr/{{ triple }}
-ENV PATH=/usr/{{ triple }}/bin:$PATH
+ENV PATH=/usr/lib/ccache:/usr/{{ triple }}/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-gcc
 COPY --from=boost-{{ arch }} /opt/boost-{{ arch }}/ /
