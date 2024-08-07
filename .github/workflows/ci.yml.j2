@@ -1,0 +1,89 @@
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+name: Continuous integration
+
+{%- set steps_pre %}
+    - uses: actions/checkout@v4
+      with:
+        submodules: "true"
+
+    - name: Configure ccache
+      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.ccache
+        key: {% raw %}${{ runner.os }}{% endraw %}
+
+    - name: Show ccache stats
+      run: ccache --show-stats --verbose
+{%- endset %}
+
+{%- set steps_post %}
+    - name: Show ccache stats
+      run: ccache --show-stats --verbose
+
+    - name: Reset ccache stats
+      run: ccache --zero-stats
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: {% raw %}${{ github.job }}{% endraw %}
+        path: dist/wheelhouse/
+{%- endset %}
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install packages
+      run: export DEBIAN_FRONTEND=noninteractive &&
+           sudo apt-get update &&
+           sudo apt-get install -y
+               ccache
+               cmake
+               g++
+               gcc
+               git
+               libboost-dev
+               libboost-python-dev
+               libc6-dev-i386
+               libcapstone-dev
+               libdw-dev
+               python3
+               python3-flake8
+               python3-pip
+               python3-venv
+               quilt
+               make
+               ninja-build
+{{ steps_pre }}
+
+    - name: Build
+      run: PATH=/usr/lib/ccache:$PATH ./ci --skip-repair
+{{ steps_post }}
+
+{%- for _, name_tag, _, _, _, _ in pythons %}
+
+  {{ name_tag }}:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install packages
+      run: export DEBIAN_FRONTEND=noninteractive &&
+           sudo apt-get update &&
+           sudo apt-get install -y
+               ccache
+{{ steps_pre }}
+
+    - name: Build
+      run: ./ci-docker --python={{ name_tag }}
+{{ steps_post }}
+{%- endfor %}
