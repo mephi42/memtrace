@@ -43,7 +43,7 @@ def main():
     with open(os.path.join(workflows, "ci.yml.j2")) as fp:
         template = jinja2.Template(fp.read(), keep_trailing_newline=True)
     with open(os.path.join(workflows, "ci.yml"), "w") as fp:
-        fp.write(template.render(pythons=config.pythons))
+        fp.write(template.render(arches=config.arches, pythons=config.pythons))
 
 
 if __name__ == "__main__":
