@@ -8,10 +8,13 @@ from docker.config import load_config
 
 def main():
     parser = ArgumentParser()
-    _, rest = parser.parse_known_args()
+    parser.add_argument("--python", action="append")
+    args, rest = parser.parse_known_args()
+    name_tags = args.python
+    if name_tags is None:
+        name_tags = [name_tag for _, name_tag, _, _, _, _ in load_config().pythons]
     basedir = os.path.dirname(__file__)
-    config = load_config()
-    for _, name_tag, _, _, _, _ in config.pythons:
+    for name_tag in name_tags:
         subprocess.check_call(
             [
                 "./in-docker",

@@ -39,6 +39,11 @@ def main():
                 # libraries
                 fp.write(" : /usr/{}/{}/lib".format(triple, name_tag))
                 fp.write(" ;\n")
+    workflows = os.path.join(basedir, "..", ".github", "workflows")
+    with open(os.path.join(workflows, "ci.yml.j2")) as fp:
+        template = jinja2.Template(fp.read(), keep_trailing_newline=True)
+    with open(os.path.join(workflows, "ci.yml"), "w") as fp:
+        fp.write(template.render(pythons=config.pythons))
 
 
 if __name__ == "__main__":
