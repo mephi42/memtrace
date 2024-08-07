@@ -1696,13 +1696,12 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         ninja-build \
         patchelf \
         quilt
-ENV PATH=/usr/lib/ccache:$PATH
 
 FROM final-common AS final-aarch64
 COPY --from=crosstool-ng-aarch64 \
      /usr/aarch64-unknown-linux-gnu \
      /usr/aarch64-unknown-linux-gnu
-ENV PATH=/usr/aarch64-unknown-linux-gnu/bin:$PATH
+ENV PATH=/usr/lib/ccache:/usr/aarch64-unknown-linux-gnu/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-gcc
 COPY --from=boost-aarch64 /opt/boost-aarch64/ /
@@ -1756,7 +1755,7 @@ FROM final-common AS final-arm
 COPY --from=crosstool-ng-arm \
      /usr/arm-unknown-linux-gnueabi \
      /usr/arm-unknown-linux-gnueabi
-ENV PATH=/usr/arm-unknown-linux-gnueabi/bin:$PATH
+ENV PATH=/usr/lib/ccache:/usr/arm-unknown-linux-gnueabi/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabi-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabi-gcc
 COPY --from=boost-arm /opt/boost-arm/ /
@@ -1810,7 +1809,7 @@ FROM final-common AS final-i686
 COPY --from=crosstool-ng-i686 \
      /usr/i686-unknown-linux-gnu \
      /usr/i686-unknown-linux-gnu
-ENV PATH=/usr/i686-unknown-linux-gnu/bin:$PATH
+ENV PATH=/usr/lib/ccache:/usr/i686-unknown-linux-gnu/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-gcc
 COPY --from=boost-i686 /opt/boost-i686/ /
@@ -1864,7 +1863,7 @@ FROM final-common AS final-ppc64
 COPY --from=crosstool-ng-ppc64 \
      /usr/powerpc64-unknown-linux-gnu \
      /usr/powerpc64-unknown-linux-gnu
-ENV PATH=/usr/powerpc64-unknown-linux-gnu/bin:$PATH
+ENV PATH=/usr/lib/ccache:/usr/powerpc64-unknown-linux-gnu/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64-unknown-linux-gnu-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64-unknown-linux-gnu-gcc
 COPY --from=boost-ppc64 /opt/boost-ppc64/ /
@@ -1918,7 +1917,7 @@ FROM final-common AS final-ppc64le
 COPY --from=crosstool-ng-ppc64le \
      /usr/powerpc64le-unknown-linux-gnu \
      /usr/powerpc64le-unknown-linux-gnu
-ENV PATH=/usr/powerpc64le-unknown-linux-gnu/bin:$PATH
+ENV PATH=/usr/lib/ccache:/usr/powerpc64le-unknown-linux-gnu/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64le-unknown-linux-gnu-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64le-unknown-linux-gnu-gcc
 COPY --from=boost-ppc64le /opt/boost-ppc64le/ /
@@ -1972,7 +1971,7 @@ FROM final-common AS final-s390x
 COPY --from=crosstool-ng-s390x \
      /usr/s390x-ibm-linux-gnu \
      /usr/s390x-ibm-linux-gnu
-ENV PATH=/usr/s390x-ibm-linux-gnu/bin:$PATH
+ENV PATH=/usr/lib/ccache:/usr/s390x-ibm-linux-gnu/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/s390x-ibm-linux-gnu-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/s390x-ibm-linux-gnu-gcc
 COPY --from=boost-s390x /opt/boost-s390x/ /
@@ -2026,7 +2025,7 @@ FROM final-common AS final-x86_64
 COPY --from=crosstool-ng-x86_64 \
      /usr/x86_64-unknown-linux-gnu \
      /usr/x86_64-unknown-linux-gnu
-ENV PATH=/usr/x86_64-unknown-linux-gnu/bin:$PATH
+ENV PATH=/usr/lib/ccache:/usr/x86_64-unknown-linux-gnu/bin:$PATH
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/x86_64-unknown-linux-gnu-g++
 RUN ln -s /usr/bin/ccache /usr/lib/ccache/x86_64-unknown-linux-gnu-gcc
 COPY --from=boost-x86_64 /opt/boost-x86_64/ /
