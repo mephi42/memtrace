@@ -118,7 +118,7 @@ def git_ls_py_files():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--build-type", default="Release")
-    parser.add_argument("--python", action="append")
+    parser.add_argument("--python", default="python3")
     parser.add_argument("--skip-tests", action="store_true")
     parser.add_argument("--skip-repair", action="store_true")
     parser.add_argument(
@@ -126,24 +126,21 @@ def main():
         default=os.path.join(basedir, "dist", "wheelhouse"),
     )
     args, build_args = parser.parse_known_args()
-    if args.python is None:
-        args.python = ("python3",)
-    for python in args.python:
-        venv = setup_build_venv(python)
-        run_in_venv(venv, ["flake8", *git_ls_py_files()])
-        if not args.skip_tests:
-            run_in_venv(
-                venv,
-                [
-                    "python",
-                    "setup.py",
-                    "build",
-                    f"--build-type={args.build_type}",
-                    *build_args,
-                ],
-            )
-            run_in_venv(venv, ["python", "-m", "unittest", "discover"])
-        build_wheel(venv, args.build_type, build_args, args.wheel_dir, args.skip_repair)
+    venv = setup_build_venv(args.python)
+    run_in_venv(venv, ["flake8", *git_ls_py_files()])
+    if not args.skip_tests:
+        run_in_venv(
+            venv,
+            [
+                "python",
+                "setup.py",
+                "build",
+                f"--build-type={args.build_type}",
+                *build_args,
+            ],
+        )
+        run_in_venv(venv, ["python", "-m", "unittest", "discover"])
+    build_wheel(venv, args.build_type, build_args, args.wheel_dir, args.skip_repair)
 
 
 if __name__ == "__main__":
