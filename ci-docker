@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from argparse import ArgumentParser
 import os
+import platform
 import subprocess
 
 from docker.config import load_config
@@ -8,34 +9,50 @@ from docker.config import load_config
 
 def main():
     parser = ArgumentParser()
+    parser.add_argument("--arch", action="append")
     parser.add_argument("--python", action="append")
     args, rest = parser.parse_known_args()
+    arches = args.arch
+    if arches is None:
+        arches = load_config().arches
+    else:
+        arches = [arch for arch in load_config().arches if arch[0] in arches]
     name_tags = args.python
     if name_tags is None:
         name_tags = [name_tag for _, name_tag, _, _, _, _ in load_config().pythons]
     basedir = os.path.dirname(__file__)
-    for name_tag in name_tags:
-        subprocess.check_call(
-            [
-                "./in-docker",
-                "--arch=x86_64",
-                f"--python-version={name_tag}",
-                "--",
-                "env",
-                "CC=x86_64-unknown-linux-gnu-gcc",
-                "HOST=x86_64-unknown-linux-gnu",
-                "OBJDUMP=x86_64-unknown-linux-gnu-objdump",
-                "LC_ALL=C.UTF-8",
-                "LANG=C.UTF-8",
-                f"/opt/{name_tag}/bin/python3",
-                "ci",
-                f"--python=/opt/{name_tag}/bin/python3",
-                "-DBoost_USE_STATIC_LIBS=ON",
-                "-DCMAKE_MODULE_LINKER_FLAGS=-static-libgcc -static-libstdc++",
-            ]
-            + rest,
-            cwd=basedir,
-        )
+    for arch, triple in arches:
+        for name_tag in name_tags:
+            if arch == platform.machine():
+                cross = ()
+            else:
+                cross = (
+                    f"--host={arch}",
+                    f"--host-python=/usr/{triple}/{name_tag}/bin/python3",
+                    "--skip-tests",
+                )
+            subprocess.check_call(
+                [
+                    "./in-docker",
+                    f"--arch={arch}",
+                    f"--python-version={name_tag}",
+                    "--",
+                    "env",
+                    f"CC={triple}-gcc",
+                    f"HOST={triple}",
+                    f"OBJDUMP={triple}-objdump",
+                    "LC_ALL=C.UTF-8",
+                    "LANG=C.UTF-8",
+                    f"/opt/{name_tag}/bin/python3",
+                    "ci",
+                    f"--python=/opt/{name_tag}/bin/python3",
+                    *cross,
+                    "-DBoost_USE_STATIC_LIBS=ON",
+                    "-DCMAKE_MODULE_LINKER_FLAGS=-static-libgcc -static-libstdc++",
+                ]
+                + rest,
+                cwd=basedir,
+            )
 
 
 if __name__ == "__main__":

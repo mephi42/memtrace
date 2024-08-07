@@ -92,7 +92,7 @@ jobs:
       run: ccache --show-stats --verbose
 
     - name: Build
-      run: ./ci-docker --python=cp36-cp36m
+      run: ./ci-docker --arch=x86_64 --python=cp36-cp36m
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
@@ -133,7 +133,7 @@ jobs:
       run: ccache --show-stats --verbose
 
     - name: Build
-      run: ./ci-docker --python=cp37-cp37m
+      run: ./ci-docker --arch=x86_64 --python=cp37-cp37m
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
@@ -174,7 +174,7 @@ jobs:
       run: ccache --show-stats --verbose
 
     - name: Build
-      run: ./ci-docker --python=cp38-cp38
+      run: ./ci-docker --arch=x86_64 --python=cp38-cp38
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
@@ -215,7 +215,7 @@ jobs:
       run: ccache --show-stats --verbose
 
     - name: Build
-      run: ./ci-docker --python=cp39-cp39
+      run: ./ci-docker --arch=x86_64 --python=cp39-cp39
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
@@ -256,7 +256,7 @@ jobs:
       run: ccache --show-stats --verbose
 
     - name: Build
-      run: ./ci-docker --python=cp310-cp310
+      run: ./ci-docker --arch=x86_64 --python=cp310-cp310
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
@@ -297,7 +297,7 @@ jobs:
       run: ccache --show-stats --verbose
 
     - name: Build
-      run: ./ci-docker --python=cp311-cp311
+      run: ./ci-docker --arch=x86_64 --python=cp311-cp311
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
@@ -338,7 +338,7 @@ jobs:
       run: ccache --show-stats --verbose
 
     - name: Build
-      run: ./ci-docker --python=cp312-cp312
+      run: ./ci-docker --arch=x86_64 --python=cp312-cp312
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
