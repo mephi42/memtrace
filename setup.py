@@ -40,6 +40,7 @@ skbuild.setup(
     package_data={
         'memtrace': memtrace_data,
     },
+    exclude_package_data={},
     entry_points={
         'console_scripts': [
             'memtrace=memtrace.cli:main',
