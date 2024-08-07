@@ -9,7 +9,6 @@ basedir = os.path.dirname(os.path.realpath(__file__))
 uname_m = platform.machine()
 uname = f"{platform.system()}-{uname_m}"
 build = os.path.join(basedir, "build", uname)
-run_in_venv = os.path.join(basedir, "run-in-venv")
 
 
 def get_python_version(python):
@@ -23,36 +22,39 @@ def get_python_version(python):
     )
 
 
+def run_in_venv(venv, args):
+    subprocess.check_call(
+        [os.path.join(basedir, "run-in-venv"), venv, *args], cwd=basedir
+    )
+
+
 def setup_build_venv(python):
     venv = os.path.join(build, get_python_version(python))
     subprocess.check_call([python, "-m", "venv", venv])
-    subprocess.check_call(
+    run_in_venv(
+        venv,
         [
-            run_in_venv,
-            venv,
             "pip",
             "install",
             "--disable-pip-version-check",
             "--requirement=requirements.txt",
             "--upgrade",
         ],
-        cwd=basedir,
     )
     return venv
 
 
 def repair_wheel(venv, whl, wheel_dir):
     with tempfile.TemporaryDirectory(dir=wheel_dir) as tmp_wheel_dir:
-        subprocess.check_call(
+        run_in_venv(
+            venv,
             [
-                run_in_venv,
-                venv,
                 "auditwheel",
                 "repair",
                 "--plat=manylinux2014_x86_64",
                 f"--wheel-dir={tmp_wheel_dir}",
                 whl,
-            ]
+            ],
         )
         (tmp_manylinux_whl_name,) = os.listdir(tmp_wheel_dir)
         manylinux_whl = os.path.join(wheel_dir, tmp_manylinux_whl_name)
@@ -65,10 +67,9 @@ def repair_wheel(venv, whl, wheel_dir):
 
 def build_wheel(venv, build_type, build_args, wheel_dir, skip_repair):
     with tempfile.TemporaryDirectory() as dist_dir:
-        subprocess.check_call(
+        run_in_venv(
+            venv,
             [
-                run_in_venv,
-                venv,
                 "python",
                 "setup.py",
                 "bdist_wheel",
@@ -76,7 +77,6 @@ def build_wheel(venv, build_type, build_args, wheel_dir, skip_repair):
                 f"--dist-dir={dist_dir}",
                 *build_args,
             ],
-            cwd=basedir,
         )
         (whl_name,) = os.listdir(dist_dir)
         whl = os.path.join(dist_dir, whl_name)
@@ -130,31 +130,19 @@ def main():
         args.python = ("python3",)
     for python in args.python:
         venv = setup_build_venv(python)
-        subprocess.check_call(
-            [
-                run_in_venv,
-                venv,
-                "flake8",
-            ]
-            + list(git_ls_py_files()),
-            cwd=basedir,
-        )
+        run_in_venv(venv, ["flake8", *git_ls_py_files()])
         if not args.skip_tests:
-            subprocess.check_call(
+            run_in_venv(
+                venv,
                 [
-                    run_in_venv,
-                    venv,
                     "python",
                     "setup.py",
                     "build",
                     f"--build-type={args.build_type}",
                     *build_args,
                 ],
-                cwd=basedir,
             )
-            subprocess.check_call(
-                [run_in_venv, venv, "python", "-m", "unittest", "discover"]
-            )
+            run_in_venv(venv, ["python", "-m", "unittest", "discover"])
         build_wheel(venv, args.build_type, build_args, args.wheel_dir, args.skip_repair)
 
 
