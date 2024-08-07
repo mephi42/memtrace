@@ -36,7 +36,7 @@ add_custom_target(
 )
 set(valgrind_src ${CMAKE_SOURCE_DIR}/valgrind)
 set(valgrind_tracer_src ${CMAKE_SOURCE_DIR}/valgrind-tracer)
-set(uname ${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR})
+set(uname ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR})
 set(build ${CMAKE_SOURCE_DIR}/build/${uname})
 set(valgrind_build ${build}/valgrind/${CMAKE_BUILD_TYPE})
 set(valgrind_install ${CMAKE_SOURCE_DIR}/memtrace/tracer/${uname})
