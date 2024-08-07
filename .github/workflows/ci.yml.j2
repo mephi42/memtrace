@@ -6,7 +6,7 @@ on:
 
 name: Continuous integration
 
-{%- set steps_pre %}
+{%- macro steps_pre(cache_key) %}
     - uses: actions/checkout@v4
       with:
         submodules: "true"
@@ -19,13 +19,13 @@ name: Continuous integration
         path: |
           ~/.cache/pip
           ~/.ccache
-        key: {% raw %}${{ runner.os }}{% endraw %}
+        key: {{ cache_key }}
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
-{%- endset %}
+{%- endmacro %}
 
-{%- set steps_post %}
+{%- macro steps_post(artifact_name) %}
     - name: Show ccache stats
       run: ccache --show-stats --verbose
 
@@ -34,9 +34,9 @@ name: Continuous integration
 
     - uses: actions/upload-artifact@v4
       with:
-        name: {% raw %}${{ github.job }}{% endraw %}
+        name: {{ artifact_name }}
         path: dist/wheelhouse/
-{%- endset %}
+{%- endmacro %}
 
 jobs:
   native:
@@ -64,15 +64,18 @@ jobs:
                quilt
                make
                ninja-build
-{{ steps_pre }}
+{{ steps_pre("native") }}
 
     - name: Build
       run: PATH=/usr/lib/ccache:$PATH ./ci --skip-repair
-{{ steps_post }}
+{{ steps_post("native") }}
 
-{%- for _, name_tag, _, _, _, _ in pythons %}
-
-  {{ name_tag }}:
+  cross:
+    strategy:
+      matrix:
+        arch: [x86_64]
+        # TODO: arch: [{{ arches|map(attribute=0)|join(",") }}]
+        python: [{{ pythons|map(attribute=1)|join(",") }}]
     runs-on: ubuntu-latest
 
     steps:
@@ -81,9 +84,10 @@ jobs:
            sudo apt-get update &&
            sudo apt-get install -y
                ccache
-{{ steps_pre }}
+{{ steps_pre("cross-${{ matrix.arch }}-${{ matrix.python }}") }}
 
     - name: Build
-      run: ./ci-docker --arch=x86_64 --python={{ name_tag }}
-{{ steps_post }}
-{%- endfor %}
+      run: ./ci-docker
+               --arch={% raw %}${{ matrix.arch }}{% endraw %}
+               --python={% raw %}${{ matrix.python }}{% endraw %}
+{{ steps_post("cross-${{ matrix.arch }}-${{ matrix.python }}") }}

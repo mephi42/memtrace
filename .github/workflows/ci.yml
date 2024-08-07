@@ -45,7 +45,7 @@ jobs:
         path: |
           ~/.cache/pip
           ~/.ccache
-        key: ${{ runner.os }}
+        key: native
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
@@ -61,10 +61,15 @@ jobs:
 
     - uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.job }}
+        name: native
         path: dist/wheelhouse/
 
-  cp36-cp36m:
+  cross:
+    strategy:
+      matrix:
+        arch: [x86_64]
+        # TODO: arch: [aarch64,arm,i686,ppc64,ppc64le,s390x,x86_64]
+        python: [cp36-cp36m,cp37-cp37m,cp38-cp38,cp39-cp39,cp310-cp310,cp311-cp311,cp312-cp312]
     runs-on: ubuntu-latest
 
     steps:
@@ -86,13 +91,15 @@ jobs:
         path: |
           ~/.cache/pip
           ~/.ccache
-        key: ${{ runner.os }}
+        key: cross-${{ matrix.arch }}-${{ matrix.python }}
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
 
     - name: Build
-      run: ./ci-docker --arch=x86_64 --python=cp36-cp36m
+      run: ./ci-docker
+               --arch=${{ matrix.arch }}
+               --python=${{ matrix.python }}
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
@@ -102,251 +109,5 @@ jobs:
 
     - uses: actions/upload-artifact@v4
       with:
-        name: ${{ github.job }}
-        path: dist/wheelhouse/
-
-  cp37-cp37m:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Install packages
-      run: export DEBIAN_FRONTEND=noninteractive &&
-           sudo apt-get update &&
-           sudo apt-get install -y
-               ccache
-
-    - uses: actions/checkout@v4
-      with:
-        submodules: "true"
-
-    - name: Configure ccache
-      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
-
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pip
-          ~/.ccache
-        key: ${{ runner.os }}
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Build
-      run: ./ci-docker --arch=x86_64 --python=cp37-cp37m
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Reset ccache stats
-      run: ccache --zero-stats
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: ${{ github.job }}
-        path: dist/wheelhouse/
-
-  cp38-cp38:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Install packages
-      run: export DEBIAN_FRONTEND=noninteractive &&
-           sudo apt-get update &&
-           sudo apt-get install -y
-               ccache
-
-    - uses: actions/checkout@v4
-      with:
-        submodules: "true"
-
-    - name: Configure ccache
-      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
-
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pip
-          ~/.ccache
-        key: ${{ runner.os }}
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Build
-      run: ./ci-docker --arch=x86_64 --python=cp38-cp38
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Reset ccache stats
-      run: ccache --zero-stats
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: ${{ github.job }}
-        path: dist/wheelhouse/
-
-  cp39-cp39:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Install packages
-      run: export DEBIAN_FRONTEND=noninteractive &&
-           sudo apt-get update &&
-           sudo apt-get install -y
-               ccache
-
-    - uses: actions/checkout@v4
-      with:
-        submodules: "true"
-
-    - name: Configure ccache
-      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
-
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pip
-          ~/.ccache
-        key: ${{ runner.os }}
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Build
-      run: ./ci-docker --arch=x86_64 --python=cp39-cp39
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Reset ccache stats
-      run: ccache --zero-stats
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: ${{ github.job }}
-        path: dist/wheelhouse/
-
-  cp310-cp310:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Install packages
-      run: export DEBIAN_FRONTEND=noninteractive &&
-           sudo apt-get update &&
-           sudo apt-get install -y
-               ccache
-
-    - uses: actions/checkout@v4
-      with:
-        submodules: "true"
-
-    - name: Configure ccache
-      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
-
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pip
-          ~/.ccache
-        key: ${{ runner.os }}
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Build
-      run: ./ci-docker --arch=x86_64 --python=cp310-cp310
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Reset ccache stats
-      run: ccache --zero-stats
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: ${{ github.job }}
-        path: dist/wheelhouse/
-
-  cp311-cp311:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Install packages
-      run: export DEBIAN_FRONTEND=noninteractive &&
-           sudo apt-get update &&
-           sudo apt-get install -y
-               ccache
-
-    - uses: actions/checkout@v4
-      with:
-        submodules: "true"
-
-    - name: Configure ccache
-      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
-
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pip
-          ~/.ccache
-        key: ${{ runner.os }}
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Build
-      run: ./ci-docker --arch=x86_64 --python=cp311-cp311
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Reset ccache stats
-      run: ccache --zero-stats
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: ${{ github.job }}
-        path: dist/wheelhouse/
-
-  cp312-cp312:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Install packages
-      run: export DEBIAN_FRONTEND=noninteractive &&
-           sudo apt-get update &&
-           sudo apt-get install -y
-               ccache
-
-    - uses: actions/checkout@v4
-      with:
-        submodules: "true"
-
-    - name: Configure ccache
-      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
-
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/pip
-          ~/.ccache
-        key: ${{ runner.os }}
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Build
-      run: ./ci-docker --arch=x86_64 --python=cp312-cp312
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Reset ccache stats
-      run: ccache --zero-stats
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: ${{ github.job }}
+        name: cross-${{ matrix.arch }}-${{ matrix.python }}
         path: dist/wheelhouse/
