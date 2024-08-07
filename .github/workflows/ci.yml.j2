@@ -84,6 +84,6 @@ jobs:
 {{ steps_pre }}
 
     - name: Build
-      run: ./ci-docker --python={{ name_tag }}
+      run: ./ci-docker --arch=x86_64 --python={{ name_tag }}
 {{ steps_post }}
 {%- endfor %}
