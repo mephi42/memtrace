@@ -6,9 +6,6 @@ import subprocess
 import tempfile
 
 basedir = os.path.dirname(os.path.realpath(__file__))
-uname_m = platform.machine()
-uname = f"{platform.system()}-{uname_m}"
-build = os.path.join(basedir, "build", uname)
 
 
 def get_python_version(python):
@@ -28,30 +25,53 @@ def run_in_venv(venv, args):
     )
 
 
-def setup_build_venv(python):
-    venv = os.path.join(build, get_python_version(python))
-    subprocess.check_call([python, "-m", "venv", venv])
+def pip_install_in_venv(venv, pip, args):
     run_in_venv(
         venv,
         [
-            "pip",
+            pip,
             "install",
             "--disable-pip-version-check",
-            "--requirement=requirements.txt",
             "--upgrade",
+            *args,
         ],
     )
+
+
+def setup_build_venv(build, python, host_python):
+    venv = os.path.join(build, get_python_version(python))
+    if host_python is None:
+        subprocess.check_call([python, "-m", "venv", venv])
+    else:
+        bootstrap_venv = os.path.join(venv, "bootstrap")
+        subprocess.check_call([python, "-m", "venv", bootstrap_venv])
+        pip_install_in_venv(bootstrap_venv, "pip", ["crossenv"])
+        run_in_venv(bootstrap_venv, ["python", "-m", "crossenv", host_python, venv])
+    if host_python is None:
+        pip_install_in_venv(
+            venv,
+            "pip",
+            [
+                "--requirement=build-requirements.txt",
+                "--requirement=cross-requirements.txt",
+            ],
+        )
+    else:
+        pip_install_in_venv(venv, "build-pip", ["--requirement=build-requirements.txt"])
+        pip_install_in_venv(venv, "pip", ["--requirement=cross-requirements.txt"])
     return venv
 
 
-def repair_wheel(venv, whl, wheel_dir):
+def repair_wheel(venv, whl, wheel_dir, cross_prefix, host):
     with tempfile.TemporaryDirectory(dir=wheel_dir) as tmp_wheel_dir:
         run_in_venv(
             venv,
             [
+                f"{cross_prefix}python",
+                "-m",
                 "auditwheel",
                 "repair",
-                "--plat=manylinux2014_x86_64",
+                f"--plat=manylinux2014_{host}",
                 f"--wheel-dir={tmp_wheel_dir}",
                 whl,
             ],
@@ -65,7 +85,9 @@ def repair_wheel(venv, whl, wheel_dir):
         return manylinux_whl
 
 
-def build_wheel(venv, build_type, build_args, wheel_dir, skip_repair):
+def build_wheel(
+    venv, build_type, build_args, wheel_dir, skip_repair, cross_prefix, host
+):
     with tempfile.TemporaryDirectory() as dist_dir:
         run_in_venv(
             venv,
@@ -86,7 +108,7 @@ def build_wheel(venv, build_type, build_args, wheel_dir, skip_repair):
             os.rename(whl, result)
             return result
         else:
-            return repair_wheel(venv, whl, wheel_dir)
+            return repair_wheel(venv, whl, wheel_dir, cross_prefix, host)
 
 
 def git_ls_files():
@@ -119,6 +141,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--build-type", default="Release")
     parser.add_argument("--python", default="python3")
+    parser.add_argument("--host", default=platform.machine())
+    parser.add_argument("--host-python")
     parser.add_argument("--skip-tests", action="store_true")
     parser.add_argument("--skip-repair", action="store_true")
     parser.add_argument(
@@ -126,8 +150,18 @@ def main():
         default=os.path.join(basedir, "dist", "wheelhouse"),
     )
     args, build_args = parser.parse_known_args()
-    venv = setup_build_venv(args.python)
-    run_in_venv(venv, ["flake8", *git_ls_py_files()])
+    if args.host != platform.machine():
+        build_args.extend(
+            (
+                f"-DCMAKE_SYSTEM_NAME={platform.system()}",
+                f"-DCMAKE_SYSTEM_PROCESSOR={args.host}",
+            )
+        )
+    build = os.path.join(basedir, "build", f"{platform.system()}-{args.host}")
+    build_prefix = "" if args.host_python is None else "build-"
+    cross_prefix = "" if args.host_python is None else "cross-"
+    venv = setup_build_venv(build, args.python, args.host_python)
+    run_in_venv(venv, [f"{build_prefix}python", "-m", "flake8", *git_ls_py_files()])
     if not args.skip_tests:
         run_in_venv(
             venv,
@@ -140,7 +174,15 @@ def main():
             ],
         )
         run_in_venv(venv, ["python", "-m", "unittest", "discover"])
-    build_wheel(venv, args.build_type, build_args, args.wheel_dir, args.skip_repair)
+    build_wheel(
+        venv,
+        args.build_type,
+        build_args,
+        args.wheel_dir,
+        args.skip_repair,
+        cross_prefix,
+        args.host,
+    )
 
 
 if __name__ == "__main__":
