@@ -9,7 +9,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("--arch", default="x86_64")
     parser.add_argument("--python-version", default="cp36-cp36m")
-    parser.add_argument("--version", default="2024-08-04-d7c79c819")
+    parser.add_argument("--version", default="2024-08-08-b890c2228")
     args, rest = parser.parse_known_args()
     if rest[:1] == ["--"]:
         del rest[0]
