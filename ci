@@ -3,6 +3,7 @@ import argparse
 import os
 import platform
 import subprocess
+import sys
 import tempfile
 
 basedir = os.path.dirname(os.path.realpath(__file__))
@@ -58,7 +59,10 @@ def setup_build_venv(build, python, host_python):
         )
     else:
         pip_install_in_venv(venv, "build-pip", ["--requirement=build-requirements.txt"])
-        pip_install_in_venv(venv, "pip", ["--requirement=cross-requirements.txt"])
+        cross_requirements = ["--requirement=cross-requirements.txt"]
+        if sys.version_info >= (3, 12):
+            cross_requirements.append("setuptools")
+        pip_install_in_venv(venv, "pip", cross_requirements)
     return venv
 
 
