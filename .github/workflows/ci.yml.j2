@@ -73,7 +73,7 @@ jobs:
   cross:
     strategy:
       matrix:
-        arch: [ppc64,ppc64le,s390x,x86_64]
+        arch: [aarch64,ppc64,ppc64le,s390x,x86_64]
         # TODO: arch: [{{ arches|map(attribute=0)|join(",") }}]
         python: [{{ pythons|map(attribute=1)|join(",") }}]
     runs-on: ubuntu-latest
