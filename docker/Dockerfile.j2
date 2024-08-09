@@ -83,7 +83,9 @@ WORKDIR /usr/src/{{ name_tag }}
 RUN {{ git }} cherry-pick {{ commits|join(" ") }}
 {%- endif %}
 WORKDIR /tmp/{{ name_tag }}-build
-RUN /usr/src/{{ name_tag }}/configure --prefix=/opt/{{ name_tag }}
+RUN /usr/src/{{ name_tag }}/configure \
+        --prefix=/opt/{{ name_tag }} \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 {%- endfor %}

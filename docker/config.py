@@ -33,7 +33,7 @@ def load_config():
                     section_name[len(PYTHON_PREFIX) :],
                     section["name_tag"],
                     section["git_tag"],
-                    shlex.split(section.get("configure_flags", "")),
+                    shlex.split(section.get("configure_flags", "")) + ["CFLAGS=-fPIC"],
                     section["includes"],
                     [
                         commits[commit_name]

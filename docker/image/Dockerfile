@@ -165,7 +165,9 @@ RUN git clone \
 WORKDIR /usr/src/cp36-cp36m
 RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick f0be4bbb9b3c 8766cb74e186 6e5a193816e1
 WORKDIR /tmp/cp36-cp36m-build
-RUN /usr/src/cp36-cp36m/configure --prefix=/opt/cp36-cp36m
+RUN /usr/src/cp36-cp36m/configure \
+        --prefix=/opt/cp36-cp36m \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -182,7 +184,9 @@ RUN git clone \
 WORKDIR /usr/src/cp37-cp37m
 RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 6e5a193816e1
 WORKDIR /tmp/cp37-cp37m-build
-RUN /usr/src/cp37-cp37m/configure --prefix=/opt/cp37-cp37m
+RUN /usr/src/cp37-cp37m/configure \
+        --prefix=/opt/cp37-cp37m \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -199,7 +203,9 @@ RUN git clone \
 WORKDIR /usr/src/cp38-cp38
 RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 6e5a193816e1
 WORKDIR /tmp/cp38-cp38-build
-RUN /usr/src/cp38-cp38/configure --prefix=/opt/cp38-cp38
+RUN /usr/src/cp38-cp38/configure \
+        --prefix=/opt/cp38-cp38 \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -216,7 +222,9 @@ RUN git clone \
 WORKDIR /usr/src/cp39-cp39
 RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 6e5a193816e1
 WORKDIR /tmp/cp39-cp39-build
-RUN /usr/src/cp39-cp39/configure --prefix=/opt/cp39-cp39
+RUN /usr/src/cp39-cp39/configure \
+        --prefix=/opt/cp39-cp39 \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -233,7 +241,9 @@ RUN git clone \
 WORKDIR /usr/src/cp310-cp310
 RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 6e5a193816e1
 WORKDIR /tmp/cp310-cp310-build
-RUN /usr/src/cp310-cp310/configure --prefix=/opt/cp310-cp310
+RUN /usr/src/cp310-cp310/configure \
+        --prefix=/opt/cp310-cp310 \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -249,7 +259,9 @@ RUN git clone \
         /usr/src/cp311-cp311
 WORKDIR /usr/src/cp311-cp311
 WORKDIR /tmp/cp311-cp311-build
-RUN /usr/src/cp311-cp311/configure --prefix=/opt/cp311-cp311
+RUN /usr/src/cp311-cp311/configure \
+        --prefix=/opt/cp311-cp311 \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -265,7 +277,9 @@ RUN git clone \
         /usr/src/cp312-cp312
 WORKDIR /usr/src/cp312-cp312
 WORKDIR /tmp/cp312-cp312-build
-RUN /usr/src/cp312-cp312/configure --prefix=/opt/cp312-cp312
+RUN /usr/src/cp312-cp312/configure \
+        --prefix=/opt/cp312-cp312 \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -282,7 +296,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -299,7 +314,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -316,7 +332,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -333,7 +350,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -350,7 +368,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -367,7 +386,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -384,7 +404,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -401,7 +422,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -418,7 +440,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -435,7 +458,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -452,7 +476,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -469,7 +494,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -486,7 +512,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -503,7 +530,8 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        --with-pymalloc
+        --with-pymalloc \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -519,7 +547,8 @@ RUN ./configure \
         --with-build-python=/opt/cp38-cp38/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -535,7 +564,8 @@ RUN ./configure \
         --with-build-python=/opt/cp38-cp38/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -551,7 +581,8 @@ RUN ./configure \
         --with-build-python=/opt/cp38-cp38/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -567,7 +598,8 @@ RUN ./configure \
         --with-build-python=/opt/cp38-cp38/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -583,7 +615,8 @@ RUN ./configure \
         --with-build-python=/opt/cp38-cp38/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -599,7 +632,8 @@ RUN ./configure \
         --with-build-python=/opt/cp38-cp38/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -615,7 +649,8 @@ RUN ./configure \
         --with-build-python=/opt/cp38-cp38/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -631,7 +666,8 @@ RUN ./configure \
         --with-build-python=/opt/cp39-cp39/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -647,7 +683,8 @@ RUN ./configure \
         --with-build-python=/opt/cp39-cp39/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -663,7 +700,8 @@ RUN ./configure \
         --with-build-python=/opt/cp39-cp39/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -679,7 +717,8 @@ RUN ./configure \
         --with-build-python=/opt/cp39-cp39/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -695,7 +734,8 @@ RUN ./configure \
         --with-build-python=/opt/cp39-cp39/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -711,7 +751,8 @@ RUN ./configure \
         --with-build-python=/opt/cp39-cp39/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -727,7 +768,8 @@ RUN ./configure \
         --with-build-python=/opt/cp39-cp39/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -743,7 +785,8 @@ RUN ./configure \
         --with-build-python=/opt/cp310-cp310/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -759,7 +802,8 @@ RUN ./configure \
         --with-build-python=/opt/cp310-cp310/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -775,7 +819,8 @@ RUN ./configure \
         --with-build-python=/opt/cp310-cp310/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -791,7 +836,8 @@ RUN ./configure \
         --with-build-python=/opt/cp310-cp310/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -807,7 +853,8 @@ RUN ./configure \
         --with-build-python=/opt/cp310-cp310/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -823,7 +870,8 @@ RUN ./configure \
         --with-build-python=/opt/cp310-cp310/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -839,7 +887,8 @@ RUN ./configure \
         --with-build-python=/opt/cp310-cp310/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -855,7 +904,8 @@ RUN ./configure \
         --with-build-python=/opt/cp311-cp311/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -871,7 +921,8 @@ RUN ./configure \
         --with-build-python=/opt/cp311-cp311/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -887,7 +938,8 @@ RUN ./configure \
         --with-build-python=/opt/cp311-cp311/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -903,7 +955,8 @@ RUN ./configure \
         --with-build-python=/opt/cp311-cp311/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -919,7 +972,8 @@ RUN ./configure \
         --with-build-python=/opt/cp311-cp311/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -935,7 +989,8 @@ RUN ./configure \
         --with-build-python=/opt/cp311-cp311/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -951,7 +1006,8 @@ RUN ./configure \
         --with-build-python=/opt/cp311-cp311/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -967,7 +1023,8 @@ RUN ./configure \
         --with-build-python=/opt/cp312-cp312/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -983,7 +1040,8 @@ RUN ./configure \
         --with-build-python=/opt/cp312-cp312/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -999,7 +1057,8 @@ RUN ./configure \
         --with-build-python=/opt/cp312-cp312/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1015,7 +1074,8 @@ RUN ./configure \
         --with-build-python=/opt/cp312-cp312/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1031,7 +1091,8 @@ RUN ./configure \
         --with-build-python=/opt/cp312-cp312/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1047,7 +1108,8 @@ RUN ./configure \
         --with-build-python=/opt/cp312-cp312/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1063,7 +1125,8 @@ RUN ./configure \
         --with-build-python=/opt/cp312-cp312/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
-        ac_cv_file__dev_ptc=no
+        ac_cv_file__dev_ptc=no \
+        CFLAGS=-fPIC
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
