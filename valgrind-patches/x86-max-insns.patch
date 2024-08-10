@@ -1,7 +1,8 @@
 diff --git a/VEX/priv/guest_x86_toIR.c b/VEX/priv/guest_x86_toIR.c
+index 7b31bd769..ab2f9b864 100644
 --- a/VEX/priv/guest_x86_toIR.c
 +++ b/VEX/priv/guest_x86_toIR.c
-@@ -13118,7 +13118,8 @@ DisResult disInstr_X86_WRK (
+@@ -13194,7 +13194,8 @@ DisResult disInstr_X86_WRK (
        d32 += (guest_EIP_bbstart+delta); 
        /* (guest_eip_bbstart+delta) == return-to addr, d32 == call-to addr */
        if (d32 == guest_EIP_bbstart+delta && getIByte(delta) >= 0x58 

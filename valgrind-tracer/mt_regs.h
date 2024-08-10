@@ -86,9 +86,9 @@ static const struct Reg regs[] = {
     DEFINE_REG(guest_NRADDR),
     DEFINE_REG(guest_SC_CLASS),
     DEFINE_REG(guest_IP_AT_SYSCALL),
+    DEFINE_REG(guest_SETC),
     DEFINE_REG(padding1),
     DEFINE_REG(padding2),
-    DEFINE_REG(padding3),
 #endif
 #if defined(VGA_amd64)
     DEFINE_REG(host_EvC_FAILADDR),
@@ -198,7 +198,7 @@ static const struct Reg regs[] = {
     DEFINE_REG(guest_FPROUND),
     DEFINE_REG(guest_FC3210),
     DEFINE_REG(guest_EMNOTE),
-    DEFINE_REG(pad2),
+    DEFINE_REG(guest_SETC),
     DEFINE_REG(guest_CMSTART),
     DEFINE_REG(guest_CMLEN),
     DEFINE_REG(guest_NRADDR),
