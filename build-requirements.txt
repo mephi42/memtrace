@@ -1,8 +1,6 @@
 click
-cryptography < 3.2
 dataclasses; python_version < '3.7'
 flake8
 scikit-build
 sortedcontainers
-twine
 wheel
