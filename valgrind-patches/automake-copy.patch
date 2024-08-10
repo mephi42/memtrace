@@ -1,10 +1,12 @@
 diff --git a/autogen.sh b/autogen.sh
 --- a/autogen.sh
 +++ b/autogen.sh
-@@ -13,5 +13,5 @@ run ()
+@@ -13,7 +13,7 @@ run ()
  
  run aclocal
  run autoheader
 -run automake -a
 +run automake -a -c
  run autoconf
+ 
+ # Valgrind-specific Git configuration, if appropriate.

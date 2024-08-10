@@ -71,6 +71,7 @@ add_custom_command(
                     --host=${host_triple}
                     --prefix=${valgrind_install}
                     --with-mpicc=false
+                    --with-gdbscripts-dir=no
     DEPENDS ${valgrind_src}/configure
     WORKING_DIRECTORY ${valgrind_build}
 )

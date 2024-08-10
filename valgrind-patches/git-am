@@ -1,0 +1,10 @@
+#!/bin/bash
+set -e -u -x -o pipefail
+cd "$(dirname "$0")"
+IFS=$'\n' read -a patches -d '' -r <series || true
+cd ../valgrind
+for patch in "${patches[@]}"; do
+    patch -p1 <../valgrind-patches/"$patch"
+    git add .
+    git commit --message="$patch"
+done

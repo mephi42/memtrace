@@ -47,7 +47,7 @@ index 7749442e9..09d1fb7d4 100644
  # vgversion.h defines accurate versions to report with -v --version
  include/vgversion.h:
 diff --git a/Makefile.vex.am b/Makefile.vex.am
-index 98d848359..b4dfdf0eb 100644
+index c1244a69d..eafaa8743 100644
 --- a/Makefile.vex.am
 +++ b/Makefile.vex.am
 @@ -12,6 +12,7 @@ EXTRA_DIST = \
@@ -66,7 +66,7 @@ index 98d848359..b4dfdf0eb 100644
  # libvex_inner.h is special: it is a public header for valgrind core,
  # but should not be used by the end user
  
-@@ -117,10 +119,10 @@ pub/libvex_guest_offsets.h: auxprogs/genoffsets.c \
+@@ -118,10 +120,10 @@ pub/libvex_guest_offsets.h: auxprogs/genoffsets.c \
  # can be done at runtime.
  #----------------------------------------------------------------------------
  
@@ -80,7 +80,7 @@ index 98d848359..b4dfdf0eb 100644
  endif
  
 diff --git a/auxprogs/Makefile.am b/auxprogs/Makefile.am
-index c05f82825..3b5024e51 100644
+index 3a9709da6..04abc1b24 100644
 --- a/auxprogs/Makefile.am
 +++ b/auxprogs/Makefile.am
 @@ -26,6 +26,7 @@ EXTRA_DIST = \
@@ -115,10 +115,10 @@ index c05f82825..3b5024e51 100644
  #----------------------------------------------------------------------------
  # Auxiliary testsuits
 diff --git a/configure.ac b/configure.ac
-index 369daa173..a8fb09c6b 100755
+index 911bccaa8..d37cf81bc 100755
 --- a/configure.ac
 +++ b/configure.ac
-@@ -5392,6 +5392,9 @@ AC_CONFIG_FILES([
+@@ -5742,6 +5742,9 @@ AC_CONFIG_FILES([
     exp-bbv/tests/arm-linux/Makefile
     shared/Makefile
     solaris/Makefile
@@ -129,7 +129,7 @@ index 369daa173..a8fb09c6b 100755
  AC_CONFIG_FILES([coregrind/link_tool_exe_linux],
                  [chmod +x coregrind/link_tool_exe_linux])
 diff --git a/coregrind/Makefile.am b/coregrind/Makefile.am
-index 151f5c2f0..413fb4b13 100644
+index e3e31a73b..fda28dd51 100644
 --- a/coregrind/Makefile.am
 +++ b/coregrind/Makefile.am
 @@ -31,8 +31,7 @@ EXTRA_DIST = \
@@ -147,7 +147,7 @@ index 151f5c2f0..413fb4b13 100644
  
  
 +if FALSE
- vgdb_SOURCES = vgdb.c
+ vgdb_SOURCES = vgdb.c m_gdbserver/remote-utils-shared.c
  if VGCONF_OS_IS_LINUX
  if VGCONF_PLATVARIANT_IS_ANDROID
 @@ -122,6 +122,7 @@ if VGCONF_PLATFORMS_INCLUDE_X86_DARWIN
@@ -158,7 +158,7 @@ index 151f5c2f0..413fb4b13 100644
  
  #----------------------------------------------------------------------------
  # Darwin Mach stuff
-@@ -299,9 +300,9 @@ noinst_HEADERS = \
+@@ -303,9 +304,9 @@ noinst_HEADERS = \
  BUILT_SOURCES = $(mach_user_srcs)
  CLEANFILES    = $(mach_user_srcs) $(mach_server_srcs) $(mach_hdrs)
  
@@ -170,16 +170,16 @@ index 151f5c2f0..413fb4b13 100644
  endif
  
  COREGRIND_SOURCES_COMMON = \
-@@ -494,7 +495,7 @@ COREGRIND_SOURCES_COMMON = \
- NOLTO_COREGRIND_SOURCES_COMMON = \
- 	m_libcsetjmp.c \
- 	m_main.c
+@@ -505,7 +506,7 @@ NOLTO_COREGRIND_SOURCES_COMMON = \
+ 	m_main.c \
+ 	m_stacks.c \
+ 	m_gdbserver/m_gdbserver.c
 -noinst_LIBRARIES = libnolto_coregrind-@VGCONF_ARCH_PRI@-@VGCONF_OS@.a
 +noinst_LIBRARIES += libnolto_coregrind-@VGCONF_ARCH_PRI@-@VGCONF_OS@.a
  libnolto_coregrind_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_SOURCES = \
      $(NOLTO_COREGRIND_SOURCES_COMMON)
  libnolto_coregrind_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_CPPFLAGS = \
-@@ -567,9 +568,9 @@ endif
+@@ -578,9 +579,9 @@ endif
  # used by libgcc.
  #----------------------------------------------------------------------------
  
@@ -191,7 +191,7 @@ index 151f5c2f0..413fb4b13 100644
  endif
  
  libgcc_sup_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_SOURCES = \
-@@ -591,9 +592,9 @@ endif
+@@ -602,9 +603,9 @@ endif
  # libreplacemalloc_toolpreload-<platform>.a
  #----------------------------------------------------------------------------
  
@@ -203,17 +203,17 @@ index 151f5c2f0..413fb4b13 100644
  endif
  
  libreplacemalloc_toolpreload_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_SOURCES = \
-@@ -765,7 +766,7 @@ GDBSERVER_XML_FILES = \
+@@ -782,7 +783,7 @@ GDBSERVER_XML_FILES = \
  
  # so as to make sure these get copied into the install tree
  vglibdir = $(pkglibexecdir)
 -vglib_DATA  = $(GDBSERVER_XML_FILES)
 +vglib_DATA  =
  
- # so as to make sure these get copied into the tarball
- EXTRA_DIST  += $(GDBSERVER_XML_FILES)
+ if GDBSCRIPTS
+ gdbscriptsdir = @VG_GDBSCRIPTS_DIR@
 diff --git a/include/Makefile.am b/include/Makefile.am
-index 972d394b8..8b2df4c42 100644
+index 8012d7374..5c611268d 100644
 --- a/include/Makefile.am
 +++ b/include/Makefile.am
 @@ -1,6 +1,7 @@
@@ -224,7 +224,7 @@ index 972d394b8..8b2df4c42 100644
  nobase_pkginclude_HEADERS = \
  	pub_tool_basics.h 		\
  	pub_tool_basics_asm.h 		\
-@@ -106,3 +107,4 @@ nobase_pkginclude_HEADERS = \
+@@ -108,3 +109,4 @@ nobase_pkginclude_HEADERS = \
  	vki/vki-xen-x86.h		\
  	vki/vki-linux-drm.h		\
  	vki/vki-linux-io_uring.h

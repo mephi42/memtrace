@@ -110,7 +110,7 @@ Regs size         : 928
 [       104] MT_REGMETA uint64_t guest_FPROUND [0x350]
 [       105] MT_REGMETA uint64_t guest_FC3210 [0x358]
 [       106] MT_REGMETA uint32_t guest_EMNOTE [0x360]
-[       107] MT_REGMETA uint32_t pad2 [0x364]
+[       107] MT_REGMETA uint32_t guest_SETC [0x364]
 [       108] MT_REGMETA uint64_t guest_CMSTART [0x368]
 [       109] MT_REGMETA uint64_t guest_CMLEN [0x370]
 [       110] MT_REGMETA uint64_t guest_NRADDR [0x378]

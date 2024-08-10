@@ -66,9 +66,9 @@ Regs size         : 352
 [        60] MT_REGMETA uint32_t guest_NRADDR [0x148]
 [        61] MT_REGMETA uint32_t guest_SC_CLASS [0x14c]
 [        62] MT_REGMETA uint32_t guest_IP_AT_SYSCALL [0x150]
-[        63] MT_REGMETA uint32_t padding1 [0x154]
-[        64] MT_REGMETA uint32_t padding2 [0x158]
-[        65] MT_REGMETA uint32_t padding3 [0x15c]
+[        63] MT_REGMETA uint32_t guest_SETC [0x154]
+[        64] MT_REGMETA uint32_t padding1 [0x158]
+[        65] MT_REGMETA uint32_t padding2 [0x15c]
 [        66] MT_MMAP 0000000008049000-000000000804a000 r-x {workdir}/i386
 [        67] MT_MMAP 000000000804a000-000000000804b000 rw- 
 [        68] MT_MMAP 000000000804b000-000000000804c000 rwx 
