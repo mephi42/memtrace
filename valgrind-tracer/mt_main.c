@@ -109,14 +109,14 @@ static SymbolicAddrRange symbolicPcRanges[MAX_SYMBOLIC_PC_RANGES];
 static UInt nSymbolicPcRanges;
 
 /* Generic entry header. */
-struct Tlv {
+struct __attribute__((__packed__)) Tlv {
    UShort tag;
    UShort length;
 };
 
 /* Generic entry header combined with instruction sequence number. */
-union TlvInsnSeq {
-   struct {
+union __attribute__((__packed__)) TlvInsnSeq {
+   struct __attribute__((__packed__)) {
       struct Tlv tlv;
       UInt insnSeq;
    };
@@ -124,40 +124,40 @@ union TlvInsnSeq {
 };
 
 /* The first entry. */
-struct HeaderEntry {
+struct __attribute__((__packed__)) HeaderEntry {
    struct Tlv tlv;
    UShort e_machine;
    UShort regsSize;
 };
 
 /* Used for MT_LOAD, MT_STORE, MT_REG, MT_GET_REG, MT_PUT_REG. */
-struct LdStEntry {
+struct __attribute__((__packed__)) LdStEntry {
    union TlvInsnSeq tlvInsnSeq;
    Addr addr;
    UChar value[0];
 };
 
 /* Used for MT_INSN. */
-struct InsnEntry {
+struct __attribute__((__packed__)) InsnEntry {
    union TlvInsnSeq tlvInsnSeq;
    Addr pc;
    UChar value[0];
 };
 
 /* Used for MT_INSN_EXEC. */
-struct InsnExecEntry {
+struct __attribute__((__packed__)) InsnExecEntry {
    union TlvInsnSeq tlvInsnSeq;
 };
 
 /* Used for MT_GET_REG_NX and MT_PUT_REG_NX. */
-struct LdStNxEntry {
+struct __attribute__((__packed__)) LdStNxEntry {
    union TlvInsnSeq tlvInsnSeq;
    Addr addr;
    UIntPtr size;
 };
 
 /* Used for MT_MMAP. */
-struct MmapEntry {
+struct __attribute__((__packed__)) MmapEntry {
    struct Tlv tlv;
 #if VG_WORDSIZE == 8
    UInt padding;
@@ -172,7 +172,7 @@ struct MmapEntry {
 };
 
 /* Used for MT_REGMETA. */
-struct RegMetaEntry {
+struct __attribute__((__packed__)) RegMetaEntry {
    struct Tlv tlv;
    UShort offset;
    UShort size;

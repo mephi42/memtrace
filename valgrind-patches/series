@@ -2,3 +2,4 @@ automake-copy.patch
 tool-symlink.patch
 tool.patch
 x86-max-insns.patch
+armv6t2.patch
