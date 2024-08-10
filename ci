@@ -39,21 +39,29 @@ def pip_install_in_venv(venv, pip, args):
     )
 
 
-def setup_build_venv(build, python, host_python):
+def host2machine(host):
+    return {"arm": "armv7l"}.get(host, host)
+
+
+def setup_build_venv(build, python, host_python, host):
     venv = os.path.join(build, get_python_version(python))
     if host_python is None:
         subprocess.check_call([python, "-m", "venv", venv])
     else:
         bootstrap_venv = os.path.join(venv, "bootstrap")
         subprocess.check_call([python, "-m", "venv", bootstrap_venv])
-        pip_install_in_venv(
+        pip_install_in_venv(bootstrap_venv, "pip", ["crossenv"])
+        run_in_venv(
             bootstrap_venv,
-            "pip",
             [
-                "https://github.com/mephi42/crossenv/archive/ce50bbdc9c8ea712f5b6a9ef0cc62cec1129743e.zip"
+                "python",
+                "-m",
+                "crossenv",
+                f"--machine={host2machine(host)}",
+                host_python,
+                venv,
             ],
         )
-        run_in_venv(bootstrap_venv, ["python", "-m", "crossenv", host_python, venv])
     if host_python is None:
         pip_install_in_venv(
             venv,
@@ -73,7 +81,6 @@ def setup_build_venv(build, python, host_python):
 
 
 def repair_wheel(venv, whl, wheel_dir, cross_prefix, host):
-    host = {"arm": "armv7l"}.get(host, host)
     with tempfile.TemporaryDirectory(dir=wheel_dir) as tmp_wheel_dir:
         run_in_venv(
             venv,
@@ -82,7 +89,7 @@ def repair_wheel(venv, whl, wheel_dir, cross_prefix, host):
                 "-m",
                 "auditwheel",
                 "repair",
-                f"--plat=manylinux2014_{host}",
+                f"--plat=manylinux2014_{host2machine(host)}",
                 f"--wheel-dir={tmp_wheel_dir}",
                 whl,
             ],
@@ -171,7 +178,7 @@ def main():
     build = os.path.join(basedir, "build", f"{platform.system()}-{args.host}")
     build_prefix = "" if args.host_python is None else "build-"
     cross_prefix = "" if args.host_python is None else "cross-"
-    venv = setup_build_venv(build, args.python, args.host_python)
+    venv = setup_build_venv(build, args.python, args.host_python, args.host)
     run_in_venv(venv, [f"{build_prefix}python", "-m", "flake8", *git_ls_py_files()])
     if not args.skip_tests:
         run_in_venv(
