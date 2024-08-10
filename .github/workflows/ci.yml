@@ -57,6 +57,11 @@ jobs:
     - name: Build
       run: PATH=/usr/lib/ccache:$PATH ./ci --skip-repair
 
+    - name: Smoke test
+      run: python3 -m pip install --user dist/wheelhouse/*.whl &&
+           memtrace record true &&
+           memtrace report >/dev/null
+
     - name: Show ccache stats
       run: ccache --show-stats --verbose
 
