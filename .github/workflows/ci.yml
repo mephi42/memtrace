@@ -15,6 +15,7 @@ jobs:
       run: export DEBIAN_FRONTEND=noninteractive &&
            sudo apt-get update &&
            sudo apt-get install -y
+               black
                ccache
                cmake
                g++
@@ -49,6 +50,9 @@ jobs:
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
+
+    - name: Check formatting
+      run: ./fmt --check
 
     - name: Build
       run: PATH=/usr/lib/ccache:$PATH ./ci --skip-repair

@@ -14,10 +14,10 @@ from ._memtrace import Entry, Tag
 class BackwardNode:
     trace_index: int
     depth: int
-    edges: Dict[int, 'BackwardEdge'] = field(default_factory=dict)
+    edges: Dict[int, "BackwardEdge"] = field(default_factory=dict)
     done: bool = False
 
-    def get_edge(self, dst: 'BackwardNode') -> 'BackwardEdge':
+    def get_edge(self, dst: "BackwardNode") -> "BackwardEdge":
         edge = self.edges.get(dst.trace_index)
         if edge is None:
             edge = BackwardEdge(dst)
@@ -25,9 +25,9 @@ class BackwardNode:
         return edge
 
     def pp(
-            self,
-            analysis: Analysis,
-            fp=sys.stdout,
+        self,
+        analysis: Analysis,
+        fp=sys.stdout,
     ) -> None:
         class StackEntry:
             def __init__(self, edge: BackwardEdge):
@@ -35,11 +35,11 @@ class BackwardNode:
                 self.is_fresh = True
                 self.edges = iter(edge.dst.edges.values())
 
-        fp.write('#+STARTUP: indent\n')
+        fp.write("#+STARTUP: indent\n")
         stack: List[StackEntry] = [StackEntry(BackwardEdge(self))]
         seen: Set[int] = set()
         while len(stack) > 0:
-            indent = '*' * len(stack)
+            indent = "*" * len(stack)
             entry = stack[-1]
             if entry.is_fresh:
                 edge = entry.edge
@@ -48,12 +48,12 @@ class BackwardNode:
                 disasm_str = analysis.pp_code(code_index)
                 is_seen = node.trace_index in seen
                 if is_seen:
-                    prefix, suffix = '[[', ']]'
+                    prefix, suffix = "[[", "]]"
                 else:
-                    prefix, suffix = '<<', '>>'
+                    prefix, suffix = "<<", ">>"
                 fp.write(
-                    f'{indent} {prefix}InsnInTrace:{node.trace_index}'
-                    f'{suffix} {disasm_str}\n'
+                    f"{indent} {prefix}InsnInTrace:{node.trace_index}"
+                    f"{suffix} {disasm_str}\n"
                 )
                 for trace_entry in edge.reg:
                     entry_str = format_entry(
@@ -62,7 +62,7 @@ class BackwardNode:
                         disasm=analysis.disasm,
                         trace=analysis.trace,
                     )
-                    fp.write(f'Reason: {entry_str}\n')
+                    fp.write(f"Reason: {entry_str}\n")
                 for trace_entry in edge.mem:
                     entry_str = format_entry(
                         entry=trace_entry,
@@ -70,7 +70,7 @@ class BackwardNode:
                         disasm=analysis.disasm,
                         trace=analysis.trace,
                     )
-                    fp.write(f'Reason: {entry_str}\n')
+                    fp.write(f"Reason: {entry_str}\n")
                 if is_seen:
                     stack.pop()
                     continue
@@ -93,19 +93,18 @@ class BackwardEdge:
 
 class BackwardAnalysis:
     def __init__(
-            self,
-            analysis: Analysis,
-            trace_index0: int,
-            depth: int,
-            ignore_registers: List[Tuple[int, int]] = None
+        self,
+        analysis: Analysis,
+        trace_index0: int,
+        depth: int,
+        ignore_registers: List[Tuple[int, int]] = None,
     ):
         self.trace: Trace = analysis.trace
         self.ud: Ud = analysis.ud
         self.node0: BackwardNode = BackwardNode(trace_index0, depth)
         self.nodes: Dict[int, BackwardNode] = {trace_index0: self.node0}
         self.worklist: Deque[BackwardNode] = deque((self.node0,))
-        self.ignore_registers = \
-            [] if ignore_registers is None else ignore_registers
+        self.ignore_registers = [] if ignore_registers is None else ignore_registers
 
     def analyze(self) -> BackwardNode:
         while len(self.worklist) > 0:
@@ -123,21 +122,18 @@ class BackwardAnalysis:
     def step(self, node: BackwardNode) -> None:
         if node.done or node.depth == 0:
             return
-        reg_use_entries, mem_use_entries = self.get_use_entries(
-            node.trace_index)
+        reg_use_entries, mem_use_entries = self.get_use_entries(node.trace_index)
         for use, entry in zip(
-                self.ud.get_reg_uses_for_trace(node.trace_index),
-                reg_use_entries):
+            self.ud.get_reg_uses_for_trace(node.trace_index), reg_use_entries
+        ):
             if self.should_ignore_register(entry):
                 continue
-            def_node = self.get_node(
-                self.ud.get_trace_for_reg_use(use), node.depth - 1)
+            def_node = self.get_node(self.ud.get_trace_for_reg_use(use), node.depth - 1)
             node.get_edge(def_node).reg.append(entry)
         for use, entry in zip(
-                self.ud.get_mem_uses_for_trace(node.trace_index),
-                mem_use_entries):
-            def_node = self.get_node(
-                self.ud.get_trace_for_mem_use(use), node.depth - 1)
+            self.ud.get_mem_uses_for_trace(node.trace_index), mem_use_entries
+        ):
+            def_node = self.get_node(self.ud.get_trace_for_mem_use(use), node.depth - 1)
             node.get_edge(def_node).mem.append(entry)
         node.done = True
 
@@ -149,8 +145,7 @@ class BackwardAnalysis:
             self.worklist.append(node)
         return node
 
-    def get_use_entries(
-            self, trace_index: int) -> Tuple[List[Entry], List[Entry]]:
+    def get_use_entries(self, trace_index: int) -> Tuple[List[Entry], List[Entry]]:
         reg_use_entries = []
         mem_use_entries = []
         if trace_index == 0:
@@ -168,9 +163,15 @@ class BackwardAnalysis:
             except StopIteration:
                 break
             if entry.tag in (
-                    Tag.MT_LOAD, Tag.MT_STORE, Tag.MT_REG, Tag.MT_GET_REG,
-                    Tag.MT_PUT_REG, Tag.MT_INSN_EXEC, Tag.MT_GET_REG_NX,
-                    Tag.MT_PUT_REG_NX):
+                Tag.MT_LOAD,
+                Tag.MT_STORE,
+                Tag.MT_REG,
+                Tag.MT_GET_REG,
+                Tag.MT_PUT_REG,
+                Tag.MT_INSN_EXEC,
+                Tag.MT_GET_REG_NX,
+                Tag.MT_PUT_REG_NX,
+            ):
                 if entry.insn_seq != insn_seq:
                     break
                 insn_seq = entry.insn_seq

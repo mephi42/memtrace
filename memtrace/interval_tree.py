@@ -3,7 +3,7 @@ from typing import Callable, Generic, List, Tuple, TypeVar, Union
 
 from sortedcontainers import SortedKeyList
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
@@ -24,10 +24,10 @@ class IntervalTree(Generic[T]):
             return key, key + 1
         elif isinstance(key, slice):
             if key.step is not None and key.step != 1:
-                raise ValueError(f'Step must be 1: {key.step}')
+                raise ValueError(f"Step must be 1: {key.step}")
             return key.start, key.stop
         else:
-            raise TypeError('Index must be either an int or a slice')
+            raise TypeError("Index must be either an int or a slice")
 
     def __getitem__(self, key: Union[int, slice]) -> T:
         start, end = self._key2range(key)

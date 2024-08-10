@@ -35,23 +35,23 @@ def main():
                     "--skip-tests",
                 )
             argv = [
-                    "./in-docker",
-                    f"--arch={arch}",
-                    f"--python-version={name_tag}",
-                    "--",
-                    "env",
-                    f"CC={triple}-gcc",
-                    f"HOST={triple}",
-                    f"OBJDUMP={triple}-objdump",
-                    "LC_ALL=C.UTF-8",
-                    "LANG=C.UTF-8",
-                    f"/opt/{name_tag}/bin/python3",
-                    "ci",
-                    f"--python=/opt/{name_tag}/bin/python3",
-                    *cross,
-                    "-DBoost_USE_STATIC_LIBS=ON",
-                    "-DCMAKE_MODULE_LINKER_FLAGS=-static-libgcc -static-libstdc++",
-                ] + rest
+                "./in-docker",
+                f"--arch={arch}",
+                f"--python-version={name_tag}",
+                "--",
+                "env",
+                f"CC={triple}-gcc",
+                f"HOST={triple}",
+                f"OBJDUMP={triple}-objdump",
+                "LC_ALL=C.UTF-8",
+                "LANG=C.UTF-8",
+                f"/opt/{name_tag}/bin/python3",
+                "ci",
+                f"--python=/opt/{name_tag}/bin/python3",
+                *cross,
+                "-DBoost_USE_STATIC_LIBS=ON",
+                "-DCMAKE_MODULE_LINKER_FLAGS=-static-libgcc -static-libstdc++",
+            ] + rest
             returncode = subprocess.call(argv, cwd=basedir)
             if returncode != 0:
                 failures.append((arch, name_tag))

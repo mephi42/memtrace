@@ -16,24 +16,26 @@ from ._memtrace import Disasm, get_endianness_str, Tag
 
 class Analysis:
     def __init__(
-            self,
-            trace_path: str,
-            index_path: Optional[str] = None,
-            ud_path: Optional[str] = None,
-            ud_log: Optional[str] = None,
-            first_entry_index: Optional[int] = None,
-            last_entry_index: Optional[int] = None,
-            tags: Optional[Iterable[Tag]] = None,
-            insn_seqs: Optional[Iterable[int]] = None,
+        self,
+        trace_path: str,
+        index_path: Optional[str] = None,
+        ud_path: Optional[str] = None,
+        ud_log: Optional[str] = None,
+        first_entry_index: Optional[int] = None,
+        last_entry_index: Optional[int] = None,
+        tags: Optional[Iterable[Tag]] = None,
+        insn_seqs: Optional[Iterable[int]] = None,
     ):
         self.index_path = index_path
         self.ud_path = ud_path
         self.ud_log = ud_log
         self.trace = Trace.load(trace_path)
-        if (first_entry_index is not None or
-                last_entry_index is not None or
-                tags is not None or
-                insn_seqs is not None):
+        if (
+            first_entry_index is not None
+            or last_entry_index is not None
+            or tags is not None
+            or insn_seqs is not None
+        ):
             filter = TraceFilter()
             if first_entry_index is not None:
                 filter.first_entry_index = first_entry_index
@@ -54,9 +56,9 @@ class Analysis:
             return
         if self.index_path is None:
             with tempfile.TemporaryDirectory() as tmpdir:
-                index_path = os.path.join(tmpdir, '{}.bin')
+                index_path = os.path.join(tmpdir, "{}.bin")
                 self.trace.build_insn_index(index_path)
-        elif not os.path.exists(self.index_path.replace('{}', 'header')):
+        elif not os.path.exists(self.index_path.replace("{}", "header")):
             self.trace.build_insn_index(self.index_path)
         else:
             self.trace.load_insn_index(self.index_path)
@@ -65,8 +67,9 @@ class Analysis:
     def ud(self) -> Ud:
         if self._ud is None:
             self.init_insn_index()
-            if (self.ud_path is None or
-                    not os.path.exists(self.ud_path.replace('{}', 'header'))):
+            if self.ud_path is None or not os.path.exists(
+                self.ud_path.replace("{}", "header")
+            ):
                 self._ud = Ud.analyze(self.ud_path, self.trace, self.ud_log)
             else:
                 self._ud = Ud.load(self.ud_path, self.trace)
@@ -110,7 +113,7 @@ class Analysis:
         pc = self.ud.get_pc_for_code(code_index)
         disasm_str = self.ud.get_disasm_for_code(code_index)
         symbolized_pc = self.symbolizer.symbolize(pc)
-        return f'0x{pc:016x} {disasm_str} {symbolized_pc}'
+        return f"0x{pc:016x} {disasm_str} {symbolized_pc}"
 
 
 def int_any_base(x):
@@ -118,49 +121,48 @@ def int_any_base(x):
 
 
 def range_any_base(x):
-    start, end = x.split('-')
+    start, end = x.split("-")
     return int_any_base(start), int_any_base(end)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--trace-path', default='memtrace.out')
-    parser.add_argument('--ud-path')
-    parser.add_argument('--index-path')
-    subparsers = parser.add_subparsers(dest='subparser_name')
+    parser.add_argument("--trace-path", default="memtrace.out")
+    parser.add_argument("--ud-path")
+    parser.add_argument("--index-path")
+    subparsers = parser.add_subparsers(dest="subparser_name")
 
-    subparser = subparsers.add_parser('get-traces-for-pc')
-    subparser.add_argument('pc')
+    subparser = subparsers.add_parser("get-traces-for-pc")
+    subparser.add_argument("pc")
 
-    subparser = subparsers.add_parser('taint-backward')
+    subparser = subparsers.add_parser("taint-backward")
     group = subparser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--pc', type=int_any_base)
-    group.add_argument('--trace', type=int_any_base)
-    subparser.add_argument('--depth', type=int_any_base, default=1)
-    subparser.add_argument(
-        '--ignore-register', action='append', type=range_any_base)
+    group.add_argument("--pc", type=int_any_base)
+    group.add_argument("--trace", type=int_any_base)
+    subparser.add_argument("--depth", type=int_any_base, default=1)
+    subparser.add_argument("--ignore-register", action="append", type=range_any_base)
 
-    subparser = subparsers.add_parser('dump-entries')
-    subparser.add_argument('--start-trace', type=int_any_base, default=0)
-    subparser.add_argument('--count', type=int_any_base, default=10)
+    subparser = subparsers.add_parser("dump-entries")
+    subparser.add_argument("--start-trace", type=int_any_base, default=0)
+    subparser.add_argument("--count", type=int_any_base, default=10)
 
-    subparser = subparsers.add_parser('ldst')
-    subparser.add_argument('pc_range', nargs='+')
+    subparser = subparsers.add_parser("ldst")
+    subparser.add_argument("pc_range", nargs="+")
 
     args = parser.parse_args()
     with Analysis(
-            trace_path=args.trace_path,
-            index_path=args.index_path,
-            ud_path=args.ud_path,
+        trace_path=args.trace_path,
+        index_path=args.index_path,
+        ud_path=args.ud_path,
     ) as analysis:
-        if args.subparser_name == 'get-traces-for-pc':
+        if args.subparser_name == "get-traces-for-pc":
             pc = analysis.symbolizer.resolve(args.pc)
             if pc is None:
-                print(f'Cannot find symbol \'{args.pc}\'', file=sys.stderr)
+                print(f"Cannot find symbol '{args.pc}'", file=sys.stderr)
                 sys.exit(1)
             for trace in analysis.get_traces_for_pc(pc):
                 print(str(trace))
-        elif args.subparser_name == 'taint-backward':
+        elif args.subparser_name == "taint-backward":
             if args.trace is None:
                 trace_index0 = analysis.get_last_trace_for_pc(args.pc)
             else:
@@ -175,7 +177,7 @@ def main():
             )
             dag = backward.analyze()
             dag.pp(analysis)
-        elif args.subparser_name == 'dump-entries':
+        elif args.subparser_name == "dump-entries":
             analysis.trace.seek_insn(args.start_trace)
             for _ in range(args.count):
                 entry = next(analysis.trace)
@@ -187,16 +189,17 @@ def main():
                 )
                 if entry.tag == Tag.MT_INSN_EXEC:
                     pc = analysis.ud.get_pc_for_code(entry.insn_seq)
-                    disasm_str = analysis.ud.get_disasm_for_code(
-                        entry.insn_seq)
-                    entry_str = f'{entry_str} 0x{pc:016x}: {disasm_str}'
+                    disasm_str = analysis.ud.get_disasm_for_code(entry.insn_seq)
+                    entry_str = f"{entry_str} 0x{pc:016x}: {disasm_str}"
                 print(entry_str)
-        if args.subparser_name == 'ldst':
+        if args.subparser_name == "ldst":
             pc_ranges = [
-                (analysis.symbolizer.resolve(start_addr),
-                 analysis.symbolizer.resolve(end_addr))
+                (
+                    analysis.symbolizer.resolve(start_addr),
+                    analysis.symbolizer.resolve(end_addr),
+                )
                 for pc_range in args.pc_range
-                for start_addr, end_addr in (pc_range.split('-'),)
+                for start_addr, end_addr in (pc_range.split("-"),)
             ]
             filter = TraceFilter()
             filter.tags = (Tag.MT_LOAD, Tag.MT_STORE)
@@ -219,10 +222,10 @@ def main():
                 entries[entry.insn_seq][entry.index] = entry
                 mem[start:end] = entries
             for node in mem:
-                print(f'* 0x{node.start:x}-0x{node.end:x}')
+                print(f"* 0x{node.start:x}-0x{node.end:x}")
                 for insn_seq, index2entry in node.value.items():
                     disasm_str = analysis.pp_code(insn_seq)
-                    print(f'*** {disasm_str}')
+                    print(f"*** {disasm_str}")
                     for entry in index2entry.values():
                         entry_str = format_entry(
                             entry=entry,
@@ -230,8 +233,8 @@ def main():
                             disasm=analysis.disasm,
                             trace=analysis.trace,
                         )
-                        print(f'***** {entry_str}')
+                        print(f"***** {entry_str}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

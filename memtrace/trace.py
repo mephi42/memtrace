@@ -1,8 +1,7 @@
 from typing import Any, Iterable, Optional
 
 from memtrace.native import wrap_err
-from memtrace._memtrace import DumpKind, Tag, _Trace, _TraceFilter, \
-    VectorOfU32s
+from memtrace._memtrace import DumpKind, Tag, _Trace, _TraceFilter, VectorOfU32s
 
 
 class TraceFilter:
@@ -41,10 +40,10 @@ class TraceFilter:
 
 class Trace:
     @staticmethod
-    def load(path: str) -> 'Trace':
+    def load(path: str) -> "Trace":
         native = _Trace.load(path)
         if native is None:
-            raise Exception('_Trace.load() failed')
+            raise Exception("_Trace.load() failed")
         return Trace(native)
 
     def __init__(self, native: _Trace):
@@ -53,7 +52,7 @@ class Trace:
     def __getattr__(self, name: str) -> Any:
         return getattr(self.native, name)
 
-    def __iter__(self) -> 'Trace':
+    def __iter__(self) -> "Trace":
         return self
 
     def __next__(self) -> Any:

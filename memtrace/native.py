@@ -17,7 +17,6 @@ def wrap_err(func):
         if err < 0:
             native_type_name = type(native_obj).__name__
             error_str = os.strerror(-err)
-            raise Exception(
-                f'{native_type_name}.{func_name}() failed: {error_str}')
+            raise Exception(f"{native_type_name}.{func_name}() failed: {error_str}")
 
     return wrapped

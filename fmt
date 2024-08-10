@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+import subprocess
+import sys
+
+from ci import git_ls_py_files
+
+
+def main():
+    subprocess.check_call(["black", *git_ls_py_files(), *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    main()

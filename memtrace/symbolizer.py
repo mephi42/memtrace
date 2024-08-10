@@ -19,22 +19,22 @@ class Symbolizer:
     def symbolize(self, addr: int) -> str:
         line = self.trace.symbolize(addr)
         if line.symbol is None:
-            symbol = '??'
+            symbol = "??"
         else:
             symbol = line.symbol
         if line.offset == 0:
-            plus = ''
+            plus = ""
         else:
-            plus = f'+0x{line.offset:x}'
+            plus = f"+0x{line.offset:x}"
         if line.section is None:
-            section = ''
+            section = ""
         else:
-            section = f' ({line.section})'
+            section = f" ({line.section})"
         if line.file is None:
-            file = '??'
+            file = "??"
         else:
             file = line.file
-        return f'in {symbol}{plus}{section} at {file}:{line.line}'
+        return f"in {symbol}{plus}{section} at {file}:{line.line}"
 
     def resolve(self, symbol: str) -> Optional[int]:
         return self.trace.resolve(symbol)
