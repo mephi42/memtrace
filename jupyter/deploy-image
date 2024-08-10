@@ -8,26 +8,32 @@ import tempfile
 
 def main():
     basedir = os.path.dirname(__file__)
-    tag = f'mephi42/memtrace-jupyter:{memtrace.__version__}'
-    python_version = 'cp38-cp38'
+    tag = f"mephi42/memtrace-jupyter:{memtrace.__version__}"
+    python_version = "cp38-cp38"
     workdir = tempfile.TemporaryDirectory(dir=basedir)
     try:
-        subprocess.check_call([
-            os.path.join(basedir, '..', 'ci-docker'),
-            f'--python-version={python_version}',
-            f'--wheel-dir={workdir.name}',
-        ])
-        subprocess.check_call([
-            'docker',
-            'build',
-            '-f', os.path.join(basedir, 'image', 'Dockerfile'),
-            '-t', tag,
-            workdir.name,
-        ])
+        subprocess.check_call(
+            [
+                os.path.join(basedir, "..", "ci-docker"),
+                f"--python-version={python_version}",
+                f"--wheel-dir={workdir.name}",
+            ]
+        )
+        subprocess.check_call(
+            [
+                "docker",
+                "build",
+                "-f",
+                os.path.join(basedir, "image", "Dockerfile"),
+                "-t",
+                tag,
+                workdir.name,
+            ]
+        )
     finally:
         shutil.rmtree(workdir.name)
-    subprocess.check_call(['docker', 'push', tag])
+    subprocess.check_call(["docker", "push", tag])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

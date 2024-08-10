@@ -13,27 +13,27 @@ from memtrace.notebook import open_notebook
 from memtrace._memtrace import DumpKind, Tag
 
 
-@click.group(help='memtrace version ' + memtrace.__version__)
+@click.group(help="memtrace version " + memtrace.__version__)
 def main():
     pass
 
 
 @main.command(
-    help='Analyze a memtrace.out file in a Jupyter notebook',
+    help="Analyze a memtrace.out file in a Jupyter notebook",
 )
 def notebook():
     with open_notebook(click.echo):
-        click.echo('Press Ctrl+C to stop the container.')
+        click.echo("Press Ctrl+C to stop the container.")
         threading.Event().wait()
 
 
 @main.command(
     context_settings={
-        'ignore_unknown_options': True,
+        "ignore_unknown_options": True,
     },
-    help='Run a command and record its execution trace into memtrace.out',
+    help="Run a command and record its execution trace into memtrace.out",
 )
-@click.argument('argv', nargs=-1, type=click.UNPROCESSED)
+@click.argument("argv", nargs=-1, type=click.UNPROCESSED)
 def record(argv):
     p = memtrace.tracer.popen(argv)
     while True:
@@ -46,7 +46,7 @@ def record(argv):
 
 
 class TagParamType(click.ParamType):
-    name = 'tag'
+    name = "tag"
 
     def convert(self, value, param, ctx):
         return Tag.names[value]
@@ -58,43 +58,45 @@ class AnyIntParamType(click.types.IntParamType):
 
 
 @main.command(
-    help='Read out the trace stored in a memtrace.out file',
+    help="Read out the trace stored in a memtrace.out file",
 )
 @click.option(
-    '-i', '--input',
-    default='memtrace.out',
-    help='Input file name',
+    "-i",
+    "--input",
+    default="memtrace.out",
+    help="Input file name",
 )
 @click.option(
-    '-o', '--output',
-    default='/dev/stdout',
-    help='Output file name',
+    "-o",
+    "--output",
+    default="/dev/stdout",
+    help="Output file name",
 )
 @click.option(
-    '--start',
-    help='Index of the first entry (inclusive)',
+    "--start",
+    help="Index of the first entry (inclusive)",
     type=AnyIntParamType(),
 )
 @click.option(
-    '--end',
-    help='Index of the last entry (inclusive)',
+    "--end",
+    help="Index of the last entry (inclusive)",
     type=AnyIntParamType(),
 )
 @click.option(
-    '--tag',
-    help='Output only entries with the specified tags',
+    "--tag",
+    help="Output only entries with the specified tags",
     multiple=True,
     type=TagParamType(),
 )
 @click.option(
-    '--insn-seq',
-    help='Output only entries related to the specified instructions',
+    "--insn-seq",
+    help="Output only entries related to the specified instructions",
     multiple=True,
     type=AnyIntParamType(),
 )
 @click.option(
-    '--srcline',
-    help='Output only source file names and line numbers',
+    "--srcline",
+    help="Output only source file names and line numbers",
     is_flag=True,
 )
 def report(input, output, start, end, tag, insn_seq, srcline):
@@ -117,5 +119,5 @@ def report(input, output, start, end, tag, insn_seq, srcline):
     analysis.trace.dump(output, kind)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
