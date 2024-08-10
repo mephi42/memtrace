@@ -50,7 +50,7 @@ def setup_build_venv(build, python, host_python):
             bootstrap_venv,
             "pip",
             [
-                "https://github.com/mephi42/crossenv/archive/1b117f494111c89f3ed3f8abfa389db0ac726fc5.zip"
+                "https://github.com/mephi42/crossenv/archive/ce50bbdc9c8ea712f5b6a9ef0cc62cec1129743e.zip"
             ],
         )
         run_in_venv(bootstrap_venv, ["python", "-m", "crossenv", host_python, venv])
@@ -73,6 +73,7 @@ def setup_build_venv(build, python, host_python):
 
 
 def repair_wheel(venv, whl, wheel_dir, cross_prefix, host):
+    host = {"arm": "armv7l"}.get(host, host)
     with tempfile.TemporaryDirectory(dir=wheel_dir) as tmp_wheel_dir:
         run_in_venv(
             venv,
