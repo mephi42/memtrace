@@ -86,8 +86,7 @@ def repair_wheel(venv, whl, wheel_dir, cross_prefix, host):
             venv,
             [
                 f"{cross_prefix}python",
-                "-m",
-                "auditwheel",
+                os.path.join(basedir, "auditwheel"),
                 "repair",
                 f"--plat=manylinux2014_{host2machine(host)}",
                 f"--wheel-dir={tmp_wheel_dir}",
