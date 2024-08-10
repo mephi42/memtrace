@@ -46,7 +46,13 @@ def setup_build_venv(build, python, host_python):
     else:
         bootstrap_venv = os.path.join(venv, "bootstrap")
         subprocess.check_call([python, "-m", "venv", bootstrap_venv])
-        pip_install_in_venv(bootstrap_venv, "pip", ["crossenv"])
+        pip_install_in_venv(
+            bootstrap_venv,
+            "pip",
+            [
+                "https://github.com/mephi42/crossenv/archive/1b117f494111c89f3ed3f8abfa389db0ac726fc5.zip"
+            ],
+        )
         run_in_venv(bootstrap_venv, ["python", "-m", "crossenv", host_python, venv])
     if host_python is None:
         pip_install_in_venv(
