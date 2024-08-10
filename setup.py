@@ -5,14 +5,6 @@ import skbuild
 import memtrace
 
 uname = os.uname()
-memtrace_dir = os.path.join(os.path.dirname(__file__), "memtrace")
-tracer_dir = os.path.join(memtrace_dir, "tracer", f"{uname.sysname}-{uname.machine}")
-memtrace_data = [
-    "memtrace.ipynb",
-]
-for dirpath, dirnames, filenames in os.walk(tracer_dir):
-    dirpath = os.path.relpath(dirpath, memtrace_dir)
-    memtrace_data.extend(os.path.join(dirpath, filename) for filename in filenames)
 skbuild.setup(
     name="memtrace",
     version=memtrace.__version__,
@@ -36,7 +28,9 @@ skbuild.setup(
         "sortedcontainers",
     ],
     package_data={
-        "memtrace": memtrace_data,
+        "memtrace": [
+            "memtrace.ipynb",
+        ],
     },
     entry_points={
         "console_scripts": [
