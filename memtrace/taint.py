@@ -1,6 +1,6 @@
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List, Set, Tuple
+from typing import Deque, Dict, List, Optional, Set, Tuple
 import sys
 
 from memtrace.analysis import Analysis
@@ -97,7 +97,7 @@ class BackwardAnalysis:
         analysis: Analysis,
         trace_index0: int,
         depth: int,
-        ignore_registers: List[Tuple[int, int]] = None,
+        ignore_registers: Optional[List[Tuple[int, int]]] = None,
     ):
         self.trace: Trace = analysis.trace
         self.ud: Ud = analysis.ud

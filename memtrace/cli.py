@@ -13,6 +13,7 @@ import memtrace.tracer
 from memtrace.notebook import open_notebook
 from memtrace._memtrace import DumpKind, Tag
 import memtrace.stats
+from memtrace.taint import BackwardAnalysis
 from memtrace.trace import Trace
 
 
@@ -58,6 +59,14 @@ class TagParamType(click.ParamType):
 class AnyIntParamType(click.types.IntParamType):
     def convert(self, value, param, ctx):
         return int(value, 0)
+
+
+class AnyIntRangeParamType(click.ParamType):
+    name = "range"
+
+    def convert(self, value, param, ctx):
+        start, end = value.split("-")
+        return int(start, 0), int(end, 0)
 
 
 def input_option(function):
@@ -225,6 +234,16 @@ def index(input, index):
     Trace.load(input).build_insn_index(index)
 
 
+def resolve_pc(analysis, pc):
+    analysis.ud
+    analysis.trace.seek_end()
+    resolved_pc = analysis.symbolizer.resolve(pc)
+    if resolved_pc is None:
+        print(f"Cannot find symbol '{pc}'", file=sys.stderr)
+        sys.exit(1)
+    return resolved_pc
+
+
 @main.command(
     help="Print the insn-in-trace indices corresponding to the "
     + "specified address or symbol",
@@ -241,15 +260,54 @@ def traces_for_pc(input, index, ud, output, pc):
         index_path=index,
         ud_path=ud,
     ) as analysis:
-        analysis.ud
-        analysis.trace.seek_end()
-        resolved_pc = analysis.symbolizer.resolve(pc)
-        if resolved_pc is None:
-            print(f"Cannot find symbol '{pc}'", file=sys.stderr)
-            sys.exit(1)
+        resolved_pc = resolve_pc(analysis, pc)
         with open(output, "w") as fp:
             for trace in analysis.get_traces_for_pc(resolved_pc):
                 fp.write(f"{trace}\n")
+
+
+@main.command(
+    help="Perform backward taint analysis on the trace",
+)
+@input_option
+@index_option
+@ud_option
+@output_option
+@click.option("--pc", help="Instruction address from which to start the analysis")
+@click.option(
+    "--trace",
+    type=AnyIntParamType(),
+    help="Insn-in-trace index from which to start the analysis",
+)
+@click.option("--depth", type=AnyIntParamType(), default=1, help="Analysis depth")
+@click.option(
+    "--ignore-register",
+    type=AnyIntRangeParamType(),
+    multiple=True,
+    help="Do not follow these registers",
+)
+def taint_backward(input, index, ud, output, pc, trace, depth, ignore_register):
+    if (trace is None) == (pc is None):
+        print("Specify either --pc or --trace", file=sys.stderr)
+        sys.exit(1)
+    index = default_index(input, index)
+    with Analysis(
+        trace_path=input,
+        index_path=index,
+        ud_path=ud,
+    ) as analysis:
+        if trace is None:
+            resolved_pc = resolve_pc(analysis, pc)
+            trace = analysis.get_last_trace_for_pc(resolved_pc)
+        backward = BackwardAnalysis(
+            analysis,
+            trace_index0=trace,
+            depth=depth,
+            ignore_registers=ignore_register,
+        )
+        dag = backward.analyze()
+        with open(output, "w") as fp:
+            dag.pp(analysis, fp)
 
 
 if __name__ == "__main__":

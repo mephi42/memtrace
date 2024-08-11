@@ -14,11 +14,9 @@ import time
 from typing import List
 import unittest
 
-from memtrace.analysis import Analysis
 import memtrace.cli
 from memtrace.format import format_entry
 from memtrace.symbolizer import Symbolizer
-from memtrace.taint import BackwardAnalysis
 from memtrace.trace import Trace
 import memtrace.tracer
 from memtrace.ud import Ud
@@ -349,26 +347,22 @@ class MachineTest(CommonTest):
 
     def test_taint(self) -> None:
         taint_org = f"{self.get_target()}-taint.org"
-        actual_taint_org = os.path.join(self.workdir.name, taint_org)
-        expected_taint_org = os.path.join(self.basedir, taint_org)
-        with Analysis(
-            trace_path=os.path.join(self.workdir.name, "memtrace.out"),
-        ) as analysis:
-            analysis.init_insn_index()
-            analysis.trace.seek_end()
-            pc = analysis.symbolizer.resolve("_taintme")
-            self.assertIsNotNone(pc)
-            analysis.trace.seek_start()
-            backward = BackwardAnalysis(
-                analysis=analysis,
-                trace_index0=analysis.get_last_trace_for_pc(pc),
-                depth=9,
+        actual = os.path.join(self.workdir.name, taint_org)
+        expected = os.path.join(self.basedir, taint_org)
+        with self.assertRaises(SystemExit) as system_exit:
+            input = os.path.join(self.workdir.name, "memtrace.out")
+            memtrace.cli.main(
+                [
+                    "taint-backward",
+                    f"--input={input}",
+                    f"--output={actual}",
+                    "--pc=_taintme",
+                    "--depth=9",
+                ]
             )
-            dag = backward.analyze()
-            with open(actual_taint_org, "w") as fp:
-                dag.pp(analysis, fp)
-        self.filter_file(actual_taint_org)
-        diff_files(expected_taint_org, actual_taint_org)
+        self.assertEqual(0, system_exit.exception.code)
+        self.filter_file(actual)
+        diff_files(expected, actual)
 
     def test_stats(self) -> None:
         stats_txt = f"{self.get_target()}-stats.txt"
