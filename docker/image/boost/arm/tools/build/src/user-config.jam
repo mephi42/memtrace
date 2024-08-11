@@ -1,8 +1,8 @@
-using gcc : arm : arm-unknown-linux-gnueabi-g++ ;
-using python : 3.6 : /usr/arm-unknown-linux-gnueabi/cp36-cp36m/bin/python3 : /usr/arm-unknown-linux-gnueabi/cp36-cp36m/include/python3.6m : /usr/arm-unknown-linux-gnueabi/cp36-cp36m/lib ;
-using python : 3.7 : /usr/arm-unknown-linux-gnueabi/cp37-cp37m/bin/python3 : /usr/arm-unknown-linux-gnueabi/cp37-cp37m/include/python3.7m : /usr/arm-unknown-linux-gnueabi/cp37-cp37m/lib ;
-using python : 3.8 : /usr/arm-unknown-linux-gnueabi/cp38-cp38/bin/python3 : /usr/arm-unknown-linux-gnueabi/cp38-cp38/include/python3.8 : /usr/arm-unknown-linux-gnueabi/cp38-cp38/lib ;
-using python : 3.9 : /usr/arm-unknown-linux-gnueabi/cp39-cp39/bin/python3 : /usr/arm-unknown-linux-gnueabi/cp39-cp39/include/python3.9 : /usr/arm-unknown-linux-gnueabi/cp39-cp39/lib ;
-using python : 3.10 : /usr/arm-unknown-linux-gnueabi/cp310-cp310/bin/python3 : /usr/arm-unknown-linux-gnueabi/cp310-cp310/include/python3.10 : /usr/arm-unknown-linux-gnueabi/cp310-cp310/lib ;
-using python : 3.11 : /usr/arm-unknown-linux-gnueabi/cp311-cp311/bin/python3 : /usr/arm-unknown-linux-gnueabi/cp311-cp311/include/python3.11 : /usr/arm-unknown-linux-gnueabi/cp311-cp311/lib ;
-using python : 3.12 : /usr/arm-unknown-linux-gnueabi/cp312-cp312/bin/python3 : /usr/arm-unknown-linux-gnueabi/cp312-cp312/include/python3.12 : /usr/arm-unknown-linux-gnueabi/cp312-cp312/lib ;
+using gcc : arm : arm-unknown-linux-gnueabihf-g++ ;
+using python : 3.6 : /usr/arm-unknown-linux-gnueabihf/cp36-cp36m/bin/python3 : /usr/arm-unknown-linux-gnueabihf/cp36-cp36m/include/python3.6m : /usr/arm-unknown-linux-gnueabihf/cp36-cp36m/lib ;
+using python : 3.7 : /usr/arm-unknown-linux-gnueabihf/cp37-cp37m/bin/python3 : /usr/arm-unknown-linux-gnueabihf/cp37-cp37m/include/python3.7m : /usr/arm-unknown-linux-gnueabihf/cp37-cp37m/lib ;
+using python : 3.8 : /usr/arm-unknown-linux-gnueabihf/cp38-cp38/bin/python3 : /usr/arm-unknown-linux-gnueabihf/cp38-cp38/include/python3.8 : /usr/arm-unknown-linux-gnueabihf/cp38-cp38/lib ;
+using python : 3.9 : /usr/arm-unknown-linux-gnueabihf/cp39-cp39/bin/python3 : /usr/arm-unknown-linux-gnueabihf/cp39-cp39/include/python3.9 : /usr/arm-unknown-linux-gnueabihf/cp39-cp39/lib ;
+using python : 3.10 : /usr/arm-unknown-linux-gnueabihf/cp310-cp310/bin/python3 : /usr/arm-unknown-linux-gnueabihf/cp310-cp310/include/python3.10 : /usr/arm-unknown-linux-gnueabihf/cp310-cp310/lib ;
+using python : 3.11 : /usr/arm-unknown-linux-gnueabihf/cp311-cp311/bin/python3 : /usr/arm-unknown-linux-gnueabihf/cp311-cp311/include/python3.11 : /usr/arm-unknown-linux-gnueabihf/cp311-cp311/lib ;
+using python : 3.12 : /usr/arm-unknown-linux-gnueabihf/cp312-cp312/bin/python3 : /usr/arm-unknown-linux-gnueabihf/cp312-cp312/include/python3.12 : /usr/arm-unknown-linux-gnueabihf/cp312-cp312/lib ;
