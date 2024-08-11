@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import argparse
 import os
 import tempfile
 from typing import Any, List, Optional, Tuple
@@ -47,45 +46,3 @@ class Ud:
 
     def get_codes_for_pc(self, pc: int) -> List[int]:
         return self.get_codes_for_pc_ranges([(pc, pc)])
-
-
-def main(argv: Optional[List[str]] = None) -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("memtrace_out", nargs="?", default="memtrace.out")
-    parser.add_argument("memtrace_idx", nargs="?")
-    parser.add_argument("--start", type=int)
-    parser.add_argument("--end", type=int)
-    parser.add_argument("--dot")
-    parser.add_argument("--html")
-    parser.add_argument("--csv")
-    parser.add_argument("--binary")
-    parser.add_argument("--log")
-    args = parser.parse_args(argv)
-    if args.memtrace_idx is None:
-        memtrace_idx = os.path.join(os.path.dirname(args.memtrace_out), "index-{}.bin")
-    else:
-        memtrace_idx = args.memtrace_idx
-    from memtrace.analysis import Analysis
-
-    analysis = Analysis(
-        args.memtrace_out,
-        memtrace_idx,
-        args.binary,
-        args.log,
-        first_entry_index=args.start,
-        last_entry_index=args.end,
-    )
-    ud = analysis.ud
-    try:
-        if args.dot is not None:
-            ud.dump_dot(args.dot)
-        if args.html is not None:
-            ud.dump_dot(args.html)
-        if args.csv is not None:
-            ud.dump_csv(args.csv)
-    finally:
-        analysis.close()
-
-
-if __name__ == "__main__":
-    main()
