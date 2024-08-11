@@ -3,6 +3,7 @@
 #include "pub_core_debuginfo.h"
 #include "pub_core_libcfile.h"
 #include "pub_core_machine.h"
+#include "pub_core_syscall.h"
 #include "pub_tool_aspacehl.h"
 #include "pub_tool_basics.h"
 #include "pub_tool_guest.h"
@@ -107,6 +108,8 @@ typedef struct {
 #define MAX_SYMBOLIC_PC_RANGES 32
 static SymbolicAddrRange symbolicPcRanges[MAX_SYMBOLIC_PC_RANGES];
 static UInt nSymbolicPcRanges;
+static UChar traceId[16];
+static Bool traceIdSpecified;
 
 /* Generic entry header. */
 struct __attribute__((__packed__)) Tlv {
@@ -128,6 +131,7 @@ struct __attribute__((__packed__)) HeaderEntry {
    struct Tlv tlv;
    UShort e_machine;
    UShort regsSize;
+   UChar traceId[16];
 };
 
 /* Used for MT_LOAD, MT_STORE, MT_REG, MT_GET_REG, MT_PUT_REG. */
@@ -350,12 +354,18 @@ static void open_trace_file(void)
    trace = traceStart;
    traceEnd = traceStart + TRACE_BUFFER_SIZE;
 
-   MT_STATIC_ASSERT(sizeof(struct HeaderEntry) == 8);
+   MT_STATIC_ASSERT(sizeof(struct HeaderEntry) == 24);
    entry = (struct HeaderEntry*)trace;
    entry->tlv.tag = MT_MAGIC;
    entry->tlv.length = sizeof(struct HeaderEntry);
    entry->e_machine = VG_ELF_MACHINE;
    entry->regsSize = sizeof(VexGuestArchState);
+   VG_(memset)(entry->traceId, 0, sizeof(entry->traceId));
+   if (traceIdSpecified)
+      VG_(memcpy)(entry->traceId, traceId, sizeof(entry->traceId));
+   else
+      VG_(do_syscall3)(__NR_getrandom,
+                       (UWord)entry->traceId, sizeof(entry->traceId), 0);
    trace += sizeof(struct HeaderEntry);
 
    store_reg_meta();
@@ -754,14 +764,56 @@ static Bool add_pc_range(const HChar* spec)
    return True;
 }
 
+static Int parse_hex_digit(HChar digit) {
+   switch (digit) {
+   case '0': return 0;
+   case '1': return 1;
+   case '2': return 2;
+   case '3': return 3;
+   case '4': return 4;
+   case '5': return 5;
+   case '6': return 6;
+   case '7': return 7;
+   case '8': return 8;
+   case '9': return 9;
+   case 'a': case 'A': return 10;
+   case 'b': case 'B': return 11;
+   case 'c': case 'C': return 12;
+   case 'd': case 'D': return 13;
+   case 'e': case 'E': return 14;
+   case 'f': case 'F': return 15;
+   default: return -1;
+   }
+}
+
+static Bool set_trace_id(const HChar *spec)
+{
+   Int digit;
+   SizeT i;
+
+   for (i = 0; i < sizeof(traceId) * 2; i++) {
+      digit = parse_hex_digit(spec[i]);
+      if (digit == -1)
+         return False;
+
+      traceId[i / 2] |= digit << (4 - (i % 2) * 4);
+   }
+
+   traceIdSpecified = True;
+   return True;
+}
+
 static Bool mt_process_cmd_line_option(const HChar* arg)
 {
    const HChar* tmpStr;
 
    if (VG_STR_CLO(arg, "--pc-range", tmpStr))
       return add_pc_range(tmpStr);
-   else
-      return False;
+
+   if (VG_STR_CLO(arg, "--trace-id", tmpStr))
+      return set_trace_id(tmpStr);
+
+   return False;
 }
 
 static void mt_print_usage(void)
@@ -1045,7 +1097,7 @@ static void mt_pre_clo_init(void)
    VG_(details_name)("Memory Tracer");
    VG_(details_description)("Valgrind tool for tracing memory accesses");
    VG_(details_copyright_author)(
-      "Copyright (C) 2019-2020, and GNU GPL'd, by mephi42.");
+      "Copyright (C) 2019-2024, and GNU GPL'd, by mephi42.");
    VG_(details_bug_reports_to)("https://github.com/mephi42/memtrace");
    VG_(basic_tool_funcs)(mt_post_clo_init,
                          mt_instrument,

@@ -3,6 +3,7 @@ Word              : I
 Word size         : 4
 Machine           : EM_386
 Regs size         : 352
+Trace ID          : fedcba98765432100123456789abcdef
 [         0] MT_REGMETA uint32_t host_EvC_FAILADDR [0x0]
 [         1] MT_REGMETA uint32_t host_EvC_COUNTER [0x4]
 [         2] MT_REGMETA uint32_t eax [0x8]

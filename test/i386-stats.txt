@@ -1,5 +1,5 @@
 MT_GET_REG count=14 size=224
-MT_HEADER32 count=1 size=8
+MT_HEADER32 count=1 size=24
 MT_INSN count=13 size=240
 MT_INSN_EXEC count=13 size=104
 MT_LOAD count=2 size=32
@@ -7,4 +7,4 @@ MT_MMAP count=4 size=
 MT_PUT_REG count=25 size=400
 MT_REGMETA count=66 size=1184
 MT_STORE count=2 size=32
-total count=140 size=2424
+total count=140 size=2440

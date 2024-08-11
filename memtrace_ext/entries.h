@@ -100,6 +100,8 @@ class Tlv : public B {
   }
 };
 
+using TraceId = std::array<std::uint8_t, 16>;
+
 template <Endianness E, typename W, typename B = Overlay>
 class HeaderEntry : public B {
  public:
@@ -118,11 +120,17 @@ class HeaderEntry : public B {
     return RawInt<E, std::uint16_t>(this->GetData() + kRegsSizeOffset)
         .GetValue();
   }
+  const TraceId& GetTraceId() const {
+    return *reinterpret_cast<const TraceId *>(
+        this->GetData() + kTraceIdOffset);
+  }
 
  private:
   static constexpr size_t kMachineTypeOffset = Tlv<E, W>::kFixedLength;
   static constexpr size_t kRegsSizeOffset =
       kMachineTypeOffset + sizeof(std::uint16_t);
+  static constexpr size_t kTraceIdOffset =
+      kRegsSizeOffset + sizeof(std::uint16_t);
 };
 
 template <Endianness E, typename W, typename B = Overlay>

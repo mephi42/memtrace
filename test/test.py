@@ -117,7 +117,7 @@ class CommonTest(unittest.TestCase):
     @classmethod
     def memtrace_call(cls, fp):
         p = memtrace.tracer.popen(
-            [f"./{cls.get_target()}"],
+            ["--trace-id=fedcba98765432100123456789abcdef", f"./{cls.get_target()}"],
             stdin=fp,
             stdout=subprocess.DEVNULL,
             cwd=cls.workdir.name,
@@ -290,6 +290,11 @@ class MachineTest(CommonTest):
                 "Machine           : {}\n".format(trace.get_machine_type()).encode()
             )
             fp.write("Regs size         : {}\n".format(trace.get_regs_size()).encode())
+            fp.write(
+                "Trace ID          : {}\n".format(
+                    bytes(trace.get_trace_id()).hex()
+                ).encode()
+            )
             pydir_bytes = self.pydir.encode()
             workdir_bytes = self.workdir.name.encode()
             testdir_bytes = self.basedir.encode()
