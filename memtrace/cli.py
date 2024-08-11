@@ -13,6 +13,7 @@ from memtrace.analysis import Analysis
 import memtrace.tracer
 from memtrace.notebook import open_notebook
 from memtrace._memtrace import DumpKind, Tag
+import memtrace.stats
 
 
 @click.group(help="memtrace version " + memtrace.__version__)
@@ -21,7 +22,7 @@ def main():
 
 
 @main.command(
-    help="Analyze a memtrace.out file in a Jupyter notebook",
+    help="Analyze the trace in a Jupyter notebook",
 )
 def notebook():
     with open_notebook(click.echo):
@@ -33,7 +34,7 @@ def notebook():
     context_settings={
         "ignore_unknown_options": True,
     },
-    help="Run a command and record its execution trace into memtrace.out",
+    help="Run a command and record its execution trace",
 )
 @click.argument("argv", nargs=-1, type=click.UNPROCESSED)
 def record(argv):
@@ -68,6 +69,15 @@ def input_option(function):
     )(function)
 
 
+def output_option(function):
+    return click.option(
+        "-o",
+        "--output",
+        default="/dev/stdout",
+        help="Output file name",
+    )(function)
+
+
 def start_option(function):
     return click.option(
         "--start",
@@ -85,15 +95,10 @@ def end_option(function):
 
 
 @main.command(
-    help="Read out the trace stored in a memtrace.out file",
+    help="Print the trace as text",
 )
 @input_option
-@click.option(
-    "-o",
-    "--output",
-    default="/dev/stdout",
-    help="Output file name",
-)
+@output_option
 @start_option
 @end_option
 @click.option(
@@ -136,7 +141,7 @@ def report(input, output, start, end, tag, insn_seq, srcline):
 
 
 @main.command(
-    help="Perform use-def analysis on the trace stored in a memtrace.out file",
+    help="Perform use-def analysis on the trace",
 )
 @input_option
 @click.option(
@@ -187,6 +192,17 @@ def ud(input, index, start, end, dot, html, csv, binary, log):
             analysis.ud.dump_html(html)
         if csv is not None:
             analysis.ud.dump_csv(csv)
+
+
+@main.command(
+    help="Analyze distribution of tags in the trace",
+)
+@input_option
+@output_option
+def stats(input, output):
+    stats = memtrace.stats.from_trace_file(input)
+    with open(output, "w") as fp:
+        memtrace.stats.pp(stats, fp)
 
 
 if __name__ == "__main__":

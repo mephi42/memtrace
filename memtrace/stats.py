@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-import argparse
-import sys
-
 from memtrace.trace import Trace
 
 
@@ -18,15 +15,3 @@ def pp(stats, fp):
         total_count += tag_stats.count
         total_size += tag_stats.size
     fp.write(f"total count={total_count} size={total_size}\n")
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("memtrace_out", nargs="?", default="memtrace.out")
-    args = parser.parse_args(argv)
-    stats = from_trace_file(args.memtrace_out)
-    pp(stats, sys.stdout)
-
-
-if __name__ == "__main__":
-    main()

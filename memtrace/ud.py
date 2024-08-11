@@ -3,6 +3,7 @@ import os
 import tempfile
 from typing import Any, List, Optional, Tuple
 
+from memtrace.native import wrap_err
 from memtrace.trace import Trace
 from ._memtrace import Range, _Ud, VectorOfRanges
 
@@ -36,6 +37,18 @@ class Ud:
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.native, name)
+
+    @wrap_err
+    def dump_dot(self, path):
+        pass
+
+    @wrap_err
+    def dump_html(self, path):
+        pass
+
+    @wrap_err
+    def dump_csv(self, path):
+        pass
 
     def get_codes_for_pc_ranges(self, pc_ranges: List[Tuple[int, int]]) -> List[int]:
         native_pc_ranges = VectorOfRanges()

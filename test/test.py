@@ -17,7 +17,6 @@ import unittest
 from memtrace.analysis import Analysis
 import memtrace.cli
 from memtrace.format import format_entry
-import memtrace.stats as stats
 from memtrace.symbolizer import Symbolizer
 from memtrace.taint import BackwardAnalysis
 from memtrace.trace import Trace
@@ -247,11 +246,11 @@ class MachineTest(CommonTest):
         ud_txt = f"{self.get_target()}-ud.txt"
         actual_ud_txt = os.path.join(self.workdir.name, ud_txt)
         expected_ud_txt = os.path.join(self.basedir, ud_txt)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit) as system_exit:
             input = os.path.join(self.workdir.name, "memtrace.out")
             dot = os.path.join(self.workdir.name, "memtrace.dot")
             html = os.path.join(self.workdir.name, "memtrace.html")
-            csv = os.path.join(self.workdir.name, "memtrace.csv")
+            csv = os.path.join(self.workdir.name, "memtrace-{}.csv")
             memtrace.cli.main(
                 [
                     "ud",
@@ -262,6 +261,7 @@ class MachineTest(CommonTest):
                     f"--log={actual_ud_txt}",
                 ]
             )
+        self.assertEqual(0, system_exit.exception.code)
         self.filter_file(actual_ud_txt)
         diff_files(expected_ud_txt, actual_ud_txt)
 
@@ -369,9 +369,16 @@ class MachineTest(CommonTest):
         stats_txt = f"{self.get_target()}-stats.txt"
         actual_stats_txt = os.path.join(self.workdir.name, stats_txt)
         expected_stats_txt = os.path.join(self.basedir, stats_txt)
-        result = stats.from_trace_file(os.path.join(self.workdir.name, "memtrace.out"))
-        with open(actual_stats_txt, "w") as fp:
-            stats.pp(result, fp)
+        with self.assertRaises(SystemExit) as system_exit:
+            input = os.path.join(self.workdir.name, "memtrace.out")
+            memtrace.cli.main(
+                [
+                    "stats",
+                    f"--input={input}",
+                    f"--output={actual_stats_txt}",
+                ]
+            )
+        self.assertEqual(0, system_exit.exception.code)
         self.filter_file(actual_stats_txt)
         diff_files(expected_stats_txt, actual_stats_txt)
 
