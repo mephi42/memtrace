@@ -76,7 +76,9 @@ jobs:
       run: python3 setup.py sdist
 
     - name: Build
-      run: PATH=/usr/lib/ccache:$PATH ./ci --skip-repair
+      run: PATH=/usr/lib/ccache:$PATH ./ci
+               --skip-repair
+               -DVALGRIND_CONFIGURE_FLAGS=--disable-dependency-tracking
 
     - name: Smoke test
       run: python3 -m pip install --user dist/wheelhouse/*.whl &&
@@ -103,6 +105,7 @@ jobs:
       run: ./ci-docker
                --arch={% raw %}${{ matrix.arch }}{% endraw %}
                --python={% raw %}${{ matrix.python }}{% endraw %}
+               -DVALGRIND_CONFIGURE_FLAGS=--disable-dependency-tracking
 {{ steps_post("cross-${{ matrix.arch }}-${{ matrix.python }}") }}
 
   PyPI:
