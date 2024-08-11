@@ -90,6 +90,9 @@ jobs:
         python: [{{ pythons|map(attribute=1)|join(",") }}]
     runs-on: ubuntu-latest
 
+{%- set arch_python %}--arch={% raw %}${{ matrix.arch }}{% endraw %}
+               --python={% raw %}${{ matrix.python }}{% endraw %}{%- endset %}
+
     steps:
     - name: Install packages
       run: export DEBIAN_FRONTEND=noninteractive &&
@@ -98,10 +101,14 @@ jobs:
                ccache
 {{ steps_pre("cross-${{ matrix.arch }}-${{ matrix.python }}") }}
 
+    - name: Pull the Docker image
+      run: ./in-docker
+               {{ arch_python }}
+               true
+
     - name: Build
       run: ./ci-docker
-               --arch={% raw %}${{ matrix.arch }}{% endraw %}
-               --python={% raw %}${{ matrix.python }}{% endraw %}
+               {{ arch_python }}
                -DVALGRIND_CONFIGURE_FLAGS=--disable-dependency-tracking
 {{ steps_post("cross-${{ matrix.arch }}-${{ matrix.python }}") }}
 

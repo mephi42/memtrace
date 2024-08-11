@@ -108,6 +108,12 @@ jobs:
     - name: Show ccache stats
       run: ccache --show-stats --verbose
 
+    - name: Pull the Docker image
+      run: ./in-docker
+               --arch=${{ matrix.arch }}
+               --python=${{ matrix.python }}
+               true
+
     - name: Build
       run: ./ci-docker
                --arch=${{ matrix.arch }}
