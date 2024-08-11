@@ -119,24 +119,12 @@ def int_any_base(x):
     return int(x, 0)
 
 
-def range_any_base(x):
-    start, end = x.split("-")
-    return int_any_base(start), int_any_base(end)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--trace-path", default="memtrace.out")
     parser.add_argument("--ud-path")
     parser.add_argument("--index-path")
     subparsers = parser.add_subparsers(dest="subparser_name")
-
-    subparser = subparsers.add_parser("taint-backward")
-    group = subparser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--pc", type=int_any_base)
-    group.add_argument("--trace", type=int_any_base)
-    subparser.add_argument("--depth", type=int_any_base, default=1)
-    subparser.add_argument("--ignore-register", action="append", type=range_any_base)
 
     subparser = subparsers.add_parser("dump-entries")
     subparser.add_argument("--start-trace", type=int_any_base, default=0)
@@ -151,22 +139,7 @@ def main():
         index_path=args.index_path,
         ud_path=args.ud_path,
     ) as analysis:
-        if args.subparser_name == "taint-backward":
-            if args.trace is None:
-                trace_index0 = analysis.get_last_trace_for_pc(args.pc)
-            else:
-                trace_index0 = args.trace
-            from memtrace.taint import BackwardAnalysis
-
-            backward = BackwardAnalysis(
-                analysis,
-                trace_index0=trace_index0,
-                depth=args.depth,
-                ignore_registers=args.ignore_register,
-            )
-            dag = backward.analyze()
-            dag.pp(analysis)
-        elif args.subparser_name == "dump-entries":
+        if args.subparser_name == "dump-entries":
             analysis.trace.seek_insn(args.start_trace)
             for _ in range(args.count):
                 entry = next(analysis.trace)
