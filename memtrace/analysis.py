@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-import argparse
-from collections import defaultdict
 import os
 import tempfile
 from typing import Iterable, Optional
 
-from memtrace.format import format_entry
-from memtrace.interval_tree import IntervalTree
 from memtrace.symbolizer import Symbolizer
 from memtrace.trace import Trace, TraceFilter
 from memtrace.ud import Ud
@@ -113,71 +109,3 @@ class Analysis:
         disasm_str = self.ud.get_disasm_for_code(code_index)
         symbolized_pc = self.symbolizer.symbolize(pc)
         return f"0x{pc:016x} {disasm_str} {symbolized_pc}"
-
-
-def int_any_base(x):
-    return int(x, 0)
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--trace-path", default="memtrace.out")
-    parser.add_argument("--ud-path")
-    parser.add_argument("--index-path")
-    subparsers = parser.add_subparsers(dest="subparser_name")
-
-    subparser = subparsers.add_parser("ldst")
-    subparser.add_argument("pc_range", nargs="+")
-
-    args = parser.parse_args()
-    with Analysis(
-        trace_path=args.trace_path,
-        index_path=args.index_path,
-        ud_path=args.ud_path,
-    ) as analysis:
-        if args.subparser_name == "ldst":
-            pc_ranges = [
-                (
-                    analysis.symbolizer.resolve(start_addr),
-                    analysis.symbolizer.resolve(end_addr),
-                )
-                for pc_range in args.pc_range
-                for start_addr, end_addr in (pc_range.split("-"),)
-            ]
-            filter = TraceFilter()
-            filter.tags = (Tag.MT_LOAD, Tag.MT_STORE)
-            filter.insn_seqs = analysis.ud.get_codes_for_pc_ranges(pc_ranges)
-            analysis.trace.set_filter(filter)
-
-            def merge(list_of_insn_seq2index2entry):
-                result = defaultdict(dict)
-                for insn_seq2index2entry in list_of_insn_seq2index2entry:
-                    for insn_seq, index2entry in insn_seq2index2entry.items():
-                        for index, entry in index2entry.items():
-                            result[insn_seq][index] = entry
-                return result
-
-            mem = IntervalTree(merge=merge)
-            for entry in analysis.trace:
-                start = entry.addr
-                end = entry.addr + len(entry.value)
-                entries = mem[start:end]
-                entries[entry.insn_seq][entry.index] = entry
-                mem[start:end] = entries
-            for node in mem:
-                print(f"* 0x{node.start:x}-0x{node.end:x}")
-                for insn_seq, index2entry in node.value.items():
-                    disasm_str = analysis.pp_code(insn_seq)
-                    print(f"*** {disasm_str}")
-                    for entry in index2entry.values():
-                        entry_str = format_entry(
-                            entry=entry,
-                            endianness=analysis.endianness_str,
-                            disasm=analysis.disasm,
-                            trace=analysis.trace,
-                        )
-                        print(f"***** {entry_str}")
-
-
-if __name__ == "__main__":
-    main()
