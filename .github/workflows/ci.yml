@@ -69,11 +69,8 @@ jobs:
            memtrace record true &&
            memtrace report >/dev/null
 
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Reset ccache stats
-      run: ccache --zero-stats
+    - name: Show and reset ccache stats
+      run: ccache --show-stats --verbose --zero-stats
 
     - uses: actions/upload-artifact@v4
       with:
@@ -117,11 +114,8 @@ jobs:
                --python=${{ matrix.python }}
                -DVALGRIND_CONFIGURE_FLAGS=--disable-dependency-tracking
 
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Reset ccache stats
-      run: ccache --zero-stats
+    - name: Show and reset ccache stats
+      run: ccache --show-stats --verbose --zero-stats
 
     - uses: actions/upload-artifact@v4
       with:
