@@ -36,7 +36,7 @@ name: Continuous integration
     - uses: actions/upload-artifact@v4
       with:
         name: {{ artifact_name }}
-        path: dist/wheelhouse/
+        path: dist/
 {%- endmacro %}
 
 jobs:
@@ -62,6 +62,7 @@ jobs:
                python3
                python3-flake8
                python3-pip
+               python3-skbuild
                python3-venv
                quilt
                make
@@ -70,6 +71,9 @@ jobs:
 
     - name: Check formatting
       run: ./fmt --check
+
+    - name: Build a source distribution
+      run: python3 setup.py sdist
 
     - name: Build
       run: PATH=/usr/lib/ccache:$PATH ./ci --skip-repair
@@ -122,11 +126,13 @@ jobs:
       with:
         pattern: cross-*
 
-    - name: Show wheels
+    - name: Show artifacts
       run: tree
 
-    - name: Upload wheels
+    - name: Upload artifacts
       env:
         TWINE_USERNAME: {% raw %}${{ secrets.TWINE_USERNAME }}{% endraw %}
         TWINE_PASSWORD: {% raw %}${{ secrets.TWINE_PASSWORD }}{% endraw %}
-      run: twine upload --non-interactive --verbose */*.whl
+      run: twine upload --non-interactive --verbose
+               native/*.tar.gz
+               cross-*/wheelhouse/*.whl

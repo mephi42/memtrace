@@ -30,6 +30,7 @@ jobs:
                python3
                python3-flake8
                python3-pip
+               python3-skbuild
                python3-venv
                quilt
                make
@@ -55,6 +56,9 @@ jobs:
     - name: Check formatting
       run: ./fmt --check
 
+    - name: Build a source distribution
+      run: python3 setup.py sdist
+
     - name: Build
       run: PATH=/usr/lib/ccache:$PATH ./ci --skip-repair
 
@@ -72,7 +76,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: native
-        path: dist/wheelhouse/
+        path: dist/
 
   cross:
     strategy:
@@ -119,7 +123,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: cross-${{ matrix.arch }}-${{ matrix.python }}
-        path: dist/wheelhouse/
+        path: dist/
 
   PyPI:
     runs-on: ubuntu-latest
@@ -142,11 +146,13 @@ jobs:
       with:
         pattern: cross-*
 
-    - name: Show wheels
+    - name: Show artifacts
       run: tree
 
-    - name: Upload wheels
+    - name: Upload artifacts
       env:
         TWINE_USERNAME: ${{ secrets.TWINE_USERNAME }}
         TWINE_PASSWORD: ${{ secrets.TWINE_PASSWORD }}
-      run: twine upload --non-interactive --verbose */*.whl
+      run: twine upload --non-interactive --verbose
+               native/*.tar.gz
+               cross-*/wheelhouse/*.whl
