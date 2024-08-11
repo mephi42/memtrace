@@ -27,11 +27,8 @@ name: Continuous integration
 {%- endmacro %}
 
 {%- macro steps_post(artifact_name) %}
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
-    - name: Reset ccache stats
-      run: ccache --zero-stats
+    - name: Show and reset ccache stats
+      run: ccache --show-stats --verbose --zero-stats
 
     - uses: actions/upload-artifact@v4
       with:
