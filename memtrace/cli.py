@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from contextlib import closing
 import os
 import signal
 import sys
@@ -109,6 +108,14 @@ def default_index(input, index):
     return index
 
 
+def ud_option(function):
+    return click.option(
+        "--ud",
+        help="Binary use-def analysis files specified using "
+        + "the {} placeholder, e.g., ud-{}.bin",
+    )(function)
+
+
 @main.command(
     help="Print the trace as text",
 )
@@ -138,14 +145,12 @@ def report(input, output, start, end, tag, insn_seq, srcline):
         tag = None
     if len(insn_seq) == 0:
         insn_seq = None
-    with closing(
-        Analysis(
-            input,
-            first_entry_index=start,
-            last_entry_index=end,
-            tags=tag,
-            insn_seqs=insn_seq,
-        )
+    with Analysis(
+        input,
+        first_entry_index=start,
+        last_entry_index=end,
+        tags=tag,
+        insn_seqs=insn_seq,
     ) as analysis:
         if srcline:
             analysis.init_insn_index()
@@ -176,26 +181,20 @@ def report(input, output, start, end, tag, insn_seq, srcline):
     + "code, trace and uses files specified using the {} placeholder, "
     + "e.g., ud-{}.csv",
 )
-@click.option(
-    "--binary",
-    help="Write the analysis results in the binary format into the files "
-    + "specified using the {} placeholder, e.g., ud-{}.bin",
-)
+@ud_option
 @click.option(
     "--log",
     help="Write the analysis log into this file",
 )
-def ud(input, index, start, end, dot, html, csv, binary, log):
+def ud(input, index, start, end, dot, html, csv, ud, log):
     index = default_index(input, index)
-    with closing(
-        Analysis(
-            trace_path=input,
-            index_path=index,
-            ud_path=binary,
-            ud_log=log,
-            first_entry_index=start,
-            last_entry_index=end,
-        )
+    with Analysis(
+        trace_path=input,
+        index_path=index,
+        ud_path=ud,
+        ud_log=log,
+        first_entry_index=start,
+        last_entry_index=end,
     ) as analysis:
         if dot is not None:
             analysis.ud.dump_dot(dot)
@@ -224,6 +223,33 @@ def stats(input, output):
 def index(input, index):
     index = default_index(input, index)
     Trace.load(input).build_insn_index(index)
+
+
+@main.command(
+    help="Print the insn-in-trace indices corresponding to the "
+    + "specified address or symbol",
+)
+@input_option
+@index_option
+@ud_option
+@output_option
+@click.argument("pc")
+def traces_for_pc(input, index, ud, output, pc):
+    index = default_index(input, index)
+    with Analysis(
+        trace_path=input,
+        index_path=index,
+        ud_path=ud,
+    ) as analysis:
+        analysis.ud
+        analysis.trace.seek_end()
+        resolved_pc = analysis.symbolizer.resolve(pc)
+        if resolved_pc is None:
+            print(f"Cannot find symbol '{pc}'", file=sys.stderr)
+            sys.exit(1)
+        with open(output, "w") as fp:
+            for trace in analysis.get_traces_for_pc(resolved_pc):
+                fp.write(f"{trace}\n")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 import argparse
 from collections import defaultdict
 import os
-import sys
 import tempfile
 from typing import Iterable, Optional
 
@@ -132,9 +131,6 @@ def main():
     parser.add_argument("--index-path")
     subparsers = parser.add_subparsers(dest="subparser_name")
 
-    subparser = subparsers.add_parser("get-traces-for-pc")
-    subparser.add_argument("pc")
-
     subparser = subparsers.add_parser("taint-backward")
     group = subparser.add_mutually_exclusive_group(required=True)
     group.add_argument("--pc", type=int_any_base)
@@ -155,14 +151,7 @@ def main():
         index_path=args.index_path,
         ud_path=args.ud_path,
     ) as analysis:
-        if args.subparser_name == "get-traces-for-pc":
-            pc = analysis.symbolizer.resolve(args.pc)
-            if pc is None:
-                print(f"Cannot find symbol '{args.pc}'", file=sys.stderr)
-                sys.exit(1)
-            for trace in analysis.get_traces_for_pc(pc):
-                print(str(trace))
-        elif args.subparser_name == "taint-backward":
+        if args.subparser_name == "taint-backward":
             if args.trace is None:
                 trace_index0 = analysis.get_last_trace_for_pc(args.pc)
             else:

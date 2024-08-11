@@ -382,6 +382,24 @@ class MachineTest(CommonTest):
         self.filter_file(actual_stats_txt)
         diff_files(expected_stats_txt, actual_stats_txt)
 
+    def test_traces_for_pc(self) -> None:
+        traces_for_pc = f"{self.get_target()}-traces-for-pc.txt"
+        actual = os.path.join(self.workdir.name, traces_for_pc)
+        expected = os.path.join(self.basedir, traces_for_pc)
+        with self.assertRaises(SystemExit) as system_exit:
+            input = os.path.join(self.workdir.name, "memtrace.out")
+            memtrace.cli.main(
+                [
+                    "traces-for-pc",
+                    f"--input={input}",
+                    f"--output={actual}",
+                    "_taintme",
+                ]
+            )
+        self.assertEqual(0, system_exit.exception.code)
+        self.filter_file(actual)
+        diff_files(expected, actual)
+
 
 class TestX86_64(MachineTest):
     @staticmethod
