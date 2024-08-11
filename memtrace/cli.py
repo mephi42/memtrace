@@ -9,6 +9,7 @@ import click.types
 
 import memtrace
 from memtrace.analysis import Analysis
+from memtrace.format import format_entry
 import memtrace.tracer
 from memtrace.notebook import open_notebook
 from memtrace._memtrace import DumpKind, Tag
@@ -22,9 +23,7 @@ def main():
     pass
 
 
-@main.command(
-    help="Analyze the trace in a Jupyter notebook",
-)
+@main.command(help="Analyze the trace in a Jupyter notebook")
 def notebook():
     with open_notebook(click.echo):
         click.echo("Press Ctrl+C to stop the container.")
@@ -125,9 +124,7 @@ def ud_option(function):
     )(function)
 
 
-@main.command(
-    help="Print the trace as text",
-)
+@main.command(help="Print the trace as text")
 @input_option
 @output_option
 @start_option
@@ -169,9 +166,7 @@ def report(input, output, start, end, tag, insn_seq, srcline):
         analysis.trace.dump(output, kind)
 
 
-@main.command(
-    help="Perform use-def analysis on the trace",
-)
+@main.command(help="Perform use-def analysis on the trace")
 @input_option
 @index_option
 @start_option
@@ -213,9 +208,7 @@ def ud(input, index, start, end, dot, html, csv, ud, log):
             analysis.ud.dump_csv(csv)
 
 
-@main.command(
-    help="Analyze distribution of tags in the trace",
-)
+@main.command(help="Analyze distribution of tags in the trace")
 @input_option
 @output_option
 def stats(input, output):
@@ -224,9 +217,7 @@ def stats(input, output):
         memtrace.stats.pp(stats, fp)
 
 
-@main.command(
-    help="Generate instruction index from the trace",
-)
+@main.command(help="Generate instruction index from the trace")
 @input_option
 @index_option
 def index(input, index):
@@ -266,9 +257,7 @@ def traces_for_pc(input, index, ud, output, pc):
                 fp.write(f"{trace}\n")
 
 
-@main.command(
-    help="Perform backward taint analysis on the trace",
-)
+@main.command(help="Perform backward taint analysis on the trace")
 @input_option
 @index_option
 @ud_option
@@ -308,6 +297,48 @@ def taint_backward(input, index, ud, output, pc, trace, depth, ignore_register):
         dag = backward.analyze()
         with open(output, "w") as fp:
             dag.pp(analysis, fp)
+
+
+@main.command(help="Pretty-print trace entries")
+@input_option
+@index_option
+@ud_option
+@output_option
+@click.option(
+    "--start-trace",
+    type=AnyIntParamType(),
+    default="0",
+    help="Insn-in-trace index to start pretty-printing from",
+)
+@click.option(
+    "--count",
+    type=AnyIntParamType(),
+    default="10",
+    help="Number of trace entries to pretty-print",
+)
+def dump_entries(input, index, ud, output, start_trace, count):
+    index = default_index(input, index)
+    with Analysis(
+        trace_path=input,
+        index_path=index,
+        ud_path=ud,
+    ) as analysis:
+        analysis.ud
+        analysis.trace.seek_insn(start_trace)
+        with open(output, "w") as fp:
+            for _ in range(count):
+                entry = next(analysis.trace)
+                entry_str = format_entry(
+                    entry=entry,
+                    endianness=analysis.endianness_str,
+                    disasm=analysis.disasm,
+                    trace=analysis.trace,
+                )
+                if entry.tag == Tag.MT_INSN_EXEC:
+                    pc = analysis.ud.get_pc_for_code(entry.insn_seq)
+                    disasm_str = analysis.ud.get_disasm_for_code(entry.insn_seq)
+                    entry_str = f"{entry_str} 0x{pc:016x}: {disasm_str}"
+                fp.write(f"{entry_str}\n")
 
 
 if __name__ == "__main__":

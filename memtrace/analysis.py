@@ -126,10 +126,6 @@ def main():
     parser.add_argument("--index-path")
     subparsers = parser.add_subparsers(dest="subparser_name")
 
-    subparser = subparsers.add_parser("dump-entries")
-    subparser.add_argument("--start-trace", type=int_any_base, default=0)
-    subparser.add_argument("--count", type=int_any_base, default=10)
-
     subparser = subparsers.add_parser("ldst")
     subparser.add_argument("pc_range", nargs="+")
 
@@ -139,21 +135,6 @@ def main():
         index_path=args.index_path,
         ud_path=args.ud_path,
     ) as analysis:
-        if args.subparser_name == "dump-entries":
-            analysis.trace.seek_insn(args.start_trace)
-            for _ in range(args.count):
-                entry = next(analysis.trace)
-                entry_str = format_entry(
-                    entry=entry,
-                    endianness=analysis.endianness_str,
-                    disasm=analysis.disasm,
-                    trace=analysis.trace,
-                )
-                if entry.tag == Tag.MT_INSN_EXEC:
-                    pc = analysis.ud.get_pc_for_code(entry.insn_seq)
-                    disasm_str = analysis.ud.get_disasm_for_code(entry.insn_seq)
-                    entry_str = f"{entry_str} 0x{pc:016x}: {disasm_str}"
-                print(entry_str)
         if args.subparser_name == "ldst":
             pc_ranges = [
                 (
