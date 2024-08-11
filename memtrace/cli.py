@@ -14,6 +14,7 @@ import memtrace.tracer
 from memtrace.notebook import open_notebook
 from memtrace._memtrace import DumpKind, Tag
 import memtrace.stats
+from memtrace.trace import Trace
 
 
 @click.group(help="memtrace version " + memtrace.__version__)
@@ -94,6 +95,20 @@ def end_option(function):
     )(function)
 
 
+def index_option(function):
+    return click.option(
+        "--index",
+        help="Instruction index files specified using the {} placeholder, "
+        + "e.g., index-{}.bin",
+    )(function)
+
+
+def default_index(input, index):
+    if index is None:
+        index = os.path.join(os.path.dirname(input), "index-{}.bin")
+    return index
+
+
 @main.command(
     help="Print the trace as text",
 )
@@ -144,10 +159,7 @@ def report(input, output, start, end, tag, insn_seq, srcline):
     help="Perform use-def analysis on the trace",
 )
 @input_option
-@click.option(
-    "--index",
-    help="Instruction index directory name",
-)
+@index_option
 @start_option
 @end_option
 @click.option(
@@ -174,8 +186,7 @@ def report(input, output, start, end, tag, insn_seq, srcline):
     help="Write the analysis log into this file",
 )
 def ud(input, index, start, end, dot, html, csv, binary, log):
-    if index is None:
-        index = os.path.join(os.path.dirname(input), "index-{}.bin")
+    index = default_index(input, index)
     with closing(
         Analysis(
             trace_path=input,
@@ -203,6 +214,16 @@ def stats(input, output):
     stats = memtrace.stats.from_trace_file(input)
     with open(output, "w") as fp:
         memtrace.stats.pp(stats, fp)
+
+
+@main.command(
+    help="Generate instruction index from the trace",
+)
+@input_option
+@index_option
+def index(input, index):
+    index = default_index(input, index)
+    Trace.load(input).build_insn_index(index)
 
 
 if __name__ == "__main__":
