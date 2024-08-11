@@ -73,7 +73,7 @@ RUN ct-ng olddefconfig
 ENV CT_ALLOW_BUILD_AS_ROOT_SURE=1
 RUN ct-ng source
 RUN ct-ng build || { err=$?; tail -n 500 build.log; exit $err; }
-ENV PATH=/usr/arm-unknown-linux-gnueabi/bin:$PATH
+ENV PATH=/usr/arm-unknown-linux-gnueabihf/bin:$PATH
 # https://stackoverflow.com/questions/77895008
 RUN apt-get remove --yes libc6-dev
 
@@ -308,8 +308,8 @@ ENV PATH=/opt/cp36-cp36m/bin:$PATH
 WORKDIR /usr/src/cp36-cp36m
 RUN ./configure \
         --build="$(uname -m)" \
-        --host=arm-unknown-linux-gnueabi \
-        --prefix=/usr/arm-unknown-linux-gnueabi/cp36-cp36m \
+        --host=arm-unknown-linux-gnueabihf \
+        --prefix=/usr/arm-unknown-linux-gnueabihf/cp36-cp36m \
         --with-build-python=/opt/cp36-cp36m/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -434,8 +434,8 @@ ENV PATH=/opt/cp37-cp37m/bin:$PATH
 WORKDIR /usr/src/cp37-cp37m
 RUN ./configure \
         --build="$(uname -m)" \
-        --host=arm-unknown-linux-gnueabi \
-        --prefix=/usr/arm-unknown-linux-gnueabi/cp37-cp37m \
+        --host=arm-unknown-linux-gnueabihf \
+        --prefix=/usr/arm-unknown-linux-gnueabihf/cp37-cp37m \
         --with-build-python=/opt/cp37-cp37m/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -559,8 +559,8 @@ ENV PATH=/opt/cp38-cp38/bin:$PATH
 WORKDIR /usr/src/cp38-cp38
 RUN ./configure \
         --build="$(uname -m)" \
-        --host=arm-unknown-linux-gnueabi \
-        --prefix=/usr/arm-unknown-linux-gnueabi/cp38-cp38 \
+        --host=arm-unknown-linux-gnueabihf \
+        --prefix=/usr/arm-unknown-linux-gnueabihf/cp38-cp38 \
         --with-build-python=/opt/cp38-cp38/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -678,8 +678,8 @@ ENV PATH=/opt/cp39-cp39/bin:$PATH
 WORKDIR /usr/src/cp39-cp39
 RUN ./configure \
         --build="$(uname -m)" \
-        --host=arm-unknown-linux-gnueabi \
-        --prefix=/usr/arm-unknown-linux-gnueabi/cp39-cp39 \
+        --host=arm-unknown-linux-gnueabihf \
+        --prefix=/usr/arm-unknown-linux-gnueabihf/cp39-cp39 \
         --with-build-python=/opt/cp39-cp39/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -797,8 +797,8 @@ ENV PATH=/opt/cp310-cp310/bin:$PATH
 WORKDIR /usr/src/cp310-cp310
 RUN ./configure \
         --build="$(uname -m)" \
-        --host=arm-unknown-linux-gnueabi \
-        --prefix=/usr/arm-unknown-linux-gnueabi/cp310-cp310 \
+        --host=arm-unknown-linux-gnueabihf \
+        --prefix=/usr/arm-unknown-linux-gnueabihf/cp310-cp310 \
         --with-build-python=/opt/cp310-cp310/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -916,8 +916,8 @@ ENV PATH=/opt/cp311-cp311/bin:$PATH
 WORKDIR /usr/src/cp311-cp311
 RUN ./configure \
         --build="$(uname -m)" \
-        --host=arm-unknown-linux-gnueabi \
-        --prefix=/usr/arm-unknown-linux-gnueabi/cp311-cp311 \
+        --host=arm-unknown-linux-gnueabihf \
+        --prefix=/usr/arm-unknown-linux-gnueabihf/cp311-cp311 \
         --with-build-python=/opt/cp311-cp311/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -1035,8 +1035,8 @@ ENV PATH=/opt/cp312-cp312/bin:$PATH
 WORKDIR /usr/src/cp312-cp312
 RUN ./configure \
         --build="$(uname -m)" \
-        --host=arm-unknown-linux-gnueabi \
-        --prefix=/usr/arm-unknown-linux-gnueabi/cp312-cp312 \
+        --host=arm-unknown-linux-gnueabihf \
+        --prefix=/usr/arm-unknown-linux-gnueabihf/cp312-cp312 \
         --with-build-python=/opt/cp312-cp312/bin/python3 \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
@@ -1185,30 +1185,30 @@ RUN ./b2 \
 FROM crosstool-ng-arm AS boost-arm
 COPY --from=boost-base /usr/src/boost /usr/src/boost
 COPY --from=cp36-cp36m-arm \
-     /usr/arm-unknown-linux-gnueabi/cp36-cp36m \
-     /usr/arm-unknown-linux-gnueabi/cp36-cp36m
+     /usr/arm-unknown-linux-gnueabihf/cp36-cp36m \
+     /usr/arm-unknown-linux-gnueabihf/cp36-cp36m
 COPY --from=cp37-cp37m-arm \
-     /usr/arm-unknown-linux-gnueabi/cp37-cp37m \
-     /usr/arm-unknown-linux-gnueabi/cp37-cp37m
+     /usr/arm-unknown-linux-gnueabihf/cp37-cp37m \
+     /usr/arm-unknown-linux-gnueabihf/cp37-cp37m
 COPY --from=cp38-cp38-arm \
-     /usr/arm-unknown-linux-gnueabi/cp38-cp38 \
-     /usr/arm-unknown-linux-gnueabi/cp38-cp38
+     /usr/arm-unknown-linux-gnueabihf/cp38-cp38 \
+     /usr/arm-unknown-linux-gnueabihf/cp38-cp38
 COPY --from=cp39-cp39-arm \
-     /usr/arm-unknown-linux-gnueabi/cp39-cp39 \
-     /usr/arm-unknown-linux-gnueabi/cp39-cp39
+     /usr/arm-unknown-linux-gnueabihf/cp39-cp39 \
+     /usr/arm-unknown-linux-gnueabihf/cp39-cp39
 COPY --from=cp310-cp310-arm \
-     /usr/arm-unknown-linux-gnueabi/cp310-cp310 \
-     /usr/arm-unknown-linux-gnueabi/cp310-cp310
+     /usr/arm-unknown-linux-gnueabihf/cp310-cp310 \
+     /usr/arm-unknown-linux-gnueabihf/cp310-cp310
 COPY --from=cp311-cp311-arm \
-     /usr/arm-unknown-linux-gnueabi/cp311-cp311 \
-     /usr/arm-unknown-linux-gnueabi/cp311-cp311
+     /usr/arm-unknown-linux-gnueabihf/cp311-cp311 \
+     /usr/arm-unknown-linux-gnueabihf/cp311-cp311
 COPY --from=cp312-cp312-arm \
-     /usr/arm-unknown-linux-gnueabi/cp312-cp312 \
-     /usr/arm-unknown-linux-gnueabi/cp312-cp312
+     /usr/arm-unknown-linux-gnueabihf/cp312-cp312 \
+     /usr/arm-unknown-linux-gnueabihf/cp312-cp312
 WORKDIR /usr/src/boost
 COPY boost/arm .
 RUN ./b2 \
-        --prefix=/opt/boost-arm/usr/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot/usr \
+        --prefix=/opt/boost-arm/usr/arm-unknown-linux-gnueabihf/arm-unknown-linux-gnueabihf/sysroot/usr \
         --with-python \
         cxxflags=-fPIC \
         link=static \
@@ -1432,9 +1432,9 @@ RUN make \
         CAPSTONE_BUILD_CORE_ONLY=yes \
         CAPSTONE_SHARED=no \
         CAPSTONE_STATIC=yes \
-        CROSS=arm-unknown-linux-gnueabi- \
+        CROSS=arm-unknown-linux-gnueabihf- \
         DESTDIR=/opt/capstone-arm \
-        PREFIX=/usr/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot/usr \
+        PREFIX=/usr/arm-unknown-linux-gnueabihf/arm-unknown-linux-gnueabihf/sysroot/usr \
         "-j$(getconf _NPROCESSORS_ONLN)" \
         install
 
@@ -1529,8 +1529,8 @@ RUN make \
 FROM crosstool-ng-arm AS zlib-ng-arm
 COPY --from=zlib-ng-base /usr/src/zlib-ng /usr/src/zlib-ng
 WORKDIR /usr/src/zlib-ng
-RUN CHOST=arm-unknown-linux-gnueabi CFLAGS=-fPIC ./configure \
-        --prefix=/usr/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot/usr \
+RUN CHOST=arm-unknown-linux-gnueabihf CFLAGS=-fPIC ./configure \
+        --prefix=/usr/arm-unknown-linux-gnueabihf/arm-unknown-linux-gnueabihf/sysroot/usr \
         --static \
         --zlib-compat
 RUN make \
@@ -1635,13 +1635,13 @@ RUN autoreconf -i
 RUN CFLAGS=-fPIC ./configure \
         --disable-debuginfod \
         --disable-libdebuginfod \
-        --host=arm-unknown-linux-gnueabi \
-        --prefix=/usr/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot/usr
+        --host=arm-unknown-linux-gnueabihf \
+        --prefix=/usr/arm-unknown-linux-gnueabihf/arm-unknown-linux-gnueabihf/sysroot/usr
 RUN make \
         DESTDIR=/opt/elfutils-arm \
         "-j$(getconf _NPROCESSORS_ONLN)" \
         install V=1
-WORKDIR /opt/elfutils-arm/usr/arm-unknown-linux-gnueabi/arm-unknown-linux-gnueabi/sysroot/usr/lib
+WORKDIR /opt/elfutils-arm/usr/arm-unknown-linux-gnueabihf/arm-unknown-linux-gnueabihf/sysroot/usr/lib
 RUN rm *.so *.so.*
 
 FROM crosstool-ng-i686 AS elfutils-i686
@@ -1816,11 +1816,11 @@ COPY --from=cp312-cp312-aarch64 \
 
 FROM final-common AS final-arm
 COPY --from=crosstool-ng-arm \
-     /usr/arm-unknown-linux-gnueabi \
-     /usr/arm-unknown-linux-gnueabi
-ENV PATH=/usr/lib/ccache:/usr/arm-unknown-linux-gnueabi/bin:$PATH
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabi-g++
-RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabi-gcc
+     /usr/arm-unknown-linux-gnueabihf \
+     /usr/arm-unknown-linux-gnueabihf
+ENV PATH=/usr/lib/ccache:/usr/arm-unknown-linux-gnueabihf/bin:$PATH
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabihf-g++
+RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabihf-gcc
 COPY --from=boost-arm /opt/boost-arm/ /
 COPY --from=capstone-arm /opt/capstone-arm/ /
 COPY --from=elfutils-arm /opt/elfutils-arm/ /
@@ -1829,44 +1829,44 @@ COPY --from=zlib-ng-arm /opt/zlib-ng-arm/ /
 FROM final-arm AS final-arm-cp36-cp36m
 COPY --from=cp36-cp36m /opt/cp36-cp36m /opt/cp36-cp36m
 COPY --from=cp36-cp36m-arm \
-     /usr/arm-unknown-linux-gnueabi/cp36-cp36m \
-     /usr/arm-unknown-linux-gnueabi/cp36-cp36m
+     /usr/arm-unknown-linux-gnueabihf/cp36-cp36m \
+     /usr/arm-unknown-linux-gnueabihf/cp36-cp36m
 
 FROM final-arm AS final-arm-cp37-cp37m
 COPY --from=cp37-cp37m /opt/cp37-cp37m /opt/cp37-cp37m
 COPY --from=cp37-cp37m-arm \
-     /usr/arm-unknown-linux-gnueabi/cp37-cp37m \
-     /usr/arm-unknown-linux-gnueabi/cp37-cp37m
+     /usr/arm-unknown-linux-gnueabihf/cp37-cp37m \
+     /usr/arm-unknown-linux-gnueabihf/cp37-cp37m
 
 FROM final-arm AS final-arm-cp38-cp38
 COPY --from=cp38-cp38 /opt/cp38-cp38 /opt/cp38-cp38
 COPY --from=cp38-cp38-arm \
-     /usr/arm-unknown-linux-gnueabi/cp38-cp38 \
-     /usr/arm-unknown-linux-gnueabi/cp38-cp38
+     /usr/arm-unknown-linux-gnueabihf/cp38-cp38 \
+     /usr/arm-unknown-linux-gnueabihf/cp38-cp38
 
 FROM final-arm AS final-arm-cp39-cp39
 COPY --from=cp39-cp39 /opt/cp39-cp39 /opt/cp39-cp39
 COPY --from=cp39-cp39-arm \
-     /usr/arm-unknown-linux-gnueabi/cp39-cp39 \
-     /usr/arm-unknown-linux-gnueabi/cp39-cp39
+     /usr/arm-unknown-linux-gnueabihf/cp39-cp39 \
+     /usr/arm-unknown-linux-gnueabihf/cp39-cp39
 
 FROM final-arm AS final-arm-cp310-cp310
 COPY --from=cp310-cp310 /opt/cp310-cp310 /opt/cp310-cp310
 COPY --from=cp310-cp310-arm \
-     /usr/arm-unknown-linux-gnueabi/cp310-cp310 \
-     /usr/arm-unknown-linux-gnueabi/cp310-cp310
+     /usr/arm-unknown-linux-gnueabihf/cp310-cp310 \
+     /usr/arm-unknown-linux-gnueabihf/cp310-cp310
 
 FROM final-arm AS final-arm-cp311-cp311
 COPY --from=cp311-cp311 /opt/cp311-cp311 /opt/cp311-cp311
 COPY --from=cp311-cp311-arm \
-     /usr/arm-unknown-linux-gnueabi/cp311-cp311 \
-     /usr/arm-unknown-linux-gnueabi/cp311-cp311
+     /usr/arm-unknown-linux-gnueabihf/cp311-cp311 \
+     /usr/arm-unknown-linux-gnueabihf/cp311-cp311
 
 FROM final-arm AS final-arm-cp312-cp312
 COPY --from=cp312-cp312 /opt/cp312-cp312 /opt/cp312-cp312
 COPY --from=cp312-cp312-arm \
-     /usr/arm-unknown-linux-gnueabi/cp312-cp312 \
-     /usr/arm-unknown-linux-gnueabi/cp312-cp312
+     /usr/arm-unknown-linux-gnueabihf/cp312-cp312 \
+     /usr/arm-unknown-linux-gnueabihf/cp312-cp312
 
 FROM final-common AS final-i686
 COPY --from=crosstool-ng-i686 \
