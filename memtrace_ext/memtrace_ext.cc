@@ -45,8 +45,9 @@ namespace {
 
 constexpr size_t kHostWordSize = sizeof(void*);
 
-void HexDump(std::FILE* f, const std::uint8_t* buf, size_t n) {
-  for (size_t i = 0; i < n; i++) std::fprintf(f, "%02x", buf[i]);
+void HexDump(std::FILE* f, const void* buf, size_t n) {
+  for (size_t i = 0; i < n; i++)
+    std::fprintf(f, "%02x", static_cast<const std::uint8_t *>(buf)[i]);
 }
 
 void ReprDump(std::FILE* f, const std::uint8_t* buf, size_t n) {
@@ -196,6 +197,9 @@ class Dumper {
     std::fprintf(f_, "Machine           : %s\n",
                  GetMachineTypeStr(entry.GetMachineType()));
     std::fprintf(f_, "Regs size         : %d\n", entry.GetRegsSize());
+    std::fprintf(f_, "Trace ID          : ");
+    HexDump(f_, &entry.GetTraceId(), sizeof(TraceId));
+    std::fprintf(f_, "\n");
     return disasmEngine_.Init(entry.GetMachineType(), E, sizeof(W));
   }
 
@@ -573,6 +577,8 @@ class TraceBase {
   virtual size_t GetWordSize() = 0;
   virtual MachineType GetMachineType() = 0;
   virtual std::uint16_t GetRegsSize() = 0;
+  virtual TraceId GetTraceId() = 0;
+  virtual std::vector<std::uint8_t> GetTraceIdPy() = 0;
   virtual boost::python::object Next() = 0;
   virtual int SeekStart() = 0;
   virtual int SeekInsn(std::uint32_t index) = 0;
@@ -652,6 +658,7 @@ struct MemDefSeeker : public DefSeeker<W> {
 };
 
 struct InsnIndexHeader {
+  TraceId traceId;
   std::uint8_t stepShift;
 };
 
@@ -807,6 +814,14 @@ class Trace : public TraceBase {
 
   std::uint16_t GetRegsSize() override { return header_.GetRegsSize(); }
 
+  TraceId GetTraceId() override { return header_.GetTraceId(); }
+
+  std::vector<std::uint8_t> GetTraceIdPy() override {
+    const TraceId& traceId = header_.GetTraceId();
+
+    return std::vector<std::uint8_t>(traceId.begin(), traceId.end());
+  }
+
   boost::python::object Next() override {
     while (true) {
       if (cur_ == end_) boost::python::objects::stop_iteration_error();
@@ -922,6 +937,7 @@ class Trace : public TraceBase {
         mmapIndex_.push_back(MmapIndexEntry{static_cast<size_t>(prev - data_)});
     }
     InsnIndexHeader header;
+    header.traceId = header_.GetTraceId();
     header.stepShift = static_cast<std::uint8_t>(stepShift);
     if ((err = WriteHeader(indexPath.Get("header").c_str(), header)) < 0)
       return err;
@@ -937,6 +953,8 @@ class Trace : public TraceBase {
     InsnIndexHeader header;
     if ((err = ReadHeader(indexPath.Get("header").c_str(), &header)) < 0)
       return err;
+    if (header.traceId != header_.GetTraceId())
+      return -EINVAL;
     if ((err = insnIndex_.Init(indexPath.Get("data").c_str(),
                                InitMode::OpenExisting)) < 0)
       return err;
@@ -1629,6 +1647,7 @@ class UdState {
 };
 
 struct BinaryHeader {
+  TraceId traceId;
   std::uint8_t hostEndianness;
   std::uint8_t hostWordSize;
   MachineType machineType;  // Traced program machine type.
@@ -2131,6 +2150,7 @@ class Ud : public UdBase {
   int DumpBinary() const {
     if (binary_ == nullptr) return 0;
     BinaryHeader header;
+    header.traceId = fullTrace_->GetTraceId();
     header.hostEndianness = static_cast<std::uint8_t>(kHostEndianness);
     header.hostWordSize = static_cast<std::uint8_t>(kHostWordSize);
     header.machineType = machineType_;
@@ -2162,7 +2182,8 @@ UdBase* UdBase::Load(const char* rawPath, std::shared_ptr<TraceBase> trace) {
   BinaryHeader header;
   if (ReadUdHeader(rawPath, &header) < 0) return nullptr;
   if (static_cast<Endianness>(header.hostEndianness) != kHostEndianness ||
-      static_cast<size_t>(header.hostWordSize) != kHostWordSize)
+      static_cast<size_t>(header.hostWordSize) != kHostWordSize ||
+      header.traceId != trace->GetTraceId())
     return nullptr;
   UdBase* ud = nullptr;
   TraceBase::Downcast(trace, [rawPath, header, &ud](auto trace) {
@@ -2318,6 +2339,7 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def("get_word_size", &TraceBase::GetWordSize)
       .def("get_machine_type", &TraceBase::GetMachineType)
       .def("get_regs_size", &TraceBase::GetRegsSize)
+      .def("get_trace_id", &TraceBase::GetTraceIdPy)
       .def("__iter__", bp::objects::identity_function())
       .def("__next__", &TraceBase::Next)
       .def("seek_start", &TraceBase::SeekStart)

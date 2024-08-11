@@ -3,6 +3,7 @@ Word              : Q
 Word size         : 8
 Machine           : EM_X86_64
 Regs size         : 928
+Trace ID          : fedcba98765432100123456789abcdef
 [         0] MT_REGMETA uint64_t host_EvC_FAILADDR [0x0]
 [         1] MT_REGMETA uint32_t host_EvC_COUNTER [0x8]
 [         2] MT_REGMETA uint32_t pad0 [0xc]
