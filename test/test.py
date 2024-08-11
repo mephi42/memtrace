@@ -22,7 +22,6 @@ from memtrace.symbolizer import Symbolizer
 from memtrace.taint import BackwardAnalysis
 from memtrace.trace import Trace
 import memtrace.tracer
-import memtrace.ud
 from memtrace.ud import Ud
 from memtrace._memtrace import Disasm, DumpKind, get_endianness_str, Tag
 
@@ -248,12 +247,21 @@ class MachineTest(CommonTest):
         ud_txt = f"{self.get_target()}-ud.txt"
         actual_ud_txt = os.path.join(self.workdir.name, ud_txt)
         expected_ud_txt = os.path.join(self.basedir, ud_txt)
-        memtrace.ud.main(
-            [
-                os.path.join(self.workdir.name, "memtrace.out"),
-                f"--log={actual_ud_txt}",
-            ]
-        )
+        with self.assertRaises(SystemExit):
+            input = os.path.join(self.workdir.name, "memtrace.out")
+            dot = os.path.join(self.workdir.name, "memtrace.dot")
+            html = os.path.join(self.workdir.name, "memtrace.html")
+            csv = os.path.join(self.workdir.name, "memtrace.csv")
+            memtrace.cli.main(
+                [
+                    "ud",
+                    f"--input={input}",
+                    f"--dot={dot}",
+                    f"--html={html}",
+                    f"--csv={csv}",
+                    f"--log={actual_ud_txt}",
+                ]
+            )
         self.filter_file(actual_ud_txt)
         diff_files(expected_ud_txt, actual_ud_txt)
 

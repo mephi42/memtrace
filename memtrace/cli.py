@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from contextlib import closing
+import os
 import signal
 import sys
 import threading
@@ -57,31 +59,43 @@ class AnyIntParamType(click.types.IntParamType):
         return int(value, 0)
 
 
+def input_option(function):
+    return click.option(
+        "-i",
+        "--input",
+        default="memtrace.out",
+        help="Input file name",
+    )(function)
+
+
+def start_option(function):
+    return click.option(
+        "--start",
+        help="Index of the first entry (inclusive)",
+        type=AnyIntParamType(),
+    )(function)
+
+
+def end_option(function):
+    return click.option(
+        "--end",
+        help="Index of the last entry (inclusive)",
+        type=AnyIntParamType(),
+    )(function)
+
+
 @main.command(
     help="Read out the trace stored in a memtrace.out file",
 )
-@click.option(
-    "-i",
-    "--input",
-    default="memtrace.out",
-    help="Input file name",
-)
+@input_option
 @click.option(
     "-o",
     "--output",
     default="/dev/stdout",
     help="Output file name",
 )
-@click.option(
-    "--start",
-    help="Index of the first entry (inclusive)",
-    type=AnyIntParamType(),
-)
-@click.option(
-    "--end",
-    help="Index of the last entry (inclusive)",
-    type=AnyIntParamType(),
-)
+@start_option
+@end_option
 @click.option(
     "--tag",
     help="Output only entries with the specified tags",
@@ -104,19 +118,75 @@ def report(input, output, start, end, tag, insn_seq, srcline):
         tag = None
     if len(insn_seq) == 0:
         insn_seq = None
-    analysis = Analysis(
-        input,
-        first_entry_index=start,
-        last_entry_index=end,
-        tags=tag,
-        insn_seqs=insn_seq,
-    )
-    if srcline:
-        analysis.init_insn_index()
-        kind = DumpKind.Source
-    else:
-        kind = DumpKind.Raw
-    analysis.trace.dump(output, kind)
+    with closing(
+        Analysis(
+            input,
+            first_entry_index=start,
+            last_entry_index=end,
+            tags=tag,
+            insn_seqs=insn_seq,
+        )
+    ) as analysis:
+        if srcline:
+            analysis.init_insn_index()
+            kind = DumpKind.Source
+        else:
+            kind = DumpKind.Raw
+        analysis.trace.dump(output, kind)
+
+
+@main.command(
+    help="Perform use-def analysis on the trace stored in a memtrace.out file",
+)
+@input_option
+@click.option(
+    "--index",
+    help="Instruction index directory name",
+)
+@start_option
+@end_option
+@click.option(
+    "--dot",
+    help="Write the analysis results in the DOT format into this file",
+)
+@click.option(
+    "--html",
+    help="Write the analysis results in the HTML format into this file",
+)
+@click.option(
+    "--csv",
+    help="Write the analysis results in the CSV format into the "
+    + "code, trace and uses files specified using the {} placeholder, "
+    + "e.g., ud-{}.csv",
+)
+@click.option(
+    "--binary",
+    help="Write the analysis results in the binary format into the files "
+    + "specified using the {} placeholder, e.g., ud-{}.bin",
+)
+@click.option(
+    "--log",
+    help="Write the analysis log into this file",
+)
+def ud(input, index, start, end, dot, html, csv, binary, log):
+    if index is None:
+        index = os.path.join(os.path.dirname(input), "index-{}.bin")
+    with closing(
+        Analysis(
+            trace_path=input,
+            index_path=index,
+            ud_path=binary,
+            ud_log=log,
+            first_entry_index=start,
+            last_entry_index=end,
+        )
+    ) as analysis:
+        if dot is not None:
+            analysis.ud.dump_dot(dot)
+        if html is not None:
+            analysis.ud.dump_html(html)
+        if csv is not None:
+            analysis.ud.dump_csv(csv)
 
 
 if __name__ == "__main__":
