@@ -40,15 +40,15 @@ jobs:
       with:
         submodules: "true"
 
-    - name: Configure ccache
-      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
-
     - uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
           ~/.ccache
         key: native
+
+    - name: Configure ccache
+      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
 
     - name: Show ccache stats
       run: ccache --show-stats --verbose
@@ -85,18 +85,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install packages
-      run: export DEBIAN_FRONTEND=noninteractive &&
-           sudo apt-get update &&
-           sudo apt-get install -y
-               ccache
 
     - uses: actions/checkout@v4
       with:
         submodules: "true"
-
-    - name: Configure ccache
-      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
 
     - uses: actions/cache@v4
       with:
@@ -105,14 +97,17 @@ jobs:
           ~/.ccache
         key: cross-${{ matrix.arch }}-${{ matrix.python }}
 
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
-
     - name: Pull the Docker image
       run: ./in-docker
                --arch=${{ matrix.arch }}
                --python=${{ matrix.python }}
                true
+
+    - name: Show ccache stats
+      run: ./in-docker
+               --arch=${{ matrix.arch }}
+               --python=${{ matrix.python }}
+               ccache --show-stats --verbose
 
     - name: Build
       run: ./ci-docker
@@ -121,7 +116,10 @@ jobs:
                -DVALGRIND_CONFIGURE_FLAGS=--disable-dependency-tracking
 
     - name: Show and reset ccache stats
-      run: ccache --show-stats --verbose --zero-stats
+      run: ./in-docker
+               --arch=${{ matrix.arch }}
+               --python=${{ matrix.python }}
+               ccache --show-stats --verbose --zero-stats
 
     - uses: actions/upload-artifact@v4
       with:

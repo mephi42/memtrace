@@ -12,24 +12,15 @@ name: Continuous integration
       with:
         submodules: "true"
 
-    - name: Configure ccache
-      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
-
     - uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
           ~/.ccache
         key: {{ cache_key }}
-
-    - name: Show ccache stats
-      run: ccache --show-stats --verbose
 {%- endmacro %}
 
 {%- macro steps_post(artifact_name) %}
-    - name: Show and reset ccache stats
-      run: ccache --show-stats --verbose --zero-stats
-
     - uses: actions/upload-artifact@v4
       with:
         name: {{ artifact_name }}
@@ -66,6 +57,12 @@ jobs:
                ninja-build
 {{ steps_pre("native") }}
 
+    - name: Configure ccache
+      run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
+
+    - name: Show ccache stats
+      run: ccache --show-stats --verbose
+
     - name: Check formatting
       run: ./fmt --check
 
@@ -81,6 +78,9 @@ jobs:
       run: python3 -m pip install --user dist/wheelhouse/*.whl &&
            memtrace record true &&
            memtrace report >/dev/null
+
+    - name: Show and reset ccache stats
+      run: ccache --show-stats --verbose --zero-stats
 {{ steps_post("native") }}
 
   cross:
@@ -94,11 +94,6 @@ jobs:
                --python={% raw %}${{ matrix.python }}{% endraw %}{%- endset %}
 
     steps:
-    - name: Install packages
-      run: export DEBIAN_FRONTEND=noninteractive &&
-           sudo apt-get update &&
-           sudo apt-get install -y
-               ccache
 {{ steps_pre("cross-${{ matrix.arch }}-${{ matrix.python }}") }}
 
     - name: Pull the Docker image
@@ -106,10 +101,20 @@ jobs:
                {{ arch_python }}
                true
 
+    - name: Show ccache stats
+      run: ./in-docker
+               {{ arch_python }}
+               ccache --show-stats --verbose
+
     - name: Build
       run: ./ci-docker
                {{ arch_python }}
                -DVALGRIND_CONFIGURE_FLAGS=--disable-dependency-tracking
+
+    - name: Show and reset ccache stats
+      run: ./in-docker
+               {{ arch_python }}
+               ccache --show-stats --verbose --zero-stats
 {{ steps_post("cross-${{ matrix.arch }}-${{ matrix.python }}") }}
 
   PyPI:
