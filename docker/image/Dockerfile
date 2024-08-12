@@ -156,6 +156,7 @@ FROM crosstool-ng-base AS cp36-cp36m
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         libffi-dev \
         libssl-dev \
+        patchelf \
         zlib1g-dev
 RUN git clone \
         --branch=v3.6.15 \
@@ -167,14 +168,16 @@ RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick f0be4bb
 WORKDIR /tmp/cp36-cp36m-build
 RUN /usr/src/cp36-cp36m/configure \
         --prefix=/opt/cp36-cp36m \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+RUN patchelf --set-rpath '$ORIGIN/../lib' /opt/cp36-cp36m/bin/python3
 
 FROM crosstool-ng-base AS cp37-cp37m
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         libffi-dev \
         libssl-dev \
+        patchelf \
         zlib1g-dev
 RUN git clone \
         --branch=v3.7.17 \
@@ -186,14 +189,16 @@ RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 6e5a193
 WORKDIR /tmp/cp37-cp37m-build
 RUN /usr/src/cp37-cp37m/configure \
         --prefix=/opt/cp37-cp37m \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+RUN patchelf --set-rpath '$ORIGIN/../lib' /opt/cp37-cp37m/bin/python3
 
 FROM crosstool-ng-base AS cp38-cp38
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         libffi-dev \
         libssl-dev \
+        patchelf \
         zlib1g-dev
 RUN git clone \
         --branch=v3.8.19 \
@@ -205,14 +210,16 @@ RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 6e5a193
 WORKDIR /tmp/cp38-cp38-build
 RUN /usr/src/cp38-cp38/configure \
         --prefix=/opt/cp38-cp38 \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+RUN patchelf --set-rpath '$ORIGIN/../lib' /opt/cp38-cp38/bin/python3
 
 FROM crosstool-ng-base AS cp39-cp39
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         libffi-dev \
         libssl-dev \
+        patchelf \
         zlib1g-dev
 RUN git clone \
         --branch=v3.9.19 \
@@ -224,14 +231,16 @@ RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 6e5a193
 WORKDIR /tmp/cp39-cp39-build
 RUN /usr/src/cp39-cp39/configure \
         --prefix=/opt/cp39-cp39 \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+RUN patchelf --set-rpath '$ORIGIN/../lib' /opt/cp39-cp39/bin/python3
 
 FROM crosstool-ng-base AS cp310-cp310
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         libffi-dev \
         libssl-dev \
+        patchelf \
         zlib1g-dev
 RUN git clone \
         --branch=v3.10.14 \
@@ -243,14 +252,16 @@ RUN git -c user.name=mephi42 -c user.email=mephi42@gmail.com cherry-pick 6e5a193
 WORKDIR /tmp/cp310-cp310-build
 RUN /usr/src/cp310-cp310/configure \
         --prefix=/opt/cp310-cp310 \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+RUN patchelf --set-rpath '$ORIGIN/../lib' /opt/cp310-cp310/bin/python3
 
 FROM crosstool-ng-base AS cp311-cp311
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         libffi-dev \
         libssl-dev \
+        patchelf \
         zlib1g-dev
 RUN git clone \
         --branch=v3.11.9 \
@@ -261,14 +272,16 @@ WORKDIR /usr/src/cp311-cp311
 WORKDIR /tmp/cp311-cp311-build
 RUN /usr/src/cp311-cp311/configure \
         --prefix=/opt/cp311-cp311 \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+RUN patchelf --set-rpath '$ORIGIN/../lib' /opt/cp311-cp311/bin/python3
 
 FROM crosstool-ng-base AS cp312-cp312
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         libffi-dev \
         libssl-dev \
+        patchelf \
         zlib1g-dev
 RUN git clone \
         --branch=v3.12.4 \
@@ -279,9 +292,10 @@ WORKDIR /usr/src/cp312-cp312
 WORKDIR /tmp/cp312-cp312-build
 RUN /usr/src/cp312-cp312/configure \
         --prefix=/opt/cp312-cp312 \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+RUN patchelf --set-rpath '$ORIGIN/../lib' /opt/cp312-cp312/bin/python3
 
 FROM crosstool-ng-aarch64 AS cp36-cp36m-aarch64
 COPY --from=cp36-cp36m /usr/src/cp36-cp36m /usr/src/cp36-cp36m
@@ -297,7 +311,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -315,7 +329,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -333,7 +347,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -351,7 +365,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -369,7 +383,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -387,7 +401,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -405,7 +419,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -423,7 +437,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -441,7 +455,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -459,7 +473,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -477,7 +491,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -495,7 +509,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -513,7 +527,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -531,7 +545,7 @@ RUN ./configure \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
         --with-pymalloc \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -548,7 +562,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -565,7 +579,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -582,7 +596,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -599,7 +613,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -616,7 +630,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -633,7 +647,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -650,7 +664,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -667,7 +681,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -684,7 +698,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -701,7 +715,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -718,7 +732,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -735,7 +749,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -752,7 +766,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -769,7 +783,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -786,7 +800,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -803,7 +817,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -820,7 +834,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -837,7 +851,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -854,7 +868,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -871,7 +885,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -888,7 +902,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -905,7 +919,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -922,7 +936,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -939,7 +953,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -956,7 +970,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -973,7 +987,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -990,7 +1004,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1007,7 +1021,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1024,7 +1038,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1041,7 +1055,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1058,7 +1072,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1075,7 +1089,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1092,7 +1106,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1109,7 +1123,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
@@ -1126,7 +1140,7 @@ RUN ./configure \
         ac_cv_buggy_getaddrinfo=no \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 

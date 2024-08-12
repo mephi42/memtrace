@@ -71,6 +71,7 @@ FROM crosstool-ng-base AS {{ name_tag }}
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         libffi-dev \
         libssl-dev \
+        patchelf \
         zlib1g-dev
 RUN git clone \
         --branch={{ git_tag }} \
@@ -85,9 +86,10 @@ RUN {{ git }} cherry-pick {{ commits|join(" ") }}
 WORKDIR /tmp/{{ name_tag }}-build
 RUN /usr/src/{{ name_tag }}/configure \
         --prefix=/opt/{{ name_tag }} \
-        CFLAGS=-fPIC
+        --enable-shared
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+RUN patchelf --set-rpath '$ORIGIN/../lib' /opt/{{ name_tag }}/bin/python3
 {%- endfor %}
 
 {%- for _, name_tag, _, configure_flags, _, _ in pythons %}
