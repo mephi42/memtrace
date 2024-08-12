@@ -7,6 +7,6 @@ index 911bccaa8..cca0a26e9 100755
       arm*)
          AC_MSG_RESULT([ok (${host_cpu})])
 -        VGCONF_PLATFORM_ARM_ARCH="-march=armv6"
-+        VGCONF_PLATFORM_ARM_ARCH="-march=armv6t2"
++        VGCONF_PLATFORM_ARM_ARCH="-march=armv6t2+fp"
          ARCH_MAX="arm"
          ;;
