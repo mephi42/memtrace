@@ -35,10 +35,6 @@ skbuild.setup(
     entry_points={
         "console_scripts": [
             "memtrace=memtrace.cli:main",
-            "memtrace-analyze=memtrace.analysis:main",
-            "memtrace-index=memtrace.index:main",
-            "memtrace-stats=memtrace.stats:main",
-            "memtrace-ud=memtrace.ud:main",
         ],
     },
 )
