@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+import os
+import subprocess
+
+
+def main():
+    parser = ArgumentParser()
+    parser.add_argument("-m")
+    args, rest = parser.parse_known_args()
+
+    script = """\
+from os import environ
+del environ["LD_PRELOAD"]
+"""
+    if args.m:
+        script += f"""\
+import {args.m}.__main__
+"""
+    else:
+        script += """\
+import sys
+assert sys.argv[0] == "-c"
+del sys.argv[0]
+with open(sys.argv[0]) as fp:
+    exec(compile(fp.read(), sys.argv[0], "exec"))
+"""
+
+    cc = os.environ.get("CC", "cc")
+    # https://github.com/google/sanitizers/issues/934
+    libstdcxx = (
+        subprocess.check_output([cc, "-print-file-name=libstdc++.so"]).strip().decode()
+    )
+    libasan = (
+        subprocess.check_output([cc, "-print-file-name=libasan.so"]).strip().decode()
+    )
+
+    # https://stackoverflow.com/questions/77894856
+    argv = ["setarch", "--addr-no-randomize", "python3", "-c", script, *rest]
+    os.execvpe(
+        argv[0],
+        argv,
+        {
+            **os.environ,
+            "ASAN_OPTIONS": "detect_leaks=0",
+            "LD_PRELOAD": os.pathsep.join((libasan, libstdcxx)),
+        },
+    )
+
+
+if __name__ == "__main__":
+    main()

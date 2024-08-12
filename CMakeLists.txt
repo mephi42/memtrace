@@ -21,6 +21,7 @@ target_compile_options(
             -Wconversion
             -Wdate-time
             -Wformat-security
+            -Wno-maybe-uninitialized
             -pedantic
             -Werror
             -fstack-protector-strong
