@@ -12,12 +12,16 @@ name: Continuous integration
       with:
         submodules: "true"
 
+    - Generate a timestamp
+      run: echo "TIMESTAMP=$(date +"%Y%m%d%H%M%S")" >>$GITHUB_ENV
+
     - uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
           ~/.ccache
-        key: {{ cache_key }}
+        key: {{ cache_key }}-{% raw %}${{ env.TIMESTAMP }}{% endraw %}
+        restore-keys: {{ cache_key }}-
 {%- endmacro %}
 
 {%- macro steps_post(artifact_name) %}
