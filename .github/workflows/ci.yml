@@ -40,12 +40,16 @@ jobs:
       with:
         submodules: "true"
 
+    - Generate a timestamp
+      run: echo "TIMESTAMP=$(date +"%Y%m%d%H%M%S")" >>$GITHUB_ENV
+
     - uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
           ~/.ccache
-        key: native
+        key: native-${{ env.TIMESTAMP }}
+        restore-keys: native-
 
     - name: Configure ccache
       run: echo "CCACHE_DIR=$HOME/.ccache" >>"$GITHUB_ENV"
@@ -90,12 +94,16 @@ jobs:
       with:
         submodules: "true"
 
+    - Generate a timestamp
+      run: echo "TIMESTAMP=$(date +"%Y%m%d%H%M%S")" >>$GITHUB_ENV
+
     - uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
           ~/.ccache
-        key: cross-${{ matrix.arch }}-${{ matrix.python }}
+        key: cross-${{ matrix.arch }}-${{ matrix.python }}-${{ env.TIMESTAMP }}
+        restore-keys: cross-${{ matrix.arch }}-${{ matrix.python }}-
 
     - name: Pull the Docker image
       run: ./in-docker
