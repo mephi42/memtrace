@@ -142,6 +142,7 @@ def main():
         "--wheel-dir",
         default=os.path.join(basedir, "dist", "wheelhouse"),
     )
+    parser.add_argument("--sanitize", action="store_true")
     args, build_args = parser.parse_known_args()
     if args.host != platform.machine():
         build_args.extend(
@@ -150,6 +151,8 @@ def main():
                 f"-DCMAKE_SYSTEM_PROCESSOR={args.host}",
             )
         )
+    if args.sanitize:
+        build_args.append("-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined")
     build = os.path.join(basedir, "build", f"{platform.system()}-{args.host}")
     build_prefix = "" if args.host_python is None else "build-"
     cross_prefix = "" if args.host_python is None else "cross-"
@@ -166,7 +169,15 @@ def main():
                 *build_args,
             ],
         )
-        run_in_venv(venv, ["python", "-m", "unittest", "discover"])
+        run_in_venv(
+            venv,
+            [
+                "./python3-asan" if args.sanitize else "python3",
+                "-m",
+                "unittest",
+                "discover",
+            ],
+        )
     build_wheel(
         venv,
         args.build_type,

@@ -40,8 +40,8 @@ jobs:
       with:
         submodules: "true"
 
-    - Generate a timestamp
-      run: echo "TIMESTAMP=$(date +"%Y%m%d%H%M%S")" >>$GITHUB_ENV
+    - name: Generate a timestamp
+      run: echo "TIMESTAMP=$(date +%Y%m%d%H%M%S)" >>"$GITHUB_ENV"
 
     - uses: actions/cache@v4
       with:
@@ -67,11 +67,12 @@ jobs:
       run: PATH=/usr/lib/ccache:$PATH ./ci
                --skip-repair
                -DVALGRIND_CONFIGURE_FLAGS=--disable-dependency-tracking
+               --sanitize
 
     - name: Smoke test
       run: python3 -m pip install --user dist/wheelhouse/*.whl &&
-           memtrace record true &&
-           memtrace report >/dev/null
+           ./python3-asan "$(command -v memtrace)" record true &&
+           ./python3-asan "$(command -v memtrace)" report | tail
 
     - name: Show and reset ccache stats
       run: ccache --show-stats --verbose --zero-stats
@@ -94,8 +95,8 @@ jobs:
       with:
         submodules: "true"
 
-    - Generate a timestamp
-      run: echo "TIMESTAMP=$(date +"%Y%m%d%H%M%S")" >>$GITHUB_ENV
+    - name: Generate a timestamp
+      run: echo "TIMESTAMP=$(date +%Y%m%d%H%M%S)" >>"$GITHUB_ENV"
 
     - uses: actions/cache@v4
       with:
