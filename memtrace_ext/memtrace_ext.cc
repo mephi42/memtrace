@@ -34,8 +34,8 @@
 // clang-format on
 
 #include "./align.h"
-#include "./disasm.h"
 #include "./debuginfo.h"
+#include "./disasm.h"
 #include "./endian.h"
 #include "./entries.h"
 #include "./machine.h"
@@ -47,7 +47,7 @@ constexpr size_t kHostWordSize = sizeof(void*);
 
 void HexDump(std::FILE* f, const void* buf, size_t n) {
   for (size_t i = 0; i < n; i++)
-    std::fprintf(f, "%02x", static_cast<const std::uint8_t *>(buf)[i]);
+    std::fprintf(f, "%02x", static_cast<const std::uint8_t*>(buf)[i]);
 }
 
 void ReprDump(std::FILE* f, const std::uint8_t* buf, size_t n) {
@@ -953,8 +953,7 @@ class Trace : public TraceBase {
     InsnIndexHeader header;
     if ((err = ReadHeader(indexPath.Get("header").c_str(), &header)) < 0)
       return err;
-    if (header.traceId != header_.GetTraceId())
-      return -EINVAL;
+    if (header.traceId != header_.GetTraceId()) return -EINVAL;
     if ((err = insnIndex_.Init(indexPath.Get("data").c_str(),
                                InitMode::OpenExisting)) < 0)
       return err;
