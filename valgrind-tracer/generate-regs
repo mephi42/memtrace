@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+import os.path
+
+from clang.cindex import Index
+
+
+def iter_subtree(node):
+    yield node
+    for child_node in node.get_children():
+        yield from iter_subtree(child_node)
+
+
+def find_struct_state(node):
+    for subtree_node in iter_subtree(node):
+        if subtree_node.spelling == "VexGuestArchState":
+            return subtree_node.type.get_canonical()
+    return None
+
+
+def main():
+    basedir = os.path.dirname(__file__)
+    valgrind = os.path.join(basedir, "..", "valgrind")
+    for arch in [
+        "VGA_x86",
+        "VGA_amd64",
+        "VGA_ppc64be",
+        "VGA_ppc64le",
+        "VGA_arm",
+        "VGA_arm64",
+        "VGA_s390x",
+    ]:
+        print(f"#if defined({arch})")
+        index = Index.create()
+        tu = index.parse(
+            os.path.join(valgrind, "include", "pub_tool_guest.h"),
+            [f"-D{arch}", "-I" + os.path.join(valgrind, "VEX", "pub")],
+        )
+        struct_state = find_struct_state(tu.cursor)
+        for field in struct_state.get_fields():
+            print(f"    DEFINE_REG({field.spelling}),")
+        print("#endif")
+
+
+if __name__ == "__main__":
+    main()
