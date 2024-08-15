@@ -121,8 +121,7 @@ class HeaderEntry : public B {
         .GetValue();
   }
   const TraceId& GetTraceId() const {
-    return *reinterpret_cast<const TraceId *>(
-        this->GetData() + kTraceIdOffset);
+    return *reinterpret_cast<const TraceId*>(this->GetData() + kTraceIdOffset);
   }
 
  private:
