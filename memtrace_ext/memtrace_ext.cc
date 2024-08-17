@@ -195,7 +195,7 @@ class Dumper {
     std::fprintf(f_, "Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
     std::fprintf(f_, "Word size         : %zu\n", sizeof(W));
     std::fprintf(f_, "Machine           : %s\n",
-                 GetMachineTypeStr(entry.GetMachineType()));
+                 GetStr(entry.GetMachineType()));
     std::fprintf(f_, "Regs size         : %d\n", entry.GetRegsSize());
     std::fprintf(f_, "Trace ID          : ");
     HexDump(f_, &entry.GetTraceId(), sizeof(TraceId));
@@ -213,12 +213,12 @@ class Dumper {
       regName = nullptr;
     if (regName == nullptr)
       std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "] ",
-                   i, entry.GetInsnSeq(), GetTagStr(tag),
+                   i, entry.GetInsnSeq(), GetStr(tag),
                    static_cast<size_t>(entry.GetSize() * 8),
                    static_cast<std::uint64_t>(entry.GetAddr()));
     else
       std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s %s ", i, entry.GetInsnSeq(),
-                   GetTagStr(tag), regName);
+                   GetStr(tag), regName);
     ValueDump<E>(f_, entry.GetValue(), entry.GetSize());
     std::fprintf(f_, "\n");
     return 0;
@@ -226,7 +226,7 @@ class Dumper {
 
   int operator()(size_t i, InsnEntry<E, W> entry) {
     std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s 0x%016" PRIx64 " ", i,
-                 entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
+                 entry.GetInsnSeq(), GetStr(entry.GetTlv().GetTag()),
                  static_cast<std::uint64_t>(entry.GetPc()));
     DisasmInsnEntry(f_, disasmEngine_, entry);
     return 0;
@@ -234,7 +234,7 @@ class Dumper {
 
   int operator()(size_t i, InsnExecEntry<E, W> entry) {
     std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s\n", i, entry.GetInsnSeq(),
-                 GetTagStr(entry.GetTlv().GetTag()));
+                 GetStr(entry.GetTlv().GetTag()));
     insnCount_++;
     return 0;
   }
@@ -246,19 +246,19 @@ class Dumper {
     if (regName == nullptr)
       std::fprintf(f_,
                    "[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "]\n", i,
-                   entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
+                   entry.GetInsnSeq(), GetStr(entry.GetTlv().GetTag()),
                    static_cast<size_t>(entry.GetSize() * 8),
                    static_cast<std::uint64_t>(entry.GetAddr()));
     else
       std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s %s\n", i,
-                   entry.GetInsnSeq(), GetTagStr(entry.GetTlv().GetTag()),
+                   entry.GetInsnSeq(), GetStr(entry.GetTlv().GetTag()),
                    regName);
     return 0;
   }
 
   int operator()(size_t i, MmapEntry<E, W> entry) {
     std::fprintf(f_, "[%10zu] %s %016" PRIx64 "-%016" PRIx64 " %c%c%c %s\n", i,
-                 GetTagStr(entry.GetTlv().GetTag()),
+                 GetStr(entry.GetTlv().GetTag()),
                  static_cast<std::uint64_t>(entry.GetStart()),
                  static_cast<std::uint64_t>(entry.GetEnd() + 1),
                  entry.GetFlags() & 1 ? 'r' : '-',
@@ -269,7 +269,7 @@ class Dumper {
 
   int operator()(size_t i, RegMetaEntry<E, W> entry) {
     std::fprintf(f_, "[%10zu] %s uint%zu_t %s [0x%" PRIx16 "]\n", i,
-                 GetTagStr(entry.GetTlv().GetTag()),
+                 GetStr(entry.GetTlv().GetTag()),
                  static_cast<size_t>(entry.GetSize() * 8), entry.GetName(),
                  entry.GetOffset());
     return 0;
@@ -565,6 +565,17 @@ enum class DumpKind {
   Raw,
   Source,
 };
+
+const char* GetStr(DumpKind kind) {
+  switch (kind) {
+    case DumpKind::Raw:
+      return "Raw";
+    case DumpKind::Source:
+      return "Source";
+    default:
+      return nullptr;
+  }
+}
 
 class TraceBase {
  public:
@@ -2226,8 +2237,7 @@ UdBase* UdBase::Analyze(const char* path, std::shared_ptr<TraceBase> trace,
 
 template <Endianness E, typename W>
 std::string MangleName(const char* name) {
-  return std::string(name) + GetEndiannessStr(E) +
-         std::to_string(sizeof(W) * 8);
+  return std::string(name) + GetStr(E) + std::to_string(sizeof(W) * 8);
 }
 
 template <Endianness E, typename W>
@@ -2273,40 +2283,35 @@ void RegisterEntries() {
       .add_property("name", &RegMetaEntryPy::CopyName);
 }
 
+template <typename T>
+void RegisterEnumValues(boost::python::enum_<T>* /* py */) {}
+
+template <typename T, typename... TT>
+void RegisterEnumValues(boost::python::enum_<T>* py, T t, TT&&... tt) {
+  py->value(GetStr(t), t);
+  RegisterEnumValues(py, std::forward<TT>(tt)...);
+}
+
 }  // namespace
 
 BOOST_PYTHON_MODULE(_memtrace) {
   namespace bp = boost::python;
-  bp::enum_<Endianness>("Endianness")
-      .value("Little", Endianness::Little)
-      .value("Big", Endianness::Big);
+  bp::enum_<Endianness> endianness("Endianness");
+  RegisterEnumValues(&endianness, Endianness::Little, Endianness::Big);
   bp::def("get_endianness_str", GetEndiannessStrPy);
-  bp::enum_<Tag>("Tag")
-      .value("MT_FIRST", Tag::MT_FIRST)
-      .value("MT_LAST", Tag::MT_LAST)
-      .value("MT_HEADER32", Tag::MT_HEADER32)
-      .value("MT_HEADER64", Tag::MT_HEADER64)
-      .value("MT_LOAD", Tag::MT_LOAD)
-      .value("MT_STORE", Tag::MT_STORE)
-      .value("MT_REG", Tag::MT_REG)
-      .value("MT_INSN", Tag::MT_INSN)
-      .value("MT_GET_REG", Tag::MT_GET_REG)
-      .value("MT_PUT_REG", Tag::MT_PUT_REG)
-      .value("MT_INSN_EXEC", Tag::MT_INSN_EXEC)
-      .value("MT_GET_REG_NX", Tag::MT_GET_REG_NX)
-      .value("MT_PUT_REG_NX", Tag::MT_PUT_REG_NX)
-      .value("MT_MMAP", Tag::MT_MMAP)
-      .value("MT_REGMETA", Tag::MT_REGMETA);
-  bp::enum_<MachineType>("MachineType")
-      .value("EM_386", MachineType::X_EM_386)
-      .value("EM_X86_64", MachineType::X_EM_X86_64)
-      .value("EM_PPC", MachineType::X_EM_PPC)
-      .value("EM_PPC64", MachineType::X_EM_PPC64)
-      .value("EM_ARM", MachineType::X_EM_ARM)
-      .value("EM_AARCH64", MachineType::X_EM_AARCH64)
-      .value("EM_S390", MachineType::X_EM_S390)
-      .value("EM_MIPS", MachineType::X_EM_MIPS)
-      .value("EM_NANOMIPS", MachineType::X_EM_NANOMIPS);
+  bp::enum_<Tag> tag("Tag");
+  tag.value("MT_FIRST", Tag::MT_FIRST);
+  tag.value("MT_LAST", Tag::MT_LAST);
+  RegisterEnumValues(&tag, Tag::MT_HEADER32, Tag::MT_HEADER64, Tag::MT_LOAD,
+                     Tag::MT_STORE, Tag::MT_REG, Tag::MT_INSN, Tag::MT_GET_REG,
+                     Tag::MT_PUT_REG, Tag::MT_INSN_EXEC, Tag::MT_GET_REG_NX,
+                     Tag::MT_PUT_REG_NX, Tag::MT_MMAP, Tag::MT_REGMETA);
+  bp::enum_<MachineType> machineType("MachineType");
+  RegisterEnumValues(&machineType, MachineType::X_EM_386,
+                     MachineType::X_EM_X86_64, MachineType::X_EM_PPC,
+                     MachineType::X_EM_PPC64, MachineType::X_EM_ARM,
+                     MachineType::X_EM_AARCH64, MachineType::X_EM_S390,
+                     MachineType::X_EM_MIPS, MachineType::X_EM_NANOMIPS);
   bp::class_<EntryPy, boost::noncopyable>("Entry", bp::no_init)
       .def_readonly("index", &EntryPy::index)
       .add_property("tag", &EntryPy::GetTag);
@@ -2388,7 +2393,6 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def_readonly("section", &LinePy::section)
       .def_readonly("file", &LinePy::file)
       .def_readonly("line", &LinePy::line);
-  bp::enum_<DumpKind>("DumpKind")
-      .value("Raw", DumpKind::Raw)
-      .value("Source", DumpKind::Source);
+  bp::enum_<DumpKind> dumpKind("DumpKind");
+  RegisterEnumValues(&dumpKind, DumpKind::Raw, DumpKind::Source);
 }

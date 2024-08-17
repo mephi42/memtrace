@@ -11,7 +11,7 @@ enum class Endianness {
   Big,
 };
 
-const char* GetEndiannessStr(Endianness endianness) {
+const char* GetStr(Endianness endianness) {
   switch (endianness) {
     case Endianness::Little:
       return "Little";

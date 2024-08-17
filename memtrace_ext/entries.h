@@ -31,8 +31,12 @@ enum class Tag {
   MT_FIRST = MT_LOAD,
 };
 
-const char* GetTagStr(Tag tag) {
+const char* GetStr(Tag tag) {
   switch (tag) {
+    case Tag::MT_HEADER32:
+      return "MT_HEADER32";
+    case Tag::MT_HEADER64:
+      return "MT_HEADER64";
     case Tag::MT_LOAD:
       return "MT_LOAD";
     case Tag::MT_STORE:

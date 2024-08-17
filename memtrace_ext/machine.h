@@ -18,7 +18,7 @@ enum class MachineType {
   X_EM_NANOMIPS = 249,
 };
 
-const char* GetMachineTypeStr(MachineType type) {
+const char* GetStr(MachineType type) {
   switch (type) {
     case MachineType::X_EM_386:
       return "EM_386";
