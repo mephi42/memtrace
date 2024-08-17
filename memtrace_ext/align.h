@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace {  // NOLINT(build/namespaces)
+namespace {  // NOLINT(build/namespaces_headers)
 
 template <size_t N>
 struct Int;

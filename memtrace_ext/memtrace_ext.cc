@@ -174,7 +174,8 @@ template <Endianness E, typename W>
 class Trace;
 
 template <Endianness E, typename W>
-void DisasmInsnEntry(FILE* f, Disasm& disasmEngine, InsnEntry<E, W> entry) {
+void DisasmInsnEntry(FILE* f, const Disasm& disasmEngine,
+                     InsnEntry<E, W> entry) {
   HexDump(f, entry.GetValue(), entry.GetSize());
   std::unique_ptr<cs_insn, CsFree> insn = disasmEngine.DoDisasm(
       entry.GetValue(), entry.GetSize(), entry.GetPc(), 0);
@@ -676,7 +677,7 @@ struct InsnIndexHeader {
 using RegMeta = std::map<std::pair<std::uint16_t, std::uint16_t>, const char*>;
 
 struct HeaderVisitor {
-  HeaderVisitor(RegMeta* regMeta) : regMeta(regMeta), proceed(true) {}
+  explicit HeaderVisitor(RegMeta* regMeta) : regMeta(regMeta), proceed(true) {}
 
   template <Endianness E, typename W>
   int operator()(size_t /* i */, RegMetaEntry<E, W> entry) {

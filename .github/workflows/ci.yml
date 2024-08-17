@@ -19,6 +19,7 @@ jobs:
                black
                ccache
                cmake
+               cpplint
                g++
                gcc
                git
@@ -57,7 +58,7 @@ jobs:
     - name: Show ccache stats
       run: ccache --show-stats --verbose
 
-    - name: Check formatting
+    - name: Check code style
       run: ./fmt --check
 
     - name: Build a source distribution

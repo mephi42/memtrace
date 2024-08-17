@@ -6,11 +6,17 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <boost/optional.hpp>
 #include <cstdint>
+#include <map>
 #include <memory>
+#include <string>
+#include <utility>
 
-namespace {  // NOLINT(build/namespaces)
+// clang-format off
+#include <boost/optional.hpp>
+// clang-format on
+
+namespace {  // NOLINT(build/namespaces_headers)
 
 struct DwflDeleter {
   void operator()(Dwfl* dwfl) { dwfl_end(dwfl); }
@@ -29,7 +35,7 @@ DwflPtr DwflBegin() { return DwflPtr(dwfl_begin(&kDwflCallbacks)); }
 
 class SymbolIndex {
  public:
-  SymbolIndex(Dwfl* dwfl) {
+  explicit SymbolIndex(Dwfl* dwfl) {
     dwfl_getmodules(dwfl, &SymbolIndex::Callback, this, 0);
   }
 
