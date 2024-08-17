@@ -71,6 +71,8 @@ static IRExpr* mkPtr(void* ptr)
 #define MT_MMAP 0x4d50
 #define MT_REGMETA 0x4d51
 
+#define MT_INSN_INDIRECT_JUMP (1 << 0)
+
 #define TRACE_BUFFER_SIZE (1024 * 1024 * 1024)
 #define MAX_ENTRY_LENGTH (4 * 1024)
 #define ALIGN_UP(p, size) (((p) + ((size) - 1)) & ~((size) - 1))
@@ -145,6 +147,7 @@ struct __attribute__((__packed__)) LdStEntry {
 struct __attribute__((__packed__)) InsnEntry {
    union TlvInsnSeq tlvInsnSeq;
    Addr pc;
+   UChar flags;
    UChar value[0];
 };
 
@@ -551,14 +554,15 @@ static void add_reg_entries(IRSB* out, UInt insnSeq)
       add_reg_entry(out, insnSeq, i);
 }
 
-static void add_insn_entry_now(UInt insnSeq, Addr pc, UInt insn_length)
+static void add_insn_entry_now(UInt insnSeq, Addr pc, UInt insn_length,
+                               UChar flags)
 {
    struct InsnEntry* entry;
    Int alignedEntryLength;
    Int entryLength;
 
-   MT_STATIC_ASSERT(VG_WORDSIZE == 4 ? sizeof(struct InsnEntry) == 12 :
-                    VG_WORDSIZE == 8 ? sizeof(struct InsnEntry) == 16 :
+   MT_STATIC_ASSERT(VG_WORDSIZE == 4 ? sizeof(struct InsnEntry) == 13 :
+                    VG_WORDSIZE == 8 ? sizeof(struct InsnEntry) == 17 :
                     0);
    entryLength = sizeof(struct InsnEntry) + insn_length;
    entry = (struct InsnEntry*)trace;
@@ -566,6 +570,7 @@ static void add_insn_entry_now(UInt insnSeq, Addr pc, UInt insn_length)
    entry->tlvInsnSeq.tlv.length = entryLength;
    entry->tlvInsnSeq.insnSeq = insnSeq;
    entry->pc = pc;
+   entry->flags = flags;
    VG_(memcpy)(entry->value, (void*)pc, insn_length);
    alignedEntryLength = ALIGN_UP(entryLength, sizeof(UIntPtr));
    tl_assert(alignedEntryLength <= MAX_ENTRY_LENGTH);
@@ -863,6 +868,18 @@ static void store_syscall_insn_seq(IRSB* out, UInt insnSeq)
                               IRExpr_Const(IRConst_U32(insnSeq))));
 }
 
+static Int get_last_mark_idx(IRSB* bb)
+{
+   Int i, result = -1;
+
+   for (i = 0; i < bb->stmts_used; i++) {
+      if (bb->stmts[i]->tag == Ist_IMark)
+         result = i;
+   }
+
+   return result;
+}
+
 static
 IRSB* mt_instrument(VgCallbackClosure* closure,
                     IRSB* bb,
@@ -873,10 +890,11 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
                     IRType hWordTy)
 {
    static UInt insnSeq = 0;
+   Int i, last_mark_idx;
    Int pcFlags = 0;
    IRSB* out;
-   Int i;
 
+   last_mark_idx = get_last_mark_idx(bb);
    out = deepCopyIRSBExceptStmts(bb);
    for (i = 0; i < bb->stmts_used; i++) {
       IRStmt* stmt = bb->stmts[i];
@@ -890,8 +908,14 @@ IRSB* mt_instrument(VgCallbackClosure* closure,
 
          insnSeq++;
          pcFlags = get_pc_flags(pc);
-         if (pcFlags)
-            add_insn_entry_now(insnSeq, pc, stmt->Ist.IMark.len);
+         if (pcFlags) {
+            UChar flags = 0;
+
+            if (i == last_mark_idx && bb->next->tag != Iex_Const)
+               /* Ist_Exit.dst is IRConst, so no need to check them. */
+               flags |= MT_INSN_INDIRECT_JUMP;
+            add_insn_entry_now(insnSeq, pc, stmt->Ist.IMark.len, flags);
+         }
          if (pcFlags & AR_INSNS)
             add_insn_exec_entry(out, insnSeq);
          if (pcFlags & AR_ALL_REGS)

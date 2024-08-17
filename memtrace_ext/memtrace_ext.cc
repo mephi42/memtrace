@@ -229,6 +229,9 @@ class Dumper {
     std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s 0x%016" PRIx64 " ", i,
                  entry.GetInsnSeq(), GetStr(entry.GetTlv().GetTag()),
                  static_cast<std::uint64_t>(entry.GetPc()));
+    if (entry.GetFlags() & static_cast<std::underlying_type_t<InsnFlags>>(
+                               InsnFlags::MT_INSN_INDIRECT_JUMP))
+      std::fprintf(f_, "%s ", GetStr(InsnFlags::MT_INSN_INDIRECT_JUMP));
     DisasmInsnEntry(f_, disasmEngine_, entry);
     return 0;
   }
@@ -2255,7 +2258,8 @@ void RegisterEntries() {
       MangleName<E, W>("InsnEntry").c_str(), bp::no_init)
       .add_property("insn_seq", &InsnEntryPy::GetInsnSeq)
       .add_property("pc", &InsnEntryPy::GetPc)
-      .add_property("value", &InsnEntryPy::CopyValue);
+      .add_property("value", &InsnEntryPy::CopyValue)
+      .add_property("flags", &InsnEntryPy::GetFlags);
   using InsnExecEntryPy = InsnExecEntry<E, W, EntryPyEW<E, W>>;
   bp::class_<InsnExecEntryPy, boost::noncopyable, bp::bases<EntryPy>>(
       MangleName<E, W>("InsnExecEntry").c_str(), bp::no_init)
@@ -2396,4 +2400,6 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def_readonly("line", &LinePy::line);
   bp::enum_<DumpKind> dumpKind("DumpKind");
   RegisterEnumValues(&dumpKind, DumpKind::Raw, DumpKind::Source);
+  bp::enum_<InsnFlags> insnFlags("InsnFlags");
+  RegisterEnumValues(&insnFlags, InsnFlags::MT_INSN_INDIRECT_JUMP);
 }
