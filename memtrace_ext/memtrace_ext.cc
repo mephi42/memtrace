@@ -757,6 +757,9 @@ class Trace : public TraceBase {
 
   template <typename V, typename F>
   int VisitOne(V* visitor, const F& filter) {
+    if (PyErr_CheckSignals()) {
+      boost::python::throw_error_already_set();
+    }
     if (!Have(Tlv<E, W>::kFixedLength)) return -EINVAL;
     Tlv<E, W> tlv(cur_);
     if (!Have(tlv.GetAlignedLength())) return -EINVAL;
