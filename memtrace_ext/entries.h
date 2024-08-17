@@ -165,6 +165,19 @@ class LdStEntry : public B {
   static constexpr size_t kValueOffset = kAddrOffset + sizeof(W);
 };
 
+enum class InsnFlags : std::uint8_t {
+  MT_INSN_INDIRECT_JUMP = (1 << 0),
+};
+
+const char* GetStr(InsnFlags flags) {
+  switch (flags) {
+    case InsnFlags::MT_INSN_INDIRECT_JUMP:
+      return "MT_INSN_INDIRECT_JUMP";
+    default:
+      return nullptr;
+  }
+}
+
 template <Endianness E, typename W, typename B = Overlay>
 class InsnEntry : public B {
  public:
@@ -177,6 +190,9 @@ class InsnEntry : public B {
   }
   W GetPc() const {
     return RawInt<E, W>(this->GetData() + kPcOffset).GetValue();
+  }
+  std::uint8_t GetFlags() const {
+    return RawInt<E, std::uint8_t>(this->GetData() + kFlagsOffset).GetValue();
   }
   const std::uint8_t* GetValue() const {
     return this->GetData() + kValueOffset;
@@ -191,7 +207,8 @@ class InsnEntry : public B {
  private:
   static constexpr size_t kInsnSeqOffset = Tlv<E, W>::kFixedLength;
   static constexpr size_t kPcOffset = kInsnSeqOffset + sizeof(std::uint32_t);
-  static constexpr size_t kValueOffset = kPcOffset + sizeof(W);
+  static constexpr size_t kFlagsOffset = kPcOffset + sizeof(W);
+  static constexpr size_t kValueOffset = kFlagsOffset + sizeof(std::uint8_t);
 };
 
 template <Endianness E, typename W, typename B = Overlay>

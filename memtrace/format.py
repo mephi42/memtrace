@@ -1,6 +1,6 @@
 import struct
 
-from ._memtrace import Disasm, Entry, Tag
+from ._memtrace import Disasm, Entry, Tag, InsnFlags
 from .trace import Trace
 
 
@@ -54,12 +54,15 @@ def format_entry(
                 format_value(bytes(entry.value), endianness),
             )
     elif entry.tag == Tag.MT_INSN:
-        s += "0x{:08x}: {} 0x{:016x} {} {}".format(
+        s += "0x{:08x}: {} 0x{:016x}".format(
             entry.insn_seq,
             entry.tag,
             entry.pc,
-            bytes(entry.value).hex(),
-            disasm.disasm_str(entry.value, entry.pc),
+        )
+        if entry.flags & InsnFlags.MT_INSN_INDIRECT_JUMP:
+            s += " MT_INSN_INDIRECT_JUMP"
+        s += " {} {}".format(
+            bytes(entry.value).hex(), disasm.disasm_str(entry.value, entry.pc)
         )
     elif entry.tag == Tag.MT_INSN_EXEC:
         s += "0x{:08x}: {}".format(entry.insn_seq, entry.tag)
