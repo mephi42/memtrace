@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace {  // NOLINT(build/namespaces)
+namespace {  // NOLINT(build/namespaces_headers)
 
 enum class Endianness {
   Little,

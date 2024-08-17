@@ -17,12 +17,22 @@ def main(check):
         black_args = []
         clang_format_args = ["-i"]
     subprocess.check_call(["black", *git_ls_py_files(), *black_args])
+    memtrace_ext_sources = [
+        *glob("memtrace_ext/*.cc"),
+        *glob("memtrace_ext/*.h"),
+    ]
     subprocess.check_call(
         [
             "clang-format",
-            *glob("memtrace_ext/*.cc"),
-            *glob("memtrace_ext/*.h"),
+            *memtrace_ext_sources,
             *clang_format_args,
+        ]
+    )
+    subprocess.check_call(
+        [
+            "cpplint",
+            "--root=memtrace_ext",
+            *memtrace_ext_sources,
         ]
     )
 

@@ -4,7 +4,7 @@
 
 #include <elf.h>
 
-namespace {  // NOLINT(build/namespaces)
+namespace {  // NOLINT(build/namespaces_headers)
 
 enum class MachineType {
   X_EM_386 = EM_386,

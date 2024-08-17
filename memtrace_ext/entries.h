@@ -10,7 +10,7 @@
 #include "./endian.h"
 #include "./machine.h"
 
-namespace {  // NOLINT(build/namespaces)
+namespace {  // NOLINT(build/namespaces_headers)
 
 enum class Tag {
   MT_HEADER32 = 0x4d34,

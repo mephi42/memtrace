@@ -13,7 +13,7 @@
 #include "./endian.h"
 #include "./machine.h"
 
-namespace {  // NOLINT(build/namespaces)
+namespace {  // NOLINT(build/namespaces_headers)
 
 class CsFree {
  public:

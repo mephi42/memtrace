@@ -16,7 +16,7 @@
 
 #include "./align.h"
 
-namespace {  // NOLINT(build/namespaces)
+namespace {  // NOLINT(build/namespaces_headers)
 
 enum class InitMode {
   CreateTemporary,
