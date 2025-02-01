@@ -5,7 +5,7 @@ ARG boost_version=1_85_0
 ARG capstone_version=4.0.2
 ARG crosstool_ng_version=1.26.0
 ARG elfutils_version=0.188
-ARG zlib_ng_version=2.2.1
+ARG zlib_ng_version=2.2.3
 
 # https://hub.docker.com/_/debian/tags?page=&page_size=&ordering=&name=bookworm
 FROM debian:bookworm-20250113-slim AS base
@@ -184,9 +184,6 @@ RUN git clone \
         --depth=1 \
         https://github.com/zlib-ng/zlib-ng.git \
         /usr/src/zlib-ng
-WORKDIR /usr/src/zlib-ng
-COPY zlib-ng/common .
-RUN patch -p1 <hwcap-s390-vx.patch
 
 {%- for arch, triple in arches %}
 
