@@ -6,3 +6,4 @@ using python : 3.9 : /usr/powerpc64-unknown-linux-gnu/cp39-cp39/bin/python3 : /u
 using python : 3.10 : /usr/powerpc64-unknown-linux-gnu/cp310-cp310/bin/python3 : /usr/powerpc64-unknown-linux-gnu/cp310-cp310/include/python3.10 : /usr/powerpc64-unknown-linux-gnu/cp310-cp310/lib ;
 using python : 3.11 : /usr/powerpc64-unknown-linux-gnu/cp311-cp311/bin/python3 : /usr/powerpc64-unknown-linux-gnu/cp311-cp311/include/python3.11 : /usr/powerpc64-unknown-linux-gnu/cp311-cp311/lib ;
 using python : 3.12 : /usr/powerpc64-unknown-linux-gnu/cp312-cp312/bin/python3 : /usr/powerpc64-unknown-linux-gnu/cp312-cp312/include/python3.12 : /usr/powerpc64-unknown-linux-gnu/cp312-cp312/lib ;
+using python : 3.13 : /usr/powerpc64-unknown-linux-gnu/cp313-cp313/bin/python3 : /usr/powerpc64-unknown-linux-gnu/cp313-cp313/include/python3.13 : /usr/powerpc64-unknown-linux-gnu/cp313-cp313/lib ;

@@ -8,7 +8,7 @@ ARG elfutils_version=0.188
 ARG zlib_ng_version=2.2.1
 
 # https://hub.docker.com/_/debian/tags?page=&page_size=&ordering=&name=bookworm
-FROM debian:bookworm-20240701-slim AS base
+FROM debian:bookworm-20250113-slim AS base
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -201,7 +201,7 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         patchelf \
         zlib1g-dev
 RUN git clone \
-        --branch=v3.8.19 \
+        --branch=v3.8.20 \
         --filter=tree:0 \
         https://github.com/python/cpython.git \
         /usr/src/cp38-cp38
@@ -222,7 +222,7 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         patchelf \
         zlib1g-dev
 RUN git clone \
-        --branch=v3.9.19 \
+        --branch=v3.9.21 \
         --filter=tree:0 \
         https://github.com/python/cpython.git \
         /usr/src/cp39-cp39
@@ -243,7 +243,7 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         patchelf \
         zlib1g-dev
 RUN git clone \
-        --branch=v3.10.14 \
+        --branch=v3.10.16 \
         --filter=tree:0 \
         https://github.com/python/cpython.git \
         /usr/src/cp310-cp310
@@ -264,7 +264,7 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         patchelf \
         zlib1g-dev
 RUN git clone \
-        --branch=v3.11.9 \
+        --branch=v3.11.11 \
         --filter=tree:0 \
         https://github.com/python/cpython.git \
         /usr/src/cp311-cp311
@@ -284,7 +284,7 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
         patchelf \
         zlib1g-dev
 RUN git clone \
-        --branch=v3.12.4 \
+        --branch=v3.12.8 \
         --filter=tree:0 \
         https://github.com/python/cpython.git \
         /usr/src/cp312-cp312
@@ -296,6 +296,26 @@ RUN /usr/src/cp312-cp312/configure \
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 RUN patchelf --set-rpath '$ORIGIN/../lib' /opt/cp312-cp312/bin/python3
+
+FROM crosstool-ng-base AS cp313-cp313
+RUN apt-get update && apt-get install --no-install-recommends --yes \
+        libffi-dev \
+        libssl-dev \
+        patchelf \
+        zlib1g-dev
+RUN git clone \
+        --branch=v3.13.1 \
+        --filter=tree:0 \
+        https://github.com/python/cpython.git \
+        /usr/src/cp313-cp313
+WORKDIR /usr/src/cp313-cp313
+WORKDIR /tmp/cp313-cp313-build
+RUN /usr/src/cp313-cp313/configure \
+        --prefix=/opt/cp313-cp313 \
+        --enable-shared
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+RUN patchelf --set-rpath '$ORIGIN/../lib' /opt/cp313-cp313/bin/python3
 
 FROM crosstool-ng-aarch64 AS cp36-cp36m-aarch64
 COPY --from=cp36-cp36m /usr/src/cp36-cp36m /usr/src/cp36-cp36m
@@ -1144,6 +1164,125 @@ RUN ./configure \
 RUN make "-j$(getconf _NPROCESSORS_ONLN)"
 RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
 
+FROM crosstool-ng-aarch64 AS cp313-cp313-aarch64
+COPY --from=cp313-cp313 /usr/src/cp313-cp313 /usr/src/cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+ENV PATH=/opt/cp313-cp313/bin:$PATH
+WORKDIR /usr/src/cp313-cp313
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=aarch64-unknown-linux-gnu \
+        --prefix=/usr/aarch64-unknown-linux-gnu/cp313-cp313 \
+        --with-build-python=/opt/cp313-cp313/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --enable-shared
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-arm AS cp313-cp313-arm
+COPY --from=cp313-cp313 /usr/src/cp313-cp313 /usr/src/cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+ENV PATH=/opt/cp313-cp313/bin:$PATH
+WORKDIR /usr/src/cp313-cp313
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=arm-unknown-linux-gnueabihf \
+        --prefix=/usr/arm-unknown-linux-gnueabihf/cp313-cp313 \
+        --with-build-python=/opt/cp313-cp313/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --enable-shared
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-i686 AS cp313-cp313-i686
+COPY --from=cp313-cp313 /usr/src/cp313-cp313 /usr/src/cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+ENV PATH=/opt/cp313-cp313/bin:$PATH
+WORKDIR /usr/src/cp313-cp313
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=i686-unknown-linux-gnu \
+        --prefix=/usr/i686-unknown-linux-gnu/cp313-cp313 \
+        --with-build-python=/opt/cp313-cp313/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --enable-shared
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64 AS cp313-cp313-ppc64
+COPY --from=cp313-cp313 /usr/src/cp313-cp313 /usr/src/cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+ENV PATH=/opt/cp313-cp313/bin:$PATH
+WORKDIR /usr/src/cp313-cp313
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64-unknown-linux-gnu \
+        --prefix=/usr/powerpc64-unknown-linux-gnu/cp313-cp313 \
+        --with-build-python=/opt/cp313-cp313/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --enable-shared
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-ppc64le AS cp313-cp313-ppc64le
+COPY --from=cp313-cp313 /usr/src/cp313-cp313 /usr/src/cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+ENV PATH=/opt/cp313-cp313/bin:$PATH
+WORKDIR /usr/src/cp313-cp313
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=powerpc64le-unknown-linux-gnu \
+        --prefix=/usr/powerpc64le-unknown-linux-gnu/cp313-cp313 \
+        --with-build-python=/opt/cp313-cp313/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --enable-shared
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-s390x AS cp313-cp313-s390x
+COPY --from=cp313-cp313 /usr/src/cp313-cp313 /usr/src/cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+ENV PATH=/opt/cp313-cp313/bin:$PATH
+WORKDIR /usr/src/cp313-cp313
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=s390x-ibm-linux-gnu \
+        --prefix=/usr/s390x-ibm-linux-gnu/cp313-cp313 \
+        --with-build-python=/opt/cp313-cp313/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --enable-shared
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
+FROM crosstool-ng-x86_64 AS cp313-cp313-x86_64
+COPY --from=cp313-cp313 /usr/src/cp313-cp313 /usr/src/cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+ENV PATH=/opt/cp313-cp313/bin:$PATH
+WORKDIR /usr/src/cp313-cp313
+RUN ./configure \
+        --build="$(uname -m)" \
+        --host=x86_64-unknown-linux-gnu \
+        --prefix=/usr/x86_64-unknown-linux-gnu/cp313-cp313 \
+        --with-build-python=/opt/cp313-cp313/bin/python3 \
+        ac_cv_buggy_getaddrinfo=no \
+        ac_cv_file__dev_ptmx=yes \
+        ac_cv_file__dev_ptc=no \
+        --enable-shared
+RUN make "-j$(getconf _NPROCESSORS_ONLN)"
+RUN make "-j$(getconf _NPROCESSORS_ONLN)" install
+
 FROM base AS boost-base
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         ca-certificates \
@@ -1182,6 +1321,9 @@ COPY --from=cp311-cp311-aarch64 \
 COPY --from=cp312-cp312-aarch64 \
      /usr/aarch64-unknown-linux-gnu/cp312-cp312 \
      /usr/aarch64-unknown-linux-gnu/cp312-cp312
+COPY --from=cp313-cp313-aarch64 \
+     /usr/aarch64-unknown-linux-gnu/cp313-cp313 \
+     /usr/aarch64-unknown-linux-gnu/cp313-cp313
 WORKDIR /usr/src/boost
 COPY boost/aarch64 .
 RUN ./b2 \
@@ -1189,7 +1331,7 @@ RUN ./b2 \
         --with-python \
         cxxflags=-fPIC \
         link=static \
-        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12 \
+        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12,3.13 \
         runtime-link=shared \
         threading=multi \
         toolset=gcc-aarch64 \
@@ -1219,6 +1361,9 @@ COPY --from=cp311-cp311-arm \
 COPY --from=cp312-cp312-arm \
      /usr/arm-unknown-linux-gnueabihf/cp312-cp312 \
      /usr/arm-unknown-linux-gnueabihf/cp312-cp312
+COPY --from=cp313-cp313-arm \
+     /usr/arm-unknown-linux-gnueabihf/cp313-cp313 \
+     /usr/arm-unknown-linux-gnueabihf/cp313-cp313
 WORKDIR /usr/src/boost
 COPY boost/arm .
 RUN ./b2 \
@@ -1226,7 +1371,7 @@ RUN ./b2 \
         --with-python \
         cxxflags=-fPIC \
         link=static \
-        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12 \
+        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12,3.13 \
         runtime-link=shared \
         threading=multi \
         toolset=gcc-arm \
@@ -1256,6 +1401,9 @@ COPY --from=cp311-cp311-i686 \
 COPY --from=cp312-cp312-i686 \
      /usr/i686-unknown-linux-gnu/cp312-cp312 \
      /usr/i686-unknown-linux-gnu/cp312-cp312
+COPY --from=cp313-cp313-i686 \
+     /usr/i686-unknown-linux-gnu/cp313-cp313 \
+     /usr/i686-unknown-linux-gnu/cp313-cp313
 WORKDIR /usr/src/boost
 COPY boost/i686 .
 RUN ./b2 \
@@ -1263,7 +1411,7 @@ RUN ./b2 \
         --with-python \
         cxxflags=-fPIC \
         link=static \
-        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12 \
+        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12,3.13 \
         runtime-link=shared \
         threading=multi \
         toolset=gcc-i686 \
@@ -1293,6 +1441,9 @@ COPY --from=cp311-cp311-ppc64 \
 COPY --from=cp312-cp312-ppc64 \
      /usr/powerpc64-unknown-linux-gnu/cp312-cp312 \
      /usr/powerpc64-unknown-linux-gnu/cp312-cp312
+COPY --from=cp313-cp313-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp313-cp313 \
+     /usr/powerpc64-unknown-linux-gnu/cp313-cp313
 WORKDIR /usr/src/boost
 COPY boost/ppc64 .
 RUN ./b2 \
@@ -1300,7 +1451,7 @@ RUN ./b2 \
         --with-python \
         cxxflags=-fPIC \
         link=static \
-        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12 \
+        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12,3.13 \
         runtime-link=shared \
         threading=multi \
         toolset=gcc-ppc64 \
@@ -1330,6 +1481,9 @@ COPY --from=cp311-cp311-ppc64le \
 COPY --from=cp312-cp312-ppc64le \
      /usr/powerpc64le-unknown-linux-gnu/cp312-cp312 \
      /usr/powerpc64le-unknown-linux-gnu/cp312-cp312
+COPY --from=cp313-cp313-ppc64le \
+     /usr/powerpc64le-unknown-linux-gnu/cp313-cp313 \
+     /usr/powerpc64le-unknown-linux-gnu/cp313-cp313
 WORKDIR /usr/src/boost
 COPY boost/ppc64le .
 RUN ./b2 \
@@ -1337,7 +1491,7 @@ RUN ./b2 \
         --with-python \
         cxxflags=-fPIC \
         link=static \
-        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12 \
+        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12,3.13 \
         runtime-link=shared \
         threading=multi \
         toolset=gcc-ppc64le \
@@ -1367,6 +1521,9 @@ COPY --from=cp311-cp311-s390x \
 COPY --from=cp312-cp312-s390x \
      /usr/s390x-ibm-linux-gnu/cp312-cp312 \
      /usr/s390x-ibm-linux-gnu/cp312-cp312
+COPY --from=cp313-cp313-s390x \
+     /usr/s390x-ibm-linux-gnu/cp313-cp313 \
+     /usr/s390x-ibm-linux-gnu/cp313-cp313
 WORKDIR /usr/src/boost
 COPY boost/s390x .
 RUN ./b2 \
@@ -1374,7 +1531,7 @@ RUN ./b2 \
         --with-python \
         cxxflags=-fPIC \
         link=static \
-        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12 \
+        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12,3.13 \
         runtime-link=shared \
         threading=multi \
         toolset=gcc-s390x \
@@ -1404,6 +1561,9 @@ COPY --from=cp311-cp311-x86_64 \
 COPY --from=cp312-cp312-x86_64 \
      /usr/x86_64-unknown-linux-gnu/cp312-cp312 \
      /usr/x86_64-unknown-linux-gnu/cp312-cp312
+COPY --from=cp313-cp313-x86_64 \
+     /usr/x86_64-unknown-linux-gnu/cp313-cp313 \
+     /usr/x86_64-unknown-linux-gnu/cp313-cp313
 WORKDIR /usr/src/boost
 COPY boost/x86_64 .
 RUN ./b2 \
@@ -1411,7 +1571,7 @@ RUN ./b2 \
         --with-python \
         cxxflags=-fPIC \
         link=static \
-        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12 \
+        python=3.6,3.7,3.8,3.9,3.10,3.11,3.12,3.13 \
         runtime-link=shared \
         threading=multi \
         toolset=gcc-x86_64 \
@@ -1828,6 +1988,12 @@ COPY --from=cp312-cp312-aarch64 \
      /usr/aarch64-unknown-linux-gnu/cp312-cp312 \
      /usr/aarch64-unknown-linux-gnu/cp312-cp312
 
+FROM final-aarch64 AS final-aarch64-cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+COPY --from=cp313-cp313-aarch64 \
+     /usr/aarch64-unknown-linux-gnu/cp313-cp313 \
+     /usr/aarch64-unknown-linux-gnu/cp313-cp313
+
 FROM final-common AS final-arm
 COPY --from=crosstool-ng-arm \
      /usr/arm-unknown-linux-gnueabihf \
@@ -1881,6 +2047,12 @@ COPY --from=cp312-cp312 /opt/cp312-cp312 /opt/cp312-cp312
 COPY --from=cp312-cp312-arm \
      /usr/arm-unknown-linux-gnueabihf/cp312-cp312 \
      /usr/arm-unknown-linux-gnueabihf/cp312-cp312
+
+FROM final-arm AS final-arm-cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+COPY --from=cp313-cp313-arm \
+     /usr/arm-unknown-linux-gnueabihf/cp313-cp313 \
+     /usr/arm-unknown-linux-gnueabihf/cp313-cp313
 
 FROM final-common AS final-i686
 COPY --from=crosstool-ng-i686 \
@@ -1936,6 +2108,12 @@ COPY --from=cp312-cp312-i686 \
      /usr/i686-unknown-linux-gnu/cp312-cp312 \
      /usr/i686-unknown-linux-gnu/cp312-cp312
 
+FROM final-i686 AS final-i686-cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+COPY --from=cp313-cp313-i686 \
+     /usr/i686-unknown-linux-gnu/cp313-cp313 \
+     /usr/i686-unknown-linux-gnu/cp313-cp313
+
 FROM final-common AS final-ppc64
 COPY --from=crosstool-ng-ppc64 \
      /usr/powerpc64-unknown-linux-gnu \
@@ -1989,6 +2167,12 @@ COPY --from=cp312-cp312 /opt/cp312-cp312 /opt/cp312-cp312
 COPY --from=cp312-cp312-ppc64 \
      /usr/powerpc64-unknown-linux-gnu/cp312-cp312 \
      /usr/powerpc64-unknown-linux-gnu/cp312-cp312
+
+FROM final-ppc64 AS final-ppc64-cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+COPY --from=cp313-cp313-ppc64 \
+     /usr/powerpc64-unknown-linux-gnu/cp313-cp313 \
+     /usr/powerpc64-unknown-linux-gnu/cp313-cp313
 
 FROM final-common AS final-ppc64le
 COPY --from=crosstool-ng-ppc64le \
@@ -2044,6 +2228,12 @@ COPY --from=cp312-cp312-ppc64le \
      /usr/powerpc64le-unknown-linux-gnu/cp312-cp312 \
      /usr/powerpc64le-unknown-linux-gnu/cp312-cp312
 
+FROM final-ppc64le AS final-ppc64le-cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+COPY --from=cp313-cp313-ppc64le \
+     /usr/powerpc64le-unknown-linux-gnu/cp313-cp313 \
+     /usr/powerpc64le-unknown-linux-gnu/cp313-cp313
+
 FROM final-common AS final-s390x
 COPY --from=crosstool-ng-s390x \
      /usr/s390x-ibm-linux-gnu \
@@ -2098,6 +2288,12 @@ COPY --from=cp312-cp312-s390x \
      /usr/s390x-ibm-linux-gnu/cp312-cp312 \
      /usr/s390x-ibm-linux-gnu/cp312-cp312
 
+FROM final-s390x AS final-s390x-cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+COPY --from=cp313-cp313-s390x \
+     /usr/s390x-ibm-linux-gnu/cp313-cp313 \
+     /usr/s390x-ibm-linux-gnu/cp313-cp313
+
 FROM final-common AS final-x86_64
 COPY --from=crosstool-ng-x86_64 \
      /usr/x86_64-unknown-linux-gnu \
@@ -2151,3 +2347,9 @@ COPY --from=cp312-cp312 /opt/cp312-cp312 /opt/cp312-cp312
 COPY --from=cp312-cp312-x86_64 \
      /usr/x86_64-unknown-linux-gnu/cp312-cp312 \
      /usr/x86_64-unknown-linux-gnu/cp312-cp312
+
+FROM final-x86_64 AS final-x86_64-cp313-cp313
+COPY --from=cp313-cp313 /opt/cp313-cp313 /opt/cp313-cp313
+COPY --from=cp313-cp313-x86_64 \
+     /usr/x86_64-unknown-linux-gnu/cp313-cp313 \
+     /usr/x86_64-unknown-linux-gnu/cp313-cp313

@@ -8,7 +8,7 @@ ARG elfutils_version=0.188
 ARG zlib_ng_version=2.2.1
 
 # https://hub.docker.com/_/debian/tags?page=&page_size=&ordering=&name=bookworm
-FROM debian:bookworm-20240701-slim AS base
+FROM debian:bookworm-20250113-slim AS base
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive
 
