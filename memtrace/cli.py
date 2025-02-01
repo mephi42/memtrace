@@ -270,7 +270,7 @@ def traces_for_pc(input, index, ud, output, pc):
     type=AnyIntParamType(),
     help="Insn-in-trace index from which to start the analysis",
 )
-@click.option("--depth", type=AnyIntParamType(), default=1, help="Analysis depth")
+@click.option("--depth", type=AnyIntParamType(), default="1", help="Analysis depth")
 @click.option(
     "--ignore-register",
     type=AnyIntRangeParamType(),
