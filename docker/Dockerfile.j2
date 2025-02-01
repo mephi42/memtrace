@@ -5,6 +5,7 @@ ARG boost_version=1_85_0
 ARG capstone_version=4.0.2
 ARG crosstool_ng_version=1.26.0
 ARG elfutils_version=0.188
+ARG systemtap_version=5.2
 ARG zlib_ng_version=2.2.3
 
 # https://hub.docker.com/_/debian/tags?page=&page_size=&ordering=&name=bookworm
@@ -228,6 +229,33 @@ WORKDIR /opt/elfutils-{{ arch }}/usr/{{ triple }}/{{ triple }}/sysroot/usr/lib
 RUN rm *.so *.so.*
 {%- endfor %}
 
+FROM crosstool-ng-base AS systemtap-base
+ARG systemtap_version
+RUN git clone \
+        --branch=release-${systemtap_version} \
+        --depth=1 \
+        https://sourceware.org/git/systemtap.git \
+        /usr/src/systemtap
+
+{%- for arch, triple in arches %}
+
+FROM crosstool-ng-{{ arch }} AS systemtap-{{ arch }}
+COPY --from=cp36-cp36m /opt/cp36-cp36m/ /opt/cp36-cp36m/
+COPY --from=elfutils-{{ arch }} /opt/elfutils-{{ arch }}/ /
+COPY --from=systemtap-base /usr/src/systemtap /usr/src/systemtap
+COPY --from=zlib-ng-{{ arch }} /opt/zlib-ng-{{ arch }}/ /
+WORKDIR /usr/src/systemtap
+RUN PYTHON3=/opt/cp36-cp36m/bin/python3 \
+        LIBS="-pthread -lz" \
+        ./configure \
+            --host={{ triple }} \
+            --prefix=/usr/{{ triple }}/{{ triple }}/sysroot/usr
+RUN make \
+        DESTDIR=/opt/systemtap-{{ arch }} \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install-oldincludeHEADERS
+{%- endfor %}
+
 FROM base AS final-common
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         automake \
@@ -251,6 +279,7 @@ RUN ln -s /usr/bin/ccache /usr/lib/ccache/{{ triple }}-gcc
 COPY --from=boost-{{ arch }} /opt/boost-{{ arch }}/ /
 COPY --from=capstone-{{ arch }} /opt/capstone-{{ arch }}/ /
 COPY --from=elfutils-{{ arch }} /opt/elfutils-{{ arch }}/ /
+COPY --from=systemtap-{{ arch }} /opt/systemtap-{{ arch }}/ /
 COPY --from=zlib-ng-{{ arch }} /opt/zlib-ng-{{ arch }}/ /
 
 {%- for _, name_tag, _, _, _, _ in pythons %}

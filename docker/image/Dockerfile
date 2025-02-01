@@ -5,6 +5,7 @@ ARG boost_version=1_85_0
 ARG capstone_version=4.0.2
 ARG crosstool_ng_version=1.26.0
 ARG elfutils_version=0.188
+ARG systemtap_version=5.2
 ARG zlib_ng_version=2.2.3
 
 # https://hub.docker.com/_/debian/tags?page=&page_size=&ordering=&name=bookworm
@@ -1920,6 +1921,126 @@ RUN make \
 WORKDIR /opt/elfutils-x86_64/usr/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr/lib
 RUN rm *.so *.so.*
 
+FROM crosstool-ng-base AS systemtap-base
+ARG systemtap_version
+RUN git clone \
+        --branch=release-${systemtap_version} \
+        --depth=1 \
+        https://sourceware.org/git/systemtap.git \
+        /usr/src/systemtap
+
+FROM crosstool-ng-aarch64 AS systemtap-aarch64
+COPY --from=cp36-cp36m /opt/cp36-cp36m/ /opt/cp36-cp36m/
+COPY --from=elfutils-aarch64 /opt/elfutils-aarch64/ /
+COPY --from=systemtap-base /usr/src/systemtap /usr/src/systemtap
+COPY --from=zlib-ng-aarch64 /opt/zlib-ng-aarch64/ /
+WORKDIR /usr/src/systemtap
+RUN PYTHON3=/opt/cp36-cp36m/bin/python3 \
+        LIBS="-pthread -lz" \
+        ./configure \
+            --host=aarch64-unknown-linux-gnu \
+            --prefix=/usr/aarch64-unknown-linux-gnu/aarch64-unknown-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/systemtap-aarch64 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install-oldincludeHEADERS
+
+FROM crosstool-ng-arm AS systemtap-arm
+COPY --from=cp36-cp36m /opt/cp36-cp36m/ /opt/cp36-cp36m/
+COPY --from=elfutils-arm /opt/elfutils-arm/ /
+COPY --from=systemtap-base /usr/src/systemtap /usr/src/systemtap
+COPY --from=zlib-ng-arm /opt/zlib-ng-arm/ /
+WORKDIR /usr/src/systemtap
+RUN PYTHON3=/opt/cp36-cp36m/bin/python3 \
+        LIBS="-pthread -lz" \
+        ./configure \
+            --host=arm-unknown-linux-gnueabihf \
+            --prefix=/usr/arm-unknown-linux-gnueabihf/arm-unknown-linux-gnueabihf/sysroot/usr
+RUN make \
+        DESTDIR=/opt/systemtap-arm \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install-oldincludeHEADERS
+
+FROM crosstool-ng-i686 AS systemtap-i686
+COPY --from=cp36-cp36m /opt/cp36-cp36m/ /opt/cp36-cp36m/
+COPY --from=elfutils-i686 /opt/elfutils-i686/ /
+COPY --from=systemtap-base /usr/src/systemtap /usr/src/systemtap
+COPY --from=zlib-ng-i686 /opt/zlib-ng-i686/ /
+WORKDIR /usr/src/systemtap
+RUN PYTHON3=/opt/cp36-cp36m/bin/python3 \
+        LIBS="-pthread -lz" \
+        ./configure \
+            --host=i686-unknown-linux-gnu \
+            --prefix=/usr/i686-unknown-linux-gnu/i686-unknown-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/systemtap-i686 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install-oldincludeHEADERS
+
+FROM crosstool-ng-ppc64 AS systemtap-ppc64
+COPY --from=cp36-cp36m /opt/cp36-cp36m/ /opt/cp36-cp36m/
+COPY --from=elfutils-ppc64 /opt/elfutils-ppc64/ /
+COPY --from=systemtap-base /usr/src/systemtap /usr/src/systemtap
+COPY --from=zlib-ng-ppc64 /opt/zlib-ng-ppc64/ /
+WORKDIR /usr/src/systemtap
+RUN PYTHON3=/opt/cp36-cp36m/bin/python3 \
+        LIBS="-pthread -lz" \
+        ./configure \
+            --host=powerpc64-unknown-linux-gnu \
+            --prefix=/usr/powerpc64-unknown-linux-gnu/powerpc64-unknown-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/systemtap-ppc64 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install-oldincludeHEADERS
+
+FROM crosstool-ng-ppc64le AS systemtap-ppc64le
+COPY --from=cp36-cp36m /opt/cp36-cp36m/ /opt/cp36-cp36m/
+COPY --from=elfutils-ppc64le /opt/elfutils-ppc64le/ /
+COPY --from=systemtap-base /usr/src/systemtap /usr/src/systemtap
+COPY --from=zlib-ng-ppc64le /opt/zlib-ng-ppc64le/ /
+WORKDIR /usr/src/systemtap
+RUN PYTHON3=/opt/cp36-cp36m/bin/python3 \
+        LIBS="-pthread -lz" \
+        ./configure \
+            --host=powerpc64le-unknown-linux-gnu \
+            --prefix=/usr/powerpc64le-unknown-linux-gnu/powerpc64le-unknown-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/systemtap-ppc64le \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install-oldincludeHEADERS
+
+FROM crosstool-ng-s390x AS systemtap-s390x
+COPY --from=cp36-cp36m /opt/cp36-cp36m/ /opt/cp36-cp36m/
+COPY --from=elfutils-s390x /opt/elfutils-s390x/ /
+COPY --from=systemtap-base /usr/src/systemtap /usr/src/systemtap
+COPY --from=zlib-ng-s390x /opt/zlib-ng-s390x/ /
+WORKDIR /usr/src/systemtap
+RUN PYTHON3=/opt/cp36-cp36m/bin/python3 \
+        LIBS="-pthread -lz" \
+        ./configure \
+            --host=s390x-ibm-linux-gnu \
+            --prefix=/usr/s390x-ibm-linux-gnu/s390x-ibm-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/systemtap-s390x \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install-oldincludeHEADERS
+
+FROM crosstool-ng-x86_64 AS systemtap-x86_64
+COPY --from=cp36-cp36m /opt/cp36-cp36m/ /opt/cp36-cp36m/
+COPY --from=elfutils-x86_64 /opt/elfutils-x86_64/ /
+COPY --from=systemtap-base /usr/src/systemtap /usr/src/systemtap
+COPY --from=zlib-ng-x86_64 /opt/zlib-ng-x86_64/ /
+WORKDIR /usr/src/systemtap
+RUN PYTHON3=/opt/cp36-cp36m/bin/python3 \
+        LIBS="-pthread -lz" \
+        ./configure \
+            --host=x86_64-unknown-linux-gnu \
+            --prefix=/usr/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr
+RUN make \
+        DESTDIR=/opt/systemtap-x86_64 \
+        "-j$(getconf _NPROCESSORS_ONLN)" \
+        install-oldincludeHEADERS
+
 FROM base AS final-common
 RUN apt-get update && apt-get install --no-install-recommends --yes \
         automake \
@@ -1941,6 +2062,7 @@ RUN ln -s /usr/bin/ccache /usr/lib/ccache/aarch64-unknown-linux-gnu-gcc
 COPY --from=boost-aarch64 /opt/boost-aarch64/ /
 COPY --from=capstone-aarch64 /opt/capstone-aarch64/ /
 COPY --from=elfutils-aarch64 /opt/elfutils-aarch64/ /
+COPY --from=systemtap-aarch64 /opt/systemtap-aarch64/ /
 COPY --from=zlib-ng-aarch64 /opt/zlib-ng-aarch64/ /
 
 FROM final-aarch64 AS final-aarch64-cp36-cp36m
@@ -2001,6 +2123,7 @@ RUN ln -s /usr/bin/ccache /usr/lib/ccache/arm-unknown-linux-gnueabihf-gcc
 COPY --from=boost-arm /opt/boost-arm/ /
 COPY --from=capstone-arm /opt/capstone-arm/ /
 COPY --from=elfutils-arm /opt/elfutils-arm/ /
+COPY --from=systemtap-arm /opt/systemtap-arm/ /
 COPY --from=zlib-ng-arm /opt/zlib-ng-arm/ /
 
 FROM final-arm AS final-arm-cp36-cp36m
@@ -2061,6 +2184,7 @@ RUN ln -s /usr/bin/ccache /usr/lib/ccache/i686-unknown-linux-gnu-gcc
 COPY --from=boost-i686 /opt/boost-i686/ /
 COPY --from=capstone-i686 /opt/capstone-i686/ /
 COPY --from=elfutils-i686 /opt/elfutils-i686/ /
+COPY --from=systemtap-i686 /opt/systemtap-i686/ /
 COPY --from=zlib-ng-i686 /opt/zlib-ng-i686/ /
 
 FROM final-i686 AS final-i686-cp36-cp36m
@@ -2121,6 +2245,7 @@ RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64-unknown-linux-gnu-gcc
 COPY --from=boost-ppc64 /opt/boost-ppc64/ /
 COPY --from=capstone-ppc64 /opt/capstone-ppc64/ /
 COPY --from=elfutils-ppc64 /opt/elfutils-ppc64/ /
+COPY --from=systemtap-ppc64 /opt/systemtap-ppc64/ /
 COPY --from=zlib-ng-ppc64 /opt/zlib-ng-ppc64/ /
 
 FROM final-ppc64 AS final-ppc64-cp36-cp36m
@@ -2181,6 +2306,7 @@ RUN ln -s /usr/bin/ccache /usr/lib/ccache/powerpc64le-unknown-linux-gnu-gcc
 COPY --from=boost-ppc64le /opt/boost-ppc64le/ /
 COPY --from=capstone-ppc64le /opt/capstone-ppc64le/ /
 COPY --from=elfutils-ppc64le /opt/elfutils-ppc64le/ /
+COPY --from=systemtap-ppc64le /opt/systemtap-ppc64le/ /
 COPY --from=zlib-ng-ppc64le /opt/zlib-ng-ppc64le/ /
 
 FROM final-ppc64le AS final-ppc64le-cp36-cp36m
@@ -2241,6 +2367,7 @@ RUN ln -s /usr/bin/ccache /usr/lib/ccache/s390x-ibm-linux-gnu-gcc
 COPY --from=boost-s390x /opt/boost-s390x/ /
 COPY --from=capstone-s390x /opt/capstone-s390x/ /
 COPY --from=elfutils-s390x /opt/elfutils-s390x/ /
+COPY --from=systemtap-s390x /opt/systemtap-s390x/ /
 COPY --from=zlib-ng-s390x /opt/zlib-ng-s390x/ /
 
 FROM final-s390x AS final-s390x-cp36-cp36m
@@ -2301,6 +2428,7 @@ RUN ln -s /usr/bin/ccache /usr/lib/ccache/x86_64-unknown-linux-gnu-gcc
 COPY --from=boost-x86_64 /opt/boost-x86_64/ /
 COPY --from=capstone-x86_64 /opt/capstone-x86_64/ /
 COPY --from=elfutils-x86_64 /opt/elfutils-x86_64/ /
+COPY --from=systemtap-x86_64 /opt/systemtap-x86_64/ /
 COPY --from=zlib-ng-x86_64 /opt/zlib-ng-x86_64/ /
 
 FROM final-x86_64 AS final-x86_64-cp36-cp36m
