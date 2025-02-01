@@ -1,0 +1,25 @@
+From a07d5fb0560a84e20b6bcae3fc439787657cc76a Mon Sep 17 00:00:00 2001
+From: mephi42 <mephi42@gmail.com>
+Date: Sat, 1 Feb 2025 12:18:07 +0100
+Subject: [PATCH 1/5] automake-copy.patch
+
+---
+ autogen.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/autogen.sh b/autogen.sh
+index 5de086b1a..472feee04 100755
+--- a/autogen.sh
++++ b/autogen.sh
+@@ -13,7 +13,7 @@ run ()
+ 
+ run aclocal -I m4
+ run autoheader
+-run automake -a
++run automake -a -c
+ run autoconf
+ 
+ # Valgrind-specific Git configuration, if appropriate.
+-- 
+2.43.0
+

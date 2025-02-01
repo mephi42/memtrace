@@ -1,3 +1,12 @@
+From 68b46de548b3f251038530ac769f378b789a40d1 Mon Sep 17 00:00:00 2001
+From: mephi42 <mephi42@gmail.com>
+Date: Sat, 1 Feb 2025 12:18:07 +0100
+Subject: [PATCH 4/5] x86-max-insns.patch
+
+---
+ VEX/priv/guest_x86_toIR.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
 diff --git a/VEX/priv/guest_x86_toIR.c b/VEX/priv/guest_x86_toIR.c
 index 7b31bd769..ab2f9b864 100644
 --- a/VEX/priv/guest_x86_toIR.c
@@ -12,3 +21,6 @@ index 7b31bd769..ab2f9b864 100644
           /* Specially treat the position-independent-code idiom 
                   call X
                X: popl %reg
+-- 
+2.43.0
+

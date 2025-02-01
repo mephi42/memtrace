@@ -1,8 +1,0 @@
-diff --git a/memtrace b/memtrace
-new file mode 120000
-index 000000000..ea3b9b8bf
---- /dev/null
-+++ b/memtrace
-@@ -0,0 +1 @@
-+../valgrind-tracer
-\ No newline at end of file
