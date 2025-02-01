@@ -9,7 +9,7 @@ def main():
         # https://github.com/benfogle/crossenv/issues/97
 
         # auditwheel < 6 uses globals.
-        sys.maxsize = (2 ** 31) - 1
+        sys.maxsize = (2**31) - 1
 
         # auditwheel >= 6 removes globals, but introduces
         # struct.calcsize("P").

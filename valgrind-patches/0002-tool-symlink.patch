@@ -1,0 +1,21 @@
+From 149025b04d71380859de85a681a90beb4611fbb9 Mon Sep 17 00:00:00 2001
+From: mephi42 <mephi42@gmail.com>
+Date: Sat, 1 Feb 2025 12:18:07 +0100
+Subject: [PATCH 2/5] tool-symlink.patch
+
+---
+ memtrace | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 120000 memtrace
+
+diff --git a/memtrace b/memtrace
+new file mode 120000
+index 000000000..ea3b9b8bf
+--- /dev/null
++++ b/memtrace
+@@ -0,0 +1 @@
++../valgrind-tracer
+\ No newline at end of file
+-- 
+2.43.0
+

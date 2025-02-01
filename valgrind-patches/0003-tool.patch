@@ -1,8 +1,22 @@
+From aadbab708805099c8102c7e58e3ef77229d57d2d Mon Sep 17 00:00:00 2001
+From: mephi42 <mephi42@gmail.com>
+Date: Sat, 1 Feb 2025 12:18:07 +0100
+Subject: [PATCH 3/5] tool.patch
+
+---
+ Makefile.am           | 21 ++++++---------------
+ Makefile.vex.am       |  6 ++++--
+ auxprogs/Makefile.am  |  4 ++++
+ configure.ac          |  3 +++
+ coregrind/Makefile.am | 21 +++++++++++----------
+ include/Makefile.am   |  2 ++
+ 6 files changed, 30 insertions(+), 27 deletions(-)
+
 diff --git a/Makefile.am b/Makefile.am
-index 7749442e9..09d1fb7d4 100644
+index d745e26bf..4e18a8fbf 100644
 --- a/Makefile.am
 +++ b/Makefile.am
-@@ -4,18 +4,9 @@ AUTOMAKE_OPTIONS = 1.10
+@@ -6,18 +6,9 @@ ACLOCAL_AMFLAGS = -I m4
  include $(top_srcdir)/Makefile.all.am 
  
  TOOLS = \
@@ -24,7 +38,7 @@ index 7749442e9..09d1fb7d4 100644
  
  # Put docs last because building the HTML is slow and we want to get
  # everything else working before we try it.
-@@ -59,10 +50,10 @@ DEFAULT_SUPP_FILES = @DEFAULT_SUPP@
+@@ -61,10 +52,10 @@ DEFAULT_SUPP_FILES = @DEFAULT_SUPP@
  dist_noinst_DATA = $(SUPP_FILES)
  
  vglibdir = $(pkglibexecdir)
@@ -37,8 +51,8 @@ index 7749442e9..09d1fb7d4 100644
  
  BUILT_SOURCES  = default.supp include/vgversion.h valgrind.pc
  CLEANFILES     = default.supp
-@@ -139,7 +130,7 @@ clean-local:
- 	rm -rf $(inplacedir) include/vgversion.h
+@@ -146,7 +137,7 @@ clean-local:
+ 	rm -f test-suite-overall.log
  
  # Need config.h in the installed tree, since some files depend on it
 -pkginclude_HEADERS = config.h
@@ -115,10 +129,10 @@ index 3a9709da6..04abc1b24 100644
  #----------------------------------------------------------------------------
  # Auxiliary testsuits
 diff --git a/configure.ac b/configure.ac
-index 911bccaa8..d37cf81bc 100755
+index 9dec9f3b0..cbdc6980b 100755
 --- a/configure.ac
 +++ b/configure.ac
-@@ -5742,6 +5742,9 @@ AC_CONFIG_FILES([
+@@ -5722,6 +5722,9 @@ AC_CONFIG_FILES([
     exp-bbv/tests/arm-linux/Makefile
     shared/Makefile
     solaris/Makefile
@@ -129,7 +143,7 @@ index 911bccaa8..d37cf81bc 100755
  AC_CONFIG_FILES([coregrind/link_tool_exe_linux],
                  [chmod +x coregrind/link_tool_exe_linux])
 diff --git a/coregrind/Makefile.am b/coregrind/Makefile.am
-index e3e31a73b..fda28dd51 100644
+index 5491fc672..d58b66d5d 100644
 --- a/coregrind/Makefile.am
 +++ b/coregrind/Makefile.am
 @@ -31,8 +31,7 @@ EXTRA_DIST = \
@@ -158,7 +172,7 @@ index e3e31a73b..fda28dd51 100644
  
  #----------------------------------------------------------------------------
  # Darwin Mach stuff
-@@ -303,9 +304,9 @@ noinst_HEADERS = \
+@@ -304,9 +305,9 @@ noinst_HEADERS = \
  BUILT_SOURCES = $(mach_user_srcs)
  CLEANFILES    = $(mach_user_srcs) $(mach_server_srcs) $(mach_hdrs)
  
@@ -170,7 +184,7 @@ index e3e31a73b..fda28dd51 100644
  endif
  
  COREGRIND_SOURCES_COMMON = \
-@@ -505,7 +506,7 @@ NOLTO_COREGRIND_SOURCES_COMMON = \
+@@ -507,7 +508,7 @@ NOLTO_COREGRIND_SOURCES_COMMON = \
  	m_main.c \
  	m_stacks.c \
  	m_gdbserver/m_gdbserver.c
@@ -179,7 +193,7 @@ index e3e31a73b..fda28dd51 100644
  libnolto_coregrind_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_SOURCES = \
      $(NOLTO_COREGRIND_SOURCES_COMMON)
  libnolto_coregrind_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_CPPFLAGS = \
-@@ -578,9 +579,9 @@ endif
+@@ -580,9 +581,9 @@ endif
  # used by libgcc.
  #----------------------------------------------------------------------------
  
@@ -191,7 +205,7 @@ index e3e31a73b..fda28dd51 100644
  endif
  
  libgcc_sup_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_SOURCES = \
-@@ -602,9 +603,9 @@ endif
+@@ -604,9 +605,9 @@ endif
  # libreplacemalloc_toolpreload-<platform>.a
  #----------------------------------------------------------------------------
  
@@ -203,7 +217,7 @@ index e3e31a73b..fda28dd51 100644
  endif
  
  libreplacemalloc_toolpreload_@VGCONF_ARCH_PRI@_@VGCONF_OS@_a_SOURCES = \
-@@ -782,7 +783,7 @@ GDBSERVER_XML_FILES = \
+@@ -784,7 +785,7 @@ GDBSERVER_XML_FILES = \
  
  # so as to make sure these get copied into the install tree
  vglibdir = $(pkglibexecdir)
@@ -213,7 +227,7 @@ index e3e31a73b..fda28dd51 100644
  if GDBSCRIPTS
  gdbscriptsdir = @VG_GDBSCRIPTS_DIR@
 diff --git a/include/Makefile.am b/include/Makefile.am
-index 8012d7374..5c611268d 100644
+index 5d5162a46..6f52390ba 100644
 --- a/include/Makefile.am
 +++ b/include/Makefile.am
 @@ -1,6 +1,7 @@
@@ -224,8 +238,11 @@ index 8012d7374..5c611268d 100644
  nobase_pkginclude_HEADERS = \
  	pub_tool_basics.h 		\
  	pub_tool_basics_asm.h 		\
-@@ -108,3 +109,4 @@ nobase_pkginclude_HEADERS = \
- 	vki/vki-xen-x86.h		\
+@@ -109,3 +110,4 @@ nobase_pkginclude_HEADERS = \
  	vki/vki-linux-drm.h		\
- 	vki/vki-linux-io_uring.h
+ 	vki/vki-linux-io_uring.h	\
+ 	vki/vki-linux-landlock.h
 +endif
+-- 
+2.43.0
+

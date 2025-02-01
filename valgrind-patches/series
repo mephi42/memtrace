@@ -1,5 +1,5 @@
-automake-copy.patch
-tool-symlink.patch
-tool.patch
-x86-max-insns.patch
-armv6t2.patch
+0001-automake-copy.patch
+0002-tool-symlink.patch
+0003-tool.patch
+0004-x86-max-insns.patch
+0005-armv6t2.patch

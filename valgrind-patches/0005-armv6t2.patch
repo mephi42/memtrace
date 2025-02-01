@@ -1,0 +1,25 @@
+From 0105ff6d4d54c15c20dc9846f9947025b1728477 Mon Sep 17 00:00:00 2001
+From: mephi42 <mephi42@gmail.com>
+Date: Sat, 1 Feb 2025 12:18:07 +0100
+Subject: [PATCH 5/5] armv6t2.patch
+
+---
+ configure.ac | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index cbdc6980b..e505ef428 100755
+--- a/configure.ac
++++ b/configure.ac
+@@ -264,7 +264,7 @@ case "${host_cpu}" in
+ 
+      arm*)
+         AC_MSG_RESULT([ok (${host_cpu})])
+-        VGCONF_PLATFORM_ARM_ARCH="-march=armv6"
++        VGCONF_PLATFORM_ARM_ARCH="-march=armv6t2+fp"
+         ARCH_MAX="arm"
+         ;;
+ 
+-- 
+2.43.0
+
