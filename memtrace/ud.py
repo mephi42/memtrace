@@ -22,14 +22,14 @@ class Ud:
         else:
             native = _Ud.analyze(path, trace.native, log)
         if native is None:
-            raise Exception("_Ud.analyze() failed")
+            raise RuntimeError("_Ud.analyze() failed")
         return Ud(native)
 
     @staticmethod
     def load(path: str, trace: Trace) -> "Ud":
         native = _Ud.load(path, trace.native)
         if native is None:
-            raise Exception("_Ud.load() failed")
+            raise RuntimeError("_Ud.load() failed")
         return Ud(native)
 
     def __init__(self, native: _Ud):

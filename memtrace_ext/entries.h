@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020, and GNU GPL'd, by mephi42.
+// Copyright (C) 2019-2025, and GNU GPL'd, by mephi42.
 #ifndef ENTRIES_H_
 #define ENTRIES_H_
 
@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "./endian.h"
+#include "./identifier.h"
 #include "./machine.h"
 
 namespace {  // NOLINT(build/namespaces_headers)
@@ -136,15 +137,7 @@ class HeaderEntry : public B {
       kRegsSizeOffset + sizeof(std::uint16_t);
 };
 
-struct InsnSeq {
-  using value_type = std::uint32_t;
-
-  bool operator==(InsnSeq rhs) const { return value == rhs.value; }
-  bool operator!=(InsnSeq rhs) const { return value != rhs.value; }
-  bool operator<(InsnSeq rhs) const { return value < rhs.value; }
-
-  value_type value = 0;
-};
+DEFINE_IDENTIFIER(InsnSeq, std::uint32_t);
 #define PRIuInsnSeq PRIu32
 #define PRIxInsnSeq PRIx32
 

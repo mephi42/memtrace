@@ -12,7 +12,7 @@ import memtrace
 from memtrace.analysis import Analysis
 from memtrace.format import format_entry
 from memtrace.interval_tree import IntervalTree
-from memtrace._memtrace import DumpKind, InsnSeq, Tag
+from memtrace._memtrace import DumpKind, InsnSeq, Tag, TraceIndex
 from memtrace.notebook import open_notebook
 import memtrace.stats
 from memtrace.taint import BackwardAnalysis
@@ -271,8 +271,8 @@ def traces_for_pc(input, index, ud, output, pc):
     ) as analysis:
         resolved_pc = resolve_pc(analysis, pc)
         with open(output, "w") as fp:
-            for trace in analysis.get_traces_for_pc(resolved_pc):
-                fp.write(f"{trace}\n")
+            for trace_index in analysis.get_traces_for_pc(resolved_pc):
+                fp.write(f"{trace_index.value}\n")
 
 
 @main.command(help="Perform backward taint analysis on the trace")
@@ -306,6 +306,8 @@ def taint_backward(input, index, ud, output, pc, trace, depth, ignore_register):
         if trace is None:
             resolved_pc = resolve_pc(analysis, pc)
             trace = analysis.get_last_trace_for_pc(resolved_pc)
+        else:
+            trace = TraceIndex(trace)
         backward = BackwardAnalysis(
             analysis,
             trace_index0=trace,
@@ -391,7 +393,7 @@ def ldst(input, index, ud, output, pc_range):
             return result
 
         mem = IntervalTree(merge=merge)
-        analysis.trace.seek_insn(0)
+        analysis.trace.seek_start()
         for entry in analysis.trace:
             start = entry.addr
             end = entry.addr + len(entry.value)

@@ -7,12 +7,12 @@ from memtrace.analysis import Analysis
 from memtrace.format import format_entry
 from memtrace.trace import Trace
 from memtrace.ud import Ud
-from ._memtrace import Entry, Tag
+from ._memtrace import Entry, Tag, TraceIndex
 
 
 @dataclass
 class BackwardNode:
-    trace_index: int
+    trace_index: TraceIndex
     depth: int
     edges: Dict[int, "BackwardEdge"] = field(default_factory=dict)
     done: bool = False
@@ -52,7 +52,7 @@ class BackwardNode:
                 else:
                     prefix, suffix = "<<", ">>"
                 fp.write(
-                    f"{indent} {prefix}InsnInTrace:{node.trace_index}"
+                    f"{indent} {prefix}InsnInTrace:{node.trace_index.value}"
                     f"{suffix} {disasm_str}\n"
                 )
                 for trace_entry in edge.reg:
@@ -95,14 +95,14 @@ class BackwardAnalysis:
     def __init__(
         self,
         analysis: Analysis,
-        trace_index0: int,
+        trace_index0: TraceIndex,
         depth: int,
         ignore_registers: Optional[List[Tuple[int, int]]] = None,
     ):
         self.trace: Trace = analysis.trace
         self.ud: Ud = analysis.ud
         self.node0: BackwardNode = BackwardNode(trace_index0, depth)
-        self.nodes: Dict[int, BackwardNode] = {trace_index0: self.node0}
+        self.nodes: Dict[TraceIndex, BackwardNode] = {trace_index0: self.node0}
         self.worklist: Deque[BackwardNode] = deque((self.node0,))
         self.ignore_registers = [] if ignore_registers is None else ignore_registers
 
@@ -137,7 +137,7 @@ class BackwardAnalysis:
             node.get_edge(def_node).mem.append(entry)
         node.done = True
 
-    def get_node(self, trace_index: int, depth: int) -> BackwardNode:
+    def get_node(self, trace_index: TraceIndex, depth: int) -> BackwardNode:
         node = self.nodes.get(trace_index)
         if node is None:
             node = BackwardNode(trace_index, depth)
@@ -145,12 +145,14 @@ class BackwardAnalysis:
             self.worklist.append(node)
         return node
 
-    def get_use_entries(self, trace_index: int) -> Tuple[List[Entry], List[Entry]]:
+    def get_use_entries(
+        self, trace_index: TraceIndex
+    ) -> Tuple[List[Entry], List[Entry]]:
         reg_use_entries = []
         mem_use_entries = []
-        if trace_index == 0:
+        if trace_index.value == 0:
             return reg_use_entries, mem_use_entries
-        self.trace.seek_insn(trace_index - 1)
+        self.trace.seek_insn(TraceIndex(trace_index.value - 1))
         entry = next(self.trace)
         insn_seq = entry.insn_seq
         while True:

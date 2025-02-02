@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import os
 import tempfile
-from typing import Iterable, Optional
+from typing import Generator, Iterable, Optional
 
 from memtrace.symbolizer import Symbolizer
 from memtrace.trace import Trace, TraceFilter
 from memtrace.ud import Ud
-from ._memtrace import Disasm, get_endianness_str, InsnSeq, Tag
+from ._memtrace import Disasm, get_endianness_str, InsnSeq, Tag, TraceIndex
 
 
 class Analysis:
@@ -96,12 +96,12 @@ class Analysis:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def get_traces_for_pc(self, pc):
+    def get_traces_for_pc(self, pc) -> Generator[TraceIndex, None, None]:
         for code_index in self.ud.get_codes_for_pc(pc):
             for trace_index in self.ud.get_traces_for_code(code_index):
                 yield trace_index
 
-    def get_last_trace_for_pc(self, pc):
+    def get_last_trace_for_pc(self, pc) -> TraceIndex:
         return max(self.get_traces_for_pc(pc))
 
     def pp_code(self, code_index: InsnSeq) -> str:

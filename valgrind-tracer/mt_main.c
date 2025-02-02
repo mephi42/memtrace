@@ -1121,7 +1121,7 @@ static void mt_pre_clo_init(void)
    VG_(details_name)("Memory Tracer");
    VG_(details_description)("Valgrind tool for tracing memory accesses");
    VG_(details_copyright_author)(
-      "Copyright (C) 2019-2024, and GNU GPL'd, by mephi42.");
+      "Copyright (C) 2019-2025, and GNU GPL'd, by mephi42.");
    VG_(details_bug_reports_to)("https://github.com/mephi42/memtrace");
    VG_(basic_tool_funcs)(mt_post_clo_init,
                          mt_instrument,
