@@ -1,0 +1,5 @@
+* 0x402000-0x402001
+*** 0x0000000000401024 syscall  in _start+0x24 (.text) at {testdir}/x86_64.S:14
+***** [       142] 0x00000006: MT_STORE uint8_t [0x402000] 0x2a
+*** 0x0000000000401030 cmp byte ptr [rip + 0xfc9], 0x2a in _start+0x30 (.text) at {testdir}/x86_64.S:18
+***** [       156] 0x00000009: MT_LOAD uint8_t [0x402000] 0x2a

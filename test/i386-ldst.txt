@@ -1,0 +1,10 @@
+* 0x804a000-0x804a001
+*** 0x0000000008049021 int 0x80 in _base+0x16 (.text) at {testdir}/i386.S:17
+***** [       105] 0x00000008: MT_STORE uint8_t [0x804a000] 0x2a
+*** 0x000000000804902a cmp byte ptr [ebp + 0xff5], 0x2a in _base+0x1f (.text) at {testdir}/i386.S:21
+***** [       120] 0x0000000b: MT_LOAD uint8_t [0x804a000] 0x2a
+* 0x804a40c-0x804a410
+*** 0x0000000008049006 call 0x804900b in _start+0x6 (.text) at {testdir}/i386.S:10
+***** [        77] 0x00000002: MT_STORE uint32_t [0x804a40c] 0x804900b
+*** 0x000000000804900b pop ebp in _base (.text) at {testdir}/i386.S:12
+***** [        81] 0x00000003: MT_LOAD uint32_t [0x804a40c] 0x804900b
