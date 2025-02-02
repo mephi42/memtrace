@@ -20,7 +20,7 @@ from memtrace.symbolizer import Symbolizer
 from memtrace.trace import Trace
 import memtrace.tracer
 from memtrace.ud import Ud
-from memtrace._memtrace import Disasm, DumpKind, get_endianness_str, Tag
+from memtrace._memtrace import Disasm, DumpKind, get_endianness_str, Tag, TraceIndex
 
 ADDR_NO_RANDOMIZE = 0x0040000
 F_SETPIPE_SZ = 1031
@@ -348,8 +348,11 @@ class MachineTest(CommonTest):
         with open(actual_seek_txt, "w") as fp:
             while True:
                 try:
-                    trace.seek_insn(i)
-                except:  # noqa: E722
+                    trace.seek_insn(TraceIndex(i))
+                except RuntimeError as exc:
+                    self.assertEqual(
+                        "_Trace.seek_insn() failed: Invalid argument", str(exc)
+                    )
                     break
                 entry = next(trace)
                 entry_str = format_entry(entry, endianness_str, disasm, trace)
@@ -495,10 +498,10 @@ class TestCat(CommonTest):
             while len(actual) < len(expected):
                 chunk = p.stdout.read(len(expected) - len(actual))
                 if chunk == b"":
-                    raise Exception("Premature EOF")
+                    raise RuntimeError("Premature EOF")
                 actual.extend(chunk)
             if actual != expected:
-                raise Exception("cat produced malformed output")
+                raise RuntimeError("cat produced malformed output")
             p.send_signal(signal.SIGINT)
         finally:
             p.wait()

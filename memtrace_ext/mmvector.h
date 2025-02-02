@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020, and GNU GPL'd, by mephi42.
+// Copyright (C) 2019-2025, and GNU GPL'd, by mephi42.
 #ifndef MMVECTOR_H_
 #define MMVECTOR_H_
 

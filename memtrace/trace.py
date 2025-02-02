@@ -7,6 +7,7 @@ from memtrace._memtrace import (
     Tag,
     _Trace,
     _TraceFilter,
+    TraceIndex,
     VectorOfInsnSeqs,
 )
 
@@ -50,7 +51,7 @@ class Trace:
     def load(path: str) -> "Trace":
         native = _Trace.load(path)
         if native is None:
-            raise Exception("_Trace.load() failed")
+            raise RuntimeError("_Trace.load() failed")
         return Trace(native)
 
     def __init__(self, native: _Trace):
@@ -74,7 +75,7 @@ class Trace:
         pass
 
     @wrap_err
-    def seek_insn(self, index: int) -> None:
+    def seek_insn(self, index: TraceIndex) -> None:
         pass
 
     @wrap_err

@@ -1,4 +1,4 @@
-// Copyright (C) 2020, and GNU GPL'd, by mephi42.
+// Copyright (C) 2020-2025, and GNU GPL'd, by mephi42.
 #ifndef DEBUGINFO_H_
 #define DEBUGINFO_H_
 
