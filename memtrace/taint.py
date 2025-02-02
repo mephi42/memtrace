@@ -1,6 +1,6 @@
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List, Optional, Set, Tuple
+from typing import Deque, Dict, Iterable, List, Set, Tuple
 import sys
 
 from memtrace.analysis import Analysis
@@ -97,14 +97,16 @@ class BackwardAnalysis:
         analysis: Analysis,
         trace_index0: TraceIndex,
         depth: int,
-        ignore_registers: Optional[List[Tuple[int, int]]] = None,
+        ignore_registers: Iterable[Tuple[int, int]],
+        ignore_trace_indices: Set[TraceIndex],
     ):
         self.trace: Trace = analysis.trace
         self.ud: Ud = analysis.ud
         self.node0: BackwardNode = BackwardNode(trace_index0, depth)
         self.nodes: Dict[TraceIndex, BackwardNode] = {trace_index0: self.node0}
         self.worklist: Deque[BackwardNode] = deque((self.node0,))
-        self.ignore_registers = [] if ignore_registers is None else ignore_registers
+        self.ignore_registers = ignore_registers
+        self.ignore_trace_indices = ignore_trace_indices
 
     def analyze(self) -> BackwardNode:
         while len(self.worklist) > 0:
@@ -128,12 +130,18 @@ class BackwardAnalysis:
         ):
             if self.should_ignore_register(entry):
                 continue
-            def_node = self.get_node(self.ud.get_trace_for_reg_use(use), node.depth - 1)
+            trace_index = self.ud.get_trace_for_reg_use(use)
+            if trace_index in self.ignore_trace_indices:
+                continue
+            def_node = self.get_node(trace_index, node.depth - 1)
             node.get_edge(def_node).reg.append(entry)
         for use, entry in zip(
             self.ud.get_mem_uses_for_trace(node.trace_index), mem_use_entries
         ):
-            def_node = self.get_node(self.ud.get_trace_for_mem_use(use), node.depth - 1)
+            trace_index = self.ud.get_trace_for_mem_use(use)
+            if trace_index in self.ignore_trace_indices:
+                continue
+            def_node = self.get_node(trace_index, node.depth - 1)
             node.get_edge(def_node).mem.append(entry)
         node.done = True
 

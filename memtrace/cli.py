@@ -293,7 +293,15 @@ def traces_for_pc(input, index, ud, output, pc):
     multiple=True,
     help="Do not follow these registers",
 )
-def taint_backward(input, index, ud, output, pc, trace, depth, ignore_register):
+@click.option(
+    "--ignore-trace",
+    type=AnyIntParamType(),
+    multiple=True,
+    help="Do not follow these insn-in-trace indices",
+)
+def taint_backward(
+    input, index, ud, output, pc, trace, depth, ignore_register, ignore_trace
+):
     if (trace is None) == (pc is None):
         print("Specify either --pc or --trace", file=sys.stderr)
         sys.exit(1)
@@ -313,6 +321,9 @@ def taint_backward(input, index, ud, output, pc, trace, depth, ignore_register):
             trace_index0=trace,
             depth=depth,
             ignore_registers=ignore_register,
+            ignore_trace_indices={
+                TraceIndex(trace_index) for trace_index in ignore_trace
+            },
         )
         dag = backward.analyze()
         with open(output, "w") as fp:
