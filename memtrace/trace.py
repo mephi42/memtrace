@@ -1,7 +1,14 @@
 from typing import Any, Iterable, Optional
 
 from memtrace.native import wrap_err
-from memtrace._memtrace import DumpKind, Tag, _Trace, _TraceFilter, VectorOfU32s
+from memtrace._memtrace import (
+    DumpKind,
+    InsnSeq,
+    Tag,
+    _Trace,
+    _TraceFilter,
+    VectorOfInsnSeqs,
+)
 
 
 class TraceFilter:
@@ -32,8 +39,8 @@ class TraceFilter:
         return self.native.insn_seqs
 
     @insn_seqs.setter
-    def insn_seqs(self, insn_seqs):
-        native_insn_seqs = VectorOfU32s()
+    def insn_seqs(self, insn_seqs: Iterable[InsnSeq]):
+        native_insn_seqs = VectorOfInsnSeqs()
         native_insn_seqs.extend(insn_seqs)
         self.native.insn_seqs = native_insn_seqs
 
@@ -75,7 +82,13 @@ class Trace:
         pass
 
     @wrap_err
-    def dump(self, output: Optional[str], kind: DumpKind) -> None:
+    def dump(
+        self,
+        output: Optional[str],
+        kind: DumpKind,
+        header: bool = True,
+        summary: bool = True,
+    ) -> None:
         pass
 
     def set_filter(self, filter: Optional[TraceFilter]) -> None:

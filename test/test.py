@@ -240,6 +240,24 @@ class MachineTest(CommonTest):
         self.filter_file(actual_dump_txt)
         diff_files(expected_dump_txt, actual_dump_txt)
 
+    def test_dump_seq(self) -> None:
+        dump_txt = f"{self.get_target()}-dump-seq.txt"
+        actual_dump_txt = os.path.join(self.workdir.name, dump_txt)
+        expected_dump_txt = os.path.join(self.basedir, dump_txt)
+        with self.assertRaises(SystemExit):
+            memtrace.cli.main(
+                [
+                    "report",
+                    "--input=" + os.path.join(self.workdir.name, "memtrace.out"),
+                    f"--output={actual_dump_txt}",
+                    "--insn-seq=1",
+                    "--no-header",
+                    "--no-summary",
+                ]
+            )
+        self.filter_file(actual_dump_txt)
+        diff_files(expected_dump_txt, actual_dump_txt)
+
     def test_ud(self) -> None:
         ud_txt = f"{self.get_target()}-ud.txt"
         actual_ud_txt = os.path.join(self.workdir.name, ud_txt)
@@ -398,6 +416,22 @@ class MachineTest(CommonTest):
         self.assertEqual(0, system_exit.exception.code)
         self.filter_file(actual)
         diff_files(expected, actual)
+
+    def test_ldst(self) -> None:
+        dump_txt = f"{self.get_target()}-ldst.txt"
+        actual_dump_txt = os.path.join(self.workdir.name, dump_txt)
+        expected_dump_txt = os.path.join(self.basedir, dump_txt)
+        with self.assertRaises(SystemExit):
+            memtrace.cli.main(
+                [
+                    "ldst",
+                    "--input=" + os.path.join(self.workdir.name, "memtrace.out"),
+                    f"--output={actual_dump_txt}",
+                    "0-0xffffffffffffffff",
+                ]
+            )
+        self.filter_file(actual_dump_txt)
+        diff_files(expected_dump_txt, actual_dump_txt)
 
 
 class TestX86_64(MachineTest):

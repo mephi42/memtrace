@@ -136,15 +136,27 @@ class HeaderEntry : public B {
       kRegsSizeOffset + sizeof(std::uint16_t);
 };
 
+struct InsnSeq {
+  using value_type = std::uint32_t;
+
+  bool operator==(InsnSeq rhs) const { return value == rhs.value; }
+  bool operator!=(InsnSeq rhs) const { return value != rhs.value; }
+  bool operator<(InsnSeq rhs) const { return value < rhs.value; }
+
+  value_type value = 0;
+};
+#define PRIuInsnSeq PRIu32
+#define PRIxInsnSeq PRIx32
+
 template <Endianness E, typename W, typename B = Overlay>
 class LdStEntry : public B {
  public:
   using B::B;
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
-  std::uint32_t GetInsnSeq() const {
-    return RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset)
-        .GetValue();
+  InsnSeq GetInsnSeq() const {
+    return InsnSeq{
+        RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset).GetValue()};
   }
   W GetAddr() const {
     return RawInt<E, W>(this->GetData() + kAddrOffset).GetValue();
@@ -184,9 +196,9 @@ class InsnEntry : public B {
   using B::B;
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
-  std::uint32_t GetInsnSeq() const {
-    return RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset)
-        .GetValue();
+  InsnSeq GetInsnSeq() const {
+    return InsnSeq{
+        RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset).GetValue()};
   }
   W GetPc() const {
     return RawInt<E, W>(this->GetData() + kPcOffset).GetValue();
@@ -217,9 +229,9 @@ class InsnExecEntry : public B {
   using B::B;
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
-  std::uint32_t GetInsnSeq() const {
-    return RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset)
-        .GetValue();
+  InsnSeq GetInsnSeq() const {
+    return InsnSeq{
+        RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset).GetValue()};
   }
 
  private:
@@ -232,9 +244,9 @@ class LdStNxEntry : public B {
   using B::B;
 
   Tlv<E, W> GetTlv() const { return Tlv<E, W>(this->GetData()); }
-  std::uint32_t GetInsnSeq() const {
-    return RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset)
-        .GetValue();
+  InsnSeq GetInsnSeq() const {
+    return InsnSeq{
+        RawInt<E, std::uint32_t>(this->GetData() + kInsnSeqOffset).GetValue()};
   }
   W GetAddr() const {
     return RawInt<E, W>(this->GetData() + kAddrOffset).GetValue();

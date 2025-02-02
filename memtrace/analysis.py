@@ -6,7 +6,7 @@ from typing import Iterable, Optional
 from memtrace.symbolizer import Symbolizer
 from memtrace.trace import Trace, TraceFilter
 from memtrace.ud import Ud
-from ._memtrace import Disasm, get_endianness_str, Tag
+from ._memtrace import Disasm, get_endianness_str, InsnSeq, Tag
 
 
 class Analysis:
@@ -19,7 +19,7 @@ class Analysis:
         first_entry_index: Optional[int] = None,
         last_entry_index: Optional[int] = None,
         tags: Optional[Iterable[Tag]] = None,
-        insn_seqs: Optional[Iterable[int]] = None,
+        insn_seqs: Optional[Iterable[InsnSeq]] = None,
     ):
         self.index_path = index_path
         self.ud_path = ud_path
@@ -104,7 +104,7 @@ class Analysis:
     def get_last_trace_for_pc(self, pc):
         return max(self.get_traces_for_pc(pc))
 
-    def pp_code(self, code_index: int) -> str:
+    def pp_code(self, code_index: InsnSeq) -> str:
         pc = self.ud.get_pc_for_code(code_index)
         disasm_str = self.ud.get_disasm_for_code(code_index)
         symbolized_pc = self.symbolizer.symbolize(pc)

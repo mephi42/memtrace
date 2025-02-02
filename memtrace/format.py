@@ -40,7 +40,7 @@ def format_entry(
             reg_name = None
         if reg_name is None:
             s += "0x{:08x}: {} uint{}_t [0x{:x}] {}".format(
-                entry.insn_seq,
+                entry.insn_seq.value,
                 entry.tag,
                 len(entry.value) * 8,
                 entry.addr,
@@ -48,14 +48,14 @@ def format_entry(
             )
         else:
             s += "0x{:08x}: {} {} {}".format(
-                entry.insn_seq,
+                entry.insn_seq.value,
                 entry.tag,
                 reg_name,
                 format_value(bytes(entry.value), endianness),
             )
     elif entry.tag == Tag.MT_INSN:
         s += "0x{:08x}: {} 0x{:016x}".format(
-            entry.insn_seq,
+            entry.insn_seq.value,
             entry.tag,
             entry.pc,
         )
@@ -65,19 +65,19 @@ def format_entry(
             bytes(entry.value).hex(), disasm.disasm_str(entry.value, entry.pc)
         )
     elif entry.tag == Tag.MT_INSN_EXEC:
-        s += "0x{:08x}: {}".format(entry.insn_seq, entry.tag)
+        s += "0x{:08x}: {}".format(entry.insn_seq.value, entry.tag)
     elif entry.tag in (Tag.MT_GET_REG_NX, Tag.MT_PUT_REG_NX):
         reg_name = trace.get_reg_name(entry.addr, len(entry.value))
         if reg_name is None:
             s += "0x{:08x}: {} uint{}_t [0x{:x}]".format(
-                entry.insn_seq,
+                entry.insn_seq.value,
                 entry.tag,
                 len(entry.value) * 8,
                 entry.addr,
             )
         else:
             s += "0x{:08x}: {} {}".format(
-                entry.insn_seq,
+                entry.insn_seq.value,
                 entry.tag,
                 reg_name,
             )

@@ -188,19 +188,25 @@ void DisasmInsnEntry(FILE* f, const Disasm& disasmEngine,
 template <Endianness E, typename W>
 class Dumper {
  public:
-  explicit Dumper(std::FILE* f, Trace<E, W>* trace)
-      : f_(f), trace_(trace), insnCount_(0) {}
+  explicit Dumper(std::FILE* f, Trace<E, W>* trace, bool header, bool summary)
+      : f_(f),
+        trace_(trace),
+        header_(header),
+        summary_(summary),
+        insnCount_(0) {}
 
   int Init(HeaderEntry<E, W> entry, size_t /* expectedInsnCount */) {
-    std::fprintf(f_, "Endian            : %s\n", GetEndiannessStrPy(E));
-    std::fprintf(f_, "Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
-    std::fprintf(f_, "Word size         : %zu\n", sizeof(W));
-    std::fprintf(f_, "Machine           : %s\n",
-                 GetStr(entry.GetMachineType()));
-    std::fprintf(f_, "Regs size         : %d\n", entry.GetRegsSize());
-    std::fprintf(f_, "Trace ID          : ");
-    HexDump(f_, &entry.GetTraceId(), sizeof(TraceId));
-    std::fprintf(f_, "\n");
+    if (header_) {
+      std::fprintf(f_, "Endian            : %s\n", GetEndiannessStrPy(E));
+      std::fprintf(f_, "Word              : %s\n", sizeof(W) == 4 ? "I" : "Q");
+      std::fprintf(f_, "Word size         : %zu\n", sizeof(W));
+      std::fprintf(f_, "Machine           : %s\n",
+                   GetStr(entry.GetMachineType()));
+      std::fprintf(f_, "Regs size         : %d\n", entry.GetRegsSize());
+      std::fprintf(f_, "Trace ID          : ");
+      HexDump(f_, &entry.GetTraceId(), sizeof(TraceId));
+      std::fprintf(f_, "\n");
+    }
     return disasmEngine_.Init(entry.GetMachineType(), E, sizeof(W));
   }
 
@@ -213,21 +219,22 @@ class Dumper {
     else
       regName = nullptr;
     if (regName == nullptr)
-      std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "] ",
-                   i, entry.GetInsnSeq(), GetStr(tag),
-                   static_cast<size_t>(entry.GetSize() * 8),
-                   static_cast<std::uint64_t>(entry.GetAddr()));
+      std::fprintf(
+          f_, "[%10zu] 0x%08" PRIxInsnSeq ": %s uint%zu_t [0x%" PRIx64 "] ", i,
+          entry.GetInsnSeq().value, GetStr(tag),
+          static_cast<size_t>(entry.GetSize() * 8),
+          static_cast<std::uint64_t>(entry.GetAddr()));
     else
-      std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s %s ", i, entry.GetInsnSeq(),
-                   GetStr(tag), regName);
+      std::fprintf(f_, "[%10zu] 0x%08" PRIxInsnSeq ": %s %s ", i,
+                   entry.GetInsnSeq().value, GetStr(tag), regName);
     ValueDump<E>(f_, entry.GetValue(), entry.GetSize());
     std::fprintf(f_, "\n");
     return 0;
   }
 
   int operator()(size_t i, InsnEntry<E, W> entry) {
-    std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s 0x%016" PRIx64 " ", i,
-                 entry.GetInsnSeq(), GetStr(entry.GetTlv().GetTag()),
+    std::fprintf(f_, "[%10zu] 0x%08" PRIxInsnSeq ": %s 0x%016" PRIx64 " ", i,
+                 entry.GetInsnSeq().value, GetStr(entry.GetTlv().GetTag()),
                  static_cast<std::uint64_t>(entry.GetPc()));
     if (entry.GetFlags() & static_cast<std::underlying_type_t<InsnFlags>>(
                                InsnFlags::MT_INSN_INDIRECT_JUMP))
@@ -237,8 +244,8 @@ class Dumper {
   }
 
   int operator()(size_t i, InsnExecEntry<E, W> entry) {
-    std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s\n", i, entry.GetInsnSeq(),
-                 GetStr(entry.GetTlv().GetTag()));
+    std::fprintf(f_, "[%10zu] 0x%08" PRIxInsnSeq ": %s\n", i,
+                 entry.GetInsnSeq().value, GetStr(entry.GetTlv().GetTag()));
     insnCount_++;
     return 0;
   }
@@ -248,14 +255,14 @@ class Dumper {
         trace_->GetRegName(static_cast<std::uint16_t>(entry.GetAddr()),
                            static_cast<std::uint16_t>(entry.GetSize()));
     if (regName == nullptr)
-      std::fprintf(f_,
-                   "[%10zu] 0x%08" PRIx32 ": %s uint%zu_t [0x%" PRIx64 "]\n", i,
-                   entry.GetInsnSeq(), GetStr(entry.GetTlv().GetTag()),
-                   static_cast<size_t>(entry.GetSize() * 8),
-                   static_cast<std::uint64_t>(entry.GetAddr()));
+      std::fprintf(
+          f_, "[%10zu] 0x%08" PRIxInsnSeq ": %s uint%zu_t [0x%" PRIx64 "]\n", i,
+          entry.GetInsnSeq().value, GetStr(entry.GetTlv().GetTag()),
+          static_cast<size_t>(entry.GetSize() * 8),
+          static_cast<std::uint64_t>(entry.GetAddr()));
     else
-      std::fprintf(f_, "[%10zu] 0x%08" PRIx32 ": %s %s\n", i,
-                   entry.GetInsnSeq(), GetStr(entry.GetTlv().GetTag()),
+      std::fprintf(f_, "[%10zu] 0x%08" PRIxInsnSeq ": %s %s\n", i,
+                   entry.GetInsnSeq().value, GetStr(entry.GetTlv().GetTag()),
                    regName);
     return 0;
   }
@@ -280,13 +287,15 @@ class Dumper {
   }
 
   int Complete() {
-    std::fprintf(f_, "Insns             : %zu\n", insnCount_);
+    if (summary_) std::fprintf(f_, "Insns             : %zu\n", insnCount_);
     return 0;
   }
 
  private:
   FILE* f_;
   Trace<E, W>* trace_;
+  const bool header_;
+  const bool summary_;
   size_t insnCount_;
   Disasm disasmEngine_;
 };
@@ -302,8 +311,8 @@ class SourceDumper {
   }
 
   int operator()(size_t /* i */, InsnEntry<E, W> entry) {
-    if (!insns_.empty() &&
-        entry.GetInsnSeq() != insns_[0].GetInsnSeq() + insns_.size())
+    if (!insns_.empty() && entry.GetInsnSeq().value !=
+                               insns_[0].GetInsnSeq().value + insns_.size())
       return -EINVAL;
     insns_.push_back(entry);
     return 0;
@@ -311,7 +320,7 @@ class SourceDumper {
 
   int operator()(size_t /* index */, InsnExecEntry<E, W> entry) {
     if (insns_.empty()) return -EINVAL;
-    size_t insnIndex = entry.GetInsnSeq() - insns_[0].GetInsnSeq();
+    size_t insnIndex = entry.GetInsnSeq().value - insns_[0].GetInsnSeq().value;
     if (insnIndex >= insns_.size()) return -EINVAL;
     int err;
     if ((err = trace_->UpdateDwfl()) < 0) return err;
@@ -432,7 +441,7 @@ struct NoOp {
 struct Seeker {
   Seeker()
       : insnIndex(std::numeric_limits<size_t>::max()),
-        prevInsnSeq(std::numeric_limits<std::uint32_t>::max()) {}
+        prevInsnSeq{std::numeric_limits<InsnSeq::value_type>::max()} {}
 
   template <Endianness E, typename W>
   int operator()(size_t /* index */, LdStEntry<E, W> entry) {
@@ -464,7 +473,7 @@ struct Seeker {
     return 0;
   }
 
-  int HandleInsnSeq(std::uint32_t insnSeq) {
+  int HandleInsnSeq(InsnSeq insnSeq) {
     if (insnSeq != prevInsnSeq) {
       insnIndex++;
       prevInsnSeq = insnSeq;
@@ -473,7 +482,7 @@ struct Seeker {
   }
 
   size_t insnIndex;
-  std::uint32_t prevInsnSeq;
+  InsnSeq prevInsnSeq;
 };
 
 struct Indexer {
@@ -538,31 +547,31 @@ struct TraceFilter {
                             static_cast<std::uint16_t>(Tag::MT_FIRST)));
   }
 
-  std::vector<std::uint32_t> GetInsnSeqs() const {
-    return std::vector<std::uint32_t>(insnSeqs.begin(), insnSeqs.end());
+  std::vector<InsnSeq> GetInsnSeqs() const {
+    return std::vector<InsnSeq>(insnSeqs.begin(), insnSeqs.end());
   }
 
-  void SetInsnSeqs(const std::vector<std::uint32_t>& insnSeqs) {
-    this->insnSeqs = std::set<std::uint32_t>(insnSeqs.begin(), insnSeqs.end());
+  void SetInsnSeqs(const std::vector<InsnSeq>& insnSeqs) {
+    this->insnSeqs = std::set<InsnSeq>(insnSeqs.begin(), insnSeqs.end());
   }
 
   bool isMissingInsnSeqOk() const { return insnSeqs.empty(); }
 
-  bool isInsnSeqOk(std::uint32_t insnSeq) const {
+  bool isInsnSeqOk(InsnSeq insnSeq) const {
     return insnSeqs.empty() || insnSeqs.find(insnSeq) != insnSeqs.end();
   }
 
   size_t firstEntryIndex;
   size_t lastEntryIndex;
   std::uint32_t tagMask;
-  std::set<std::uint32_t> insnSeqs;
+  std::set<InsnSeq> insnSeqs;
 };
 
 struct TraceFilterNoOp {
   bool isEntryIndexOk(size_t /* entryIndex */) const { return true; }
   bool isTagOk(Tag /* tag */) const { return true; }
   bool isMissingInsnSeqOk() const { return true; }
-  bool isInsnSeqOk(std::uint32_t /* insnSeq */) const { return true; }
+  bool isInsnSeqOk(InsnSeq /* insnSeq */) const { return true; }
 };
 
 enum class DumpKind {
@@ -581,6 +590,8 @@ const char* GetStr(DumpKind kind) {
   }
 }
 
+namespace bp = boost::python;
+
 class TraceBase {
  public:
   static TraceBase* Load(const char* path);
@@ -594,7 +605,7 @@ class TraceBase {
   virtual std::uint16_t GetRegsSize() = 0;
   virtual TraceId GetTraceId() = 0;
   virtual std::vector<std::uint8_t> GetTraceIdPy() = 0;
-  virtual boost::python::object Next() = 0;
+  virtual bp::object Next() = 0;
   virtual int SeekStart() = 0;
   virtual int SeekInsn(std::uint32_t index) = 0;
   virtual int SeekEnd() = 0;
@@ -602,11 +613,12 @@ class TraceBase {
   virtual bool HasInsnIndex() = 0;
   virtual int BuildInsnIndex(const char* path, size_t stepShift) = 0;
   virtual int LoadInsnIndex(const char* path) = 0;
-  virtual int Dump(const char* path, DumpKind kind) = 0;
+  virtual int Dump(const char* path, DumpKind kind, bool header,
+                   bool summary) = 0;
   virtual void SetFilter(std::shared_ptr<TraceFilter> filter) = 0;
   virtual const char* GetRegName(std::uint16_t offset, std::uint16_t size) = 0;
   virtual LinePy Symbolize(std::uint64_t addr) = 0;
-  virtual boost::python::object Resolve(const char* symbol) = 0;
+  virtual bp::object Resolve(const char* symbol) = 0;
 };
 
 template <typename W>
@@ -733,7 +745,8 @@ class Trace : public TraceBase {
 
   template <typename V>
   int InitVisitor(V* visitor) {
-    // On average, one executed instruction takes 132.7 bytes in the trace file.
+    // On average, one executed instruction takes 132.7 bytes in the trace
+    // file.
     return visitor->Init(header_, length_ / 128);
   }
 
@@ -758,7 +771,7 @@ class Trace : public TraceBase {
   template <typename V, typename F>
   int VisitOne(V* visitor, const F& filter) {
     if (PyErr_CheckSignals()) {
-      boost::python::throw_error_already_set();
+      bp::throw_error_already_set();
     }
     if (!Have(Tlv<E, W>::kFixedLength)) return -EINVAL;
     Tlv<E, W> tlv(cur_);
@@ -840,14 +853,13 @@ class Trace : public TraceBase {
     return std::vector<std::uint8_t>(traceId.begin(), traceId.end());
   }
 
-  boost::python::object Next() override {
+  bp::object Next() override {
     while (true) {
-      if (cur_ == end_) boost::python::objects::stop_iteration_error();
+      if (cur_ == end_) bp::objects::stop_iteration_error();
       TraceEntry2Py visitor;
       int err = VisitOne(&visitor);
       if (err < 0) throw std::runtime_error("Failed to parse the next entry");
-      if (visitor.py != nullptr)
-        return boost::python::object(boost::python::ptr(visitor.py));
+      if (visitor.py != nullptr) return bp::object(bp::ptr(visitor.py));
     }
   }
 
@@ -996,13 +1008,14 @@ class Trace : public TraceBase {
     InsnIndexEntry saved_;
   };
 
-  int Dump(const char* path, DumpKind kind) override {
+  int Dump(const char* path, DumpKind kind, bool header,
+           bool summary) override {
     FILE* f = fopen(path, "w");
     if (f == nullptr) return -errno;
     int err;
     switch (kind) {
       case DumpKind::Raw: {
-        Dumper<E, W> dumper(f, this);
+        Dumper<E, W> dumper(f, this, header, summary);
         err = VisitAll(&dumper);
         break;
       }
@@ -1036,12 +1049,12 @@ class Trace : public TraceBase {
     return FindAddr(dwfl_.get(), addr);
   }
 
-  boost::python::object Resolve(const char* symbol) override {
-    if (UpdateDwfl() < 0) return boost::python::object();
+  bp::object Resolve(const char* symbol) override {
+    if (UpdateDwfl() < 0) return bp::object();
     if (boost::optional<GElf_Addr> addr = symbolIndex_->Find(symbol))
-      return boost::python::object(*addr);
+      return bp::object(*addr);
     else
-      return boost::python::object();
+      return bp::object();
   }
 
  private:
@@ -1244,7 +1257,7 @@ struct InsnInCode {
 };
 
 struct InsnInTrace {
-  std::uint32_t codeIndex;
+  InsnSeq insnSeq;
   std::uint32_t regUseStartIndex;
   std::uint32_t memUseStartIndex;
   std::uint32_t regDefStartIndex;
@@ -1678,13 +1691,13 @@ class UdBase {
 
   virtual ~UdBase() = default;
   [[nodiscard]] virtual int Init(const BinaryHeader& header) = 0;
-  virtual std::vector<std::uint32_t> GetCodesForPcRanges(
+  virtual std::vector<InsnSeq> GetCodesForPcRanges(
       const std::vector<Range<std::uint64_t>>& pcRanges) const = 0;
-  virtual std::uint64_t GetPcForCode(std::uint32_t code) const = 0;
-  virtual std::string GetDisasmForCode(std::uint32_t code) const = 0;
+  virtual std::uint64_t GetPcForCode(InsnSeq insnSeq) const = 0;
+  virtual std::string GetDisasmForCode(InsnSeq insnSeq) const = 0;
   virtual std::vector<std::uint32_t> GetTracesForCode(
-      std::uint32_t code) const = 0;
-  virtual std::uint32_t GetCodeForTrace(std::uint32_t trace) const = 0;
+      InsnSeq insnSeq) const = 0;
+  virtual InsnSeq GetCodeForTrace(std::uint32_t trace) const = 0;
   virtual std::vector<std::uint32_t> GetRegUsesForTrace(
       std::uint32_t trace) const = 0;
   virtual std::vector<std::uint32_t> GetMemUsesForTrace(
@@ -1734,14 +1747,14 @@ class Ud : public UdBase {
 
     // Add an initial catch-all entry.
     if (mode != InitMode::OpenExisting) {
-      std::uint32_t codeIndex = static_cast<std::uint32_t>(code_.size());
+      InsnSeq insnSeq{static_cast<InsnSeq::value_type>(code_.size())};
       InsnInCode<W>& code = code_.emplace_back();
       code.pc = 0;
       code.textIndex = 0;
       code.textSize = 0;
       disasm_.emplace_back("<unknown>");
       trace_.reserve(expectedInsnCount);
-      AddTrace(codeIndex);
+      AddTrace(insnSeq);
       regState_.AddDef(0, std::numeric_limits<W>::max());
       memState_.AddDef(0, std::numeric_limits<W>::max());
     }
@@ -1783,8 +1796,7 @@ class Ud : public UdBase {
   }
 
   int operator()(size_t /* i */, InsnEntry<E, W> entry) {
-    if (entry.GetInsnSeq() != static_cast<std::uint32_t>(code_.size()))
-      return -EINVAL;
+    if (entry.GetInsnSeq().value != code_.size()) return -EINVAL;
     InsnInCode<W>& code = code_.emplace_back();
     code.pc = entry.GetPc();
     code.textIndex = static_cast<std::uint32_t>(text_.size());
@@ -1834,28 +1846,28 @@ class Ud : public UdBase {
     return 0;
   }
 
-  std::vector<std::uint32_t> GetCodesForPcRanges(
+  std::vector<InsnSeq> GetCodesForPcRanges(
       const std::vector<Range<std::uint64_t>>& pcRanges) const override {
-    std::vector<std::uint32_t> codes;
-    for (std::uint32_t code = 0,
-                       size = static_cast<std::uint32_t>(code_.size());
-         code < size; code++)
+    std::vector<InsnSeq> codes;
+    for (InsnSeq insnSeq{0},
+         size{static_cast<InsnSeq::value_type>(code_.size())};
+         insnSeq < size; insnSeq.value++)
       for (const Range<std::uint64_t>& pcRange : pcRanges) {
-        std::uint64_t pc = code_[code].pc;
+        std::uint64_t pc = GetCode(insnSeq).pc;
         if (pc >= pcRange.startAddr && pc <= pcRange.endAddr) {
-          codes.push_back(code);
+          codes.push_back(insnSeq);
           break;
         }
       }
     return codes;
   }
 
-  std::uint64_t GetPcForCode(std::uint32_t code) const override {
-    return code_[code].pc;
+  std::uint64_t GetPcForCode(InsnSeq insnSeq) const override {
+    return GetCode(insnSeq).pc;
   }
 
-  std::string GetDisasmForCode(std::uint32_t code) const override {
-    const InsnInCode<W>& entry = code_[code];
+  std::string GetDisasmForCode(InsnSeq insnSeq) const override {
+    const InsnInCode<W>& entry = GetCode(insnSeq);
     std::unique_ptr<cs_insn, CsFree> insn = disasmEngine_.DoDisasm(
         &text_[entry.textIndex], entry.textSize, entry.pc, 0);
     if (insn) {
@@ -1868,18 +1880,17 @@ class Ud : public UdBase {
     }
   }
 
-  std::vector<std::uint32_t> GetTracesForCode(
-      std::uint32_t code) const override {
+  std::vector<std::uint32_t> GetTracesForCode(InsnSeq insnSeq) const override {
     std::vector<std::uint32_t> traces;
     for (std::uint32_t trace = 0,
                        size = static_cast<std::uint32_t>(trace_.size());
          trace < size; trace++)
-      if (trace_[trace].codeIndex == code) traces.push_back(trace);
+      if (trace_[trace].insnSeq == insnSeq) traces.push_back(trace);
     return traces;
   }
 
-  std::uint32_t GetCodeForTrace(std::uint32_t trace) const override {
-    return trace_[trace].codeIndex;
+  InsnSeq GetCodeForTrace(std::uint32_t trace) const override {
+    return trace_[trace].insnSeq;
   }
 
   std::vector<std::uint32_t> GetRegUsesForTrace(
@@ -1938,11 +1949,11 @@ class Ud : public UdBase {
     trace.memDefCount = static_cast<std::uint8_t>(memDefCount);
 
     if (f_ != nullptr) {
-      InsnInCode<W>& code = code_[trace.codeIndex];
+      const InsnInCode<W>& code = GetCode(trace.insnSeq);
       std::fprintf(f_, "[%zu]0x%" PRIx64 ": ", trace_.size() - 1,
                    static_cast<std::uint64_t>(code.pc));
       HexDump(f_, &text_[code.textIndex], code.textSize);
-      std::fprintf(f_, " %s reg_uses=[", disasm_[trace.codeIndex].c_str());
+      std::fprintf(f_, " %s reg_uses=[", GetDisasm(trace.insnSeq).c_str());
       int err;
       if ((err = regState_.template DumpUses<E, &InsnInTrace::regDefStartIndex>(
                f_, trace.regUseStartIndex,
@@ -1973,9 +1984,9 @@ class Ud : public UdBase {
     return 0;
   }
 
-  int AddTrace(std::uint32_t codeIndex) {
+  int AddTrace(InsnSeq insnSeq) {
     InsnInTrace& trace = trace_.emplace_back();
-    trace.codeIndex = codeIndex;
+    trace.insnSeq = insnSeq;
     trace.regUseStartIndex =
         static_cast<std::uint32_t>(regState_.GetUseCount());
     trace.memUseStartIndex =
@@ -1987,8 +1998,8 @@ class Ud : public UdBase {
     return 0;
   }
 
-  int HandleInsnSeq(std::uint32_t insnSeq) {
-    if (trace_.back().codeIndex == insnSeq) return 0;
+  int HandleInsnSeq(InsnSeq insnSeq) {
+    if (trace_.back().insnSeq == insnSeq) return 0;
     int ret;
     if ((ret = Flush()) < 0) return ret;
     if ((ret = AddTrace(insnSeq)) < 0) return ret;
@@ -2002,11 +2013,11 @@ class Ud : public UdBase {
     for (std::uint32_t traceIndex = 0; traceIndex < trace_.size();
          traceIndex++) {
       const InsnInTrace& trace = trace_[traceIndex];
-      const InsnInCode<W>& code = code_[trace.codeIndex];
+      const InsnInCode<W>& code = GetCode(trace.insnSeq);
       std::fprintf(
           f, "    %" PRIu32 " [label=\"[%" PRIu32 "] 0x%" PRIx64 ": %s\"]\n",
           traceIndex, traceIndex, static_cast<std::uint64_t>(code.pc),
-          disasm_[trace.codeIndex].c_str());
+          GetDisasm(trace.insnSeq).c_str());
       int err;
       if ((err = regState_
                      .template DumpUsesDot<E, &InsnInTrace::regDefStartIndex>(
@@ -2048,7 +2059,7 @@ class Ud : public UdBase {
     for (std::uint32_t traceIndex = 0; traceIndex < trace_.size();
          traceIndex++) {
       const InsnInTrace& trace = trace_[traceIndex];
-      const InsnInCode<W>& code = code_[trace.codeIndex];
+      const InsnInCode<W>& code = GetCode(trace.insnSeq);
       std::fprintf(f,
                    "    <tr id=\"%" PRIu32
                    "\">\n"
@@ -2062,7 +2073,7 @@ class Ud : public UdBase {
       std::fprintf(f,
                    "</td>\n"
                    "        <td>");
-      HtmlDump(f, disasm_[trace.codeIndex].c_str());
+      HtmlDump(f, GetDisasm(trace.insnSeq).c_str());
       std::fprintf(f,
                    "</td>\n"
                    "        <td>\n");
@@ -2109,12 +2120,14 @@ class Ud : public UdBase {
   int DumpCodeCsv(const char* path) const {
     std::FILE* f = std::fopen(path, "w");
     if (f == nullptr) return -errno;
-    for (std::uint32_t codeIndex = 0; codeIndex < code_.size(); codeIndex++) {
-      const InsnInCode<W>& code = code_[codeIndex];
-      std::fprintf(f, "%" PRIu32 ",%" PRIu64 ",", codeIndex,
-                   static_cast<std::uint64_t>(code_[codeIndex].pc));
+    for (InsnSeq insnSeq{0},
+         size{static_cast<InsnSeq::value_type>(code_.size())};
+         insnSeq < size; insnSeq.value++) {
+      const InsnInCode<W>& code = GetCode(insnSeq);
+      std::fprintf(f, "%" PRIuInsnSeq ",%" PRIu64 ",", insnSeq.value,
+                   static_cast<std::uint64_t>(GetCode(insnSeq).pc));
       HexDump(f, &text_[code.textIndex], code.textSize);
-      std::fprintf(f, ",\"%s\"\n", disasm_[codeIndex].c_str());
+      std::fprintf(f, ",\"%s\"\n", GetDisasm(insnSeq).c_str());
     }
     std::fclose(f);
     return 0;
@@ -2124,8 +2137,8 @@ class Ud : public UdBase {
     std::FILE* f = std::fopen(path, "w");
     if (f == nullptr) return -errno;
     for (std::uint32_t traceIndex = 0; traceIndex < trace_.size(); traceIndex++)
-      std::fprintf(f, "%" PRIu32 ",%" PRIu32 "\n", traceIndex,
-                   trace_[traceIndex].codeIndex);
+      std::fprintf(f, "%" PRIu32 ",%" PRIuInsnSeq "\n", traceIndex,
+                   trace_[traceIndex].insnSeq.value);
     std::fclose(f);
     return 0;
   }
@@ -2172,6 +2185,14 @@ class Ud : public UdBase {
     header.hostWordSize = static_cast<std::uint8_t>(kHostWordSize);
     header.machineType = machineType_;
     return WriteHeader(binaryPath_.Get("header").c_str(), header);
+  }
+
+  const InsnInCode<W>& GetCode(InsnSeq insnSeq) const {
+    return code_[insnSeq.value];
+  }
+
+  const std::string& GetDisasm(InsnSeq insnSeq) const {
+    return disasm_[insnSeq.value];
   }
 
   const char* const binary_;
@@ -2292,18 +2313,19 @@ void RegisterEntries() {
 }
 
 template <typename T>
-void RegisterEnumValues(boost::python::enum_<T>* /* py */) {}
+void RegisterEnumValues(bp::enum_<T>* /* py */) {}
 
 template <typename T, typename... TT>
-void RegisterEnumValues(boost::python::enum_<T>* py, T t, TT&&... tt) {
+void RegisterEnumValues(bp::enum_<T>* py, T t, TT&&... tt) {
   py->value(GetStr(t), t);
   RegisterEnumValues(py, std::forward<TT>(tt)...);
 }
 
+InsnSeq* CreateInsnSeq(InsnSeq::value_type value) { return new InsnSeq{value}; }
+
 }  // namespace
 
 BOOST_PYTHON_MODULE(_memtrace) {
-  namespace bp = boost::python;
   bp::enum_<Endianness> endianness("Endianness");
   RegisterEnumValues(&endianness, Endianness::Little, Endianness::Big);
   bp::def("get_endianness_str", GetEndiannessStrPy);
@@ -2405,4 +2427,12 @@ BOOST_PYTHON_MODULE(_memtrace) {
   RegisterEnumValues(&dumpKind, DumpKind::Raw, DumpKind::Source);
   bp::enum_<InsnFlags> insnFlags("InsnFlags");
   RegisterEnumValues(&insnFlags, InsnFlags::MT_INSN_INDIRECT_JUMP);
+  bp::class_<InsnSeq>("InsnSeq", bp::no_init)
+      .def_readonly("value", &InsnSeq::value)
+      .def("__init__", bp::make_constructor(CreateInsnSeq))
+      .def("__eq__", &InsnSeq::operator==)
+      .def("__ne__", &InsnSeq::operator!=)
+      .def("__lt__", &InsnSeq::operator<);  // NOLINT(whitespace/operators)
+  bp::class_<std::vector<InsnSeq>>("VectorOfInsnSeqs")
+      .def(bp::vector_indexing_suite<std::vector<InsnSeq>>());
 }

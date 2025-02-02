@@ -12,7 +12,7 @@ import memtrace
 from memtrace.analysis import Analysis
 from memtrace.format import format_entry
 from memtrace.interval_tree import IntervalTree
-from memtrace._memtrace import DumpKind, Tag
+from memtrace._memtrace import DumpKind, InsnSeq, Tag
 from memtrace.notebook import open_notebook
 import memtrace.stats
 from memtrace.taint import BackwardAnalysis
@@ -148,11 +148,27 @@ def ud_option(function):
     help="Output only source file names and line numbers",
     is_flag=True,
 )
-def report(input, output, start, end, tag, insn_seq, srcline):
+@click.option(
+    "--header/--no-header",
+    help="Show trace header",
+    is_flag=True,
+    default=True,
+)
+@click.option(
+    "--summary/--no-summary",
+    help="Show trace summary",
+    is_flag=True,
+    default=True,
+)
+def report(
+    input, output, start, end, tag, insn_seq, srcline, header: bool, summary: bool
+):
     if len(tag) == 0:
         tag = None
     if len(insn_seq) == 0:
         insn_seq = None
+    else:
+        insn_seq = [InsnSeq(value) for value in insn_seq]
     with Analysis(
         input,
         first_entry_index=start,
@@ -165,7 +181,7 @@ def report(input, output, start, end, tag, insn_seq, srcline):
             kind = DumpKind.Source
         else:
             kind = DumpKind.Raw
-        analysis.trace.dump(output, kind)
+        analysis.trace.dump(output, kind, header, summary)
 
 
 @main.command(help="Perform use-def analysis on the trace")
@@ -375,6 +391,7 @@ def ldst(input, index, ud, output, pc_range):
             return result
 
         mem = IntervalTree(merge=merge)
+        analysis.trace.seek_insn(0)
         for entry in analysis.trace:
             start = entry.addr
             end = entry.addr + len(entry.value)
