@@ -152,7 +152,7 @@ class BackwardAnalysis:
         mem_use_entries = []
         if trace_index.value == 0:
             return reg_use_entries, mem_use_entries
-        self.trace.seek_insn(TraceIndex(trace_index.value - 1))
+        self.trace.seek_insn(trace_index)
         entry = next(self.trace)
         insn_seq = entry.insn_seq
         while True:

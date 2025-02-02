@@ -442,10 +442,11 @@ struct NoOp {
 DEFINE_IDENTIFIER(TraceIndex, std::uint32_t);
 #define PRIuTraceIndex PRIu32
 #define PRIxTraceIndex PRIx32
+constexpr TraceIndex kFirstTraceIndex{1};
 
 struct Seeker {
   Seeker()
-      : traceIndex{std::numeric_limits<TraceIndex::value_type>::max()},
+      : traceIndex{kFirstTraceIndex.value - 1},
         prevInsnSeq{std::numeric_limits<InsnSeq::value_type>::max()} {}
 
   template <Endianness E, typename W>
@@ -875,10 +876,12 @@ class Trace : public TraceBase {
   [[nodiscard]] int SeekInsn(TraceIndex traceIndex) override {
     Seeker visitor;
     if (HasInsnIndex()) {
-      std::uint32_t insnIndexIndex = traceIndex.value >> insnIndexStepShift_;
+      std::uint32_t insnIndexIndex =
+          (traceIndex.value - kFirstTraceIndex.value) >> insnIndexStepShift_;
       if (insnIndexIndex >= insnIndex_.size()) return -EINVAL;
       Rewind(insnIndex_[insnIndexIndex]);
-      visitor.traceIndex.value = insnIndexIndex << insnIndexStepShift_;
+      visitor.traceIndex.value =
+          kFirstTraceIndex.value + (insnIndexIndex << insnIndexStepShift_);
       if (visitor.traceIndex == traceIndex) return 0;
       visitor.traceIndex.value--;
     } else {
@@ -967,7 +970,8 @@ class Trace : public TraceBase {
       std::uint8_t* prev = cur_;
       if ((err = VisitOne(&visitor)) < 0) return err;
       if (visitor.seeker.traceIndex != prevTraceIndex) {
-        if ((visitor.seeker.traceIndex.value & stepMask) == 0)
+        if (((visitor.seeker.traceIndex.value - kFirstTraceIndex.value) &
+             stepMask) == 0)
           insnIndex_.push_back(InsnIndexEntry{static_cast<size_t>(prev - data_),
                                               entryIndex_ - 1});
         prevTraceIndex = visitor.seeker.traceIndex;
@@ -1675,7 +1679,7 @@ class UdState {
     typename Trace<E, W>::ScopedRewind scopedRewind(fullTrace);
     return fullTrace
         ->template SeekDef<typename UdTraits<DefIndex, W>::DefSeeker>(
-            TraceIndex{traceIndex.value - 1},
+            traceIndex,
             defIndex.value -
                 (trace[traceIndex.value].*UdTraits<DefIndex, W>::StartDefIndex)
                     .value,
@@ -1784,6 +1788,7 @@ class Ud : public UdBase {
       disasm_.emplace_back("<unknown>");
       trace_.reserve(expectedInsnCount);
       AddTrace(insnSeq);
+      assert(trace_.size() == kFirstTraceIndex.value);
       regState_.AddDef(0, std::numeric_limits<W>::max());
       memState_.AddDef(0, std::numeric_limits<W>::max());
     }
@@ -2413,7 +2418,7 @@ BOOST_PYTHON_MODULE(_memtrace) {
       .def_readwrite("first_entry_index", &TraceFilter::firstEntryIndex)
       .def_readwrite("last_entry_index", &TraceFilter::lastEntryIndex)
       .def_readwrite("tag_mask", &TraceFilter::tagMask)
-      /* There is no set_indexing_suite, so use vectors in the interface. */
+      // There is no set_indexing_suite, so use vectors in the interface.
       .add_property("insn_seqs", &TraceFilter::GetInsnSeqs,
                     &TraceFilter::SetInsnSeqs);
   bp::class_<TraceBase, boost::noncopyable>("_Trace", bp::no_init)

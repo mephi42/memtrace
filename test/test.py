@@ -344,7 +344,7 @@ class MachineTest(CommonTest):
             endianness,
             trace.get_word_size(),
         )
-        i = 0
+        i = 1  # kFirstTraceIndex
         with open(actual_seek_txt, "w") as fp:
             while True:
                 try:
