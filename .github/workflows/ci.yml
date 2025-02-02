@@ -87,7 +87,7 @@ jobs:
     strategy:
       matrix:
         arch: [aarch64,arm,i686,ppc64,ppc64le,s390x,x86_64]
-        python: [cp36-cp36m,cp37-cp37m,cp38-cp38,cp39-cp39,cp310-cp310,cp311-cp311,cp312-cp312]
+        python: [cp36-cp36m,cp37-cp37m,cp38-cp38,cp39-cp39,cp310-cp310,cp311-cp311,cp312-cp312,cp313-cp313]
     runs-on: ubuntu-latest
 
     steps:
