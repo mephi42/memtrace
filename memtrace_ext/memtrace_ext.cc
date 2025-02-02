@@ -639,12 +639,13 @@ struct Range {
   W endAddr;
 };
 
-DEFINE_IDENTIFIER(DefIndex, std::uint32_t);
+DEFINE_IDENTIFIER(RegDefIndex, std::uint32_t);
+DEFINE_IDENTIFIER(MemDefIndex, std::uint32_t);
 
 template <typename W>
 struct DefSeeker {
   DefSeeker()
-      : relativeDefIndex(std::numeric_limits<DefIndex::value_type>::max()),
+      : relativeDefIndex(std::numeric_limits<std::uint32_t>::max()),
         range({0, 0}) {}
 
   void HandleDef(W start, W end) {
@@ -652,7 +653,7 @@ struct DefSeeker {
     range = {start, end};
   }
 
-  DefIndex::value_type relativeDefIndex;
+  std::uint32_t relativeDefIndex;
   Range<W> range;
 
   template <typename Entry>
@@ -914,8 +915,7 @@ class Trace : public TraceBase {
 
   template <typename DefSeeker>
   [[nodiscard]] int SeekDef(TraceIndex traceIndex,
-                            DefIndex::value_type relativeDefIndex,
-                            Range<W>* range) {
+                            std::uint32_t relativeDefIndex, Range<W>* range) {
     int err;
     if ((err = SeekInsn(traceIndex)) < 0) return err;
     DefSeeker visitor;
@@ -1265,16 +1265,34 @@ struct InsnInCode {
   std::uint32_t textSize;
 };
 
+DEFINE_IDENTIFIER(RegUseIndex, std::uint32_t);
+DEFINE_IDENTIFIER(MemUseIndex, std::uint32_t);
+
 struct InsnInTrace {
   InsnSeq insnSeq;
-  std::uint32_t regUseStartIndex;
-  std::uint32_t memUseStartIndex;
-  DefIndex regDefStartIndex;
-  DefIndex memDefStartIndex;
+  RegUseIndex regUseStartIndex;
+  MemUseIndex memUseStartIndex;
+  RegDefIndex regDefStartIndex;
+  MemDefIndex memDefStartIndex;
   std::uint8_t regUseCount;
   std::uint8_t memUseCount;
   std::uint8_t regDefCount;
   std::uint8_t memDefCount;
+};
+
+template <typename T, typename W>
+struct UdTraits {};
+template <typename W>
+struct UdTraits<RegDefIndex, W> {
+  using DefSeeker = RegDefSeeker<W>;
+  static constexpr RegDefIndex InsnInTrace::*StartDefIndex =
+      &InsnInTrace::regDefStartIndex;
+};
+template <typename W>
+struct UdTraits<MemDefIndex, W> {
+  using DefSeeker = MemDefSeeker<W>;
+  static constexpr MemDefIndex InsnInTrace::*StartDefIndex =
+      &InsnInTrace::memDefStartIndex;
 };
 
 size_t GetFirstPrimeGreaterThanOrEqualTo(size_t value) {
@@ -1295,41 +1313,44 @@ size_t GetFirstPrimeGreaterThanOrEqualTo(size_t value) {
   }
 }
 
-template <typename W>
+template <typename W, typename UseIndex>
 struct PartialUse {
-  std::uint32_t first;  // uses_ index
-  Range<W> second;
+  static constexpr UseIndex kFreeSlot{
+      static_cast<typename UseIndex::value_type>(-1)};
+
+  UseIndex useIndex;
+  Range<W> range;
 };
 
-template <typename W>
-const PartialUse<W>* ScanPartialUses(const PartialUse<W>* partialUses,
-                                     size_t partialUseCount,
-                                     std::uint32_t useIndex) {
+template <typename W, typename UseIndex>
+const PartialUse<W, UseIndex>* ScanPartialUses(
+    const PartialUse<W, UseIndex>* partialUses, size_t partialUseCount,
+    UseIndex useIndex) {
   for (size_t entryIndex = 0; entryIndex < partialUseCount; entryIndex++) {
-    const PartialUse<W>& partialUse = partialUses[entryIndex];
-    if (partialUse.first == useIndex ||
-        partialUse.first == static_cast<std::uint32_t>(-1))
+    const PartialUse<W, UseIndex>& partialUse = partialUses[entryIndex];
+    if (partialUse.useIndex == useIndex ||
+        partialUse.useIndex == PartialUse<W, UseIndex>::kFreeSlot)
       return &partialUse;
   }
   return nullptr;
 }
 
-template <typename W>
-const PartialUse<W>& FindPartialUse(const PartialUse<W>* hashTable,
-                                    size_t hashTableSize,
-                                    std::uint32_t useIndex) {
-  size_t entryIndex = useIndex % hashTableSize;
-  const PartialUse<W>* use = ScanPartialUses(
+template <typename W, typename UseIndex>
+const PartialUse<W, UseIndex>& FindPartialUse(
+    const PartialUse<W, UseIndex>* hashTable, size_t hashTableSize,
+    UseIndex useIndex) {
+  size_t entryIndex = useIndex.value % hashTableSize;
+  const PartialUse<W, UseIndex>* use = ScanPartialUses(
       hashTable + entryIndex, hashTableSize - entryIndex, useIndex);
   if (use == nullptr) use = ScanPartialUses(hashTable, entryIndex, useIndex);
   assert(use != nullptr);
   return *use;
 }
 
-template <typename W>
+template <typename W, typename UseIndex>
 class PartialUses {
  public:
-  using const_iterator = const PartialUse<W>*;
+  using const_iterator = const PartialUse<W, UseIndex>*;
 
   PartialUses() : load_(0), maxLoad_(0) {}
 
@@ -1339,59 +1360,60 @@ class PartialUses {
     if ((err = entries_.Init(path, mode)) < 0) return err;
     if (mode != InitMode::OpenExisting) {
       entries_.resize(11);
-      for (size_t i = 0; i < entries_.size(); i++) entries_[i].first = -1;
+      for (size_t i = 0; i < entries_.size(); i++)
+        entries_[i].useIndex = PartialUse<W, UseIndex>::kFreeSlot;
     }
     maxLoad_ = entries_.size() / 2;
     return 0;
   }
 
-  PartialUse<W>* end() const { return nullptr; }
+  PartialUse<W, UseIndex>* end() const { return nullptr; }
 
-  Range<W>& operator[](std::uint32_t useIndex) {
-    PartialUse<W>& result1 = const_cast<PartialUse<W>&>(
+  Range<W>& operator[](UseIndex useIndex) {
+    PartialUse<W, UseIndex>& result1 = const_cast<PartialUse<W, UseIndex>&>(
         FindPartialUse(entries_.data(), entries_.size(), useIndex));
-    if (result1.first == useIndex) return result1.second;
-    result1.first = useIndex;
+    if (result1.useIndex == useIndex) return result1.range;
+    result1.useIndex = useIndex;
     load_ += 1;
-    if (load_ <= maxLoad_) return result1.second;
+    if (load_ <= maxLoad_) return result1.range;
     reserve(load_ * 2);
-    PartialUse<W>& result2 = const_cast<PartialUse<W>&>(
+    PartialUse<W, UseIndex>& result2 = const_cast<PartialUse<W, UseIndex>&>(
         FindPartialUse(entries_.data(), entries_.size(), useIndex));
-    assert(result2.first == useIndex);
-    return result2.second;
+    assert(result2.useIndex == useIndex);
+    return result2.range;
   }
 
-  const PartialUse<W>* find(std::uint32_t useIndex) const {
-    const PartialUse<W>& result =
+  const PartialUse<W, UseIndex>* find(UseIndex useIndex) const {
+    const PartialUse<W, UseIndex>& result =
         FindPartialUse(entries_.data(), entries_.size(), useIndex);
-    return result.first == useIndex ? &result : nullptr;
+    return result.useIndex == useIndex ? &result : nullptr;
   }
 
-  const MmVector<PartialUse<W>>& GetData() const { return entries_; }
+  const MmVector<PartialUse<W, UseIndex>>& GetData() const { return entries_; }
 
   void reserve(size_t n) {
     size_t newSize = GetFirstPrimeGreaterThanOrEqualTo(n * 2);
-    MmVector<PartialUse<W>> oldEntries;
+    MmVector<PartialUse<W, UseIndex>> oldEntries;
     if (oldEntries.Init(path_.c_str(), InitMode::CreateTemporary) < 0)
       throw std::bad_alloc();
     oldEntries.insert(oldEntries.end(), entries_.begin(), entries_.end());
     size_t oldSize = entries_.size();
     entries_.resize(newSize);
     for (size_t i = 0; i < newSize; i++)
-      entries_[i].first = static_cast<std::uint32_t>(-1);
+      entries_[i].useIndex = PartialUse<W, UseIndex>::kFreeSlot;
     for (size_t oldEntryIndex = 0; oldEntryIndex < oldSize; oldEntryIndex++) {
-      const PartialUse<W>& oldEntry = oldEntries[oldEntryIndex];
-      if (oldEntry.first == static_cast<std::uint32_t>(-1)) continue;
-      PartialUse<W>& newEntry = const_cast<PartialUse<W>&>(
-          FindPartialUse(entries_.data(), newSize, oldEntry.first));
-      assert(newEntry.first == static_cast<std::uint32_t>(-1));
+      const PartialUse<W, UseIndex>& oldEntry = oldEntries[oldEntryIndex];
+      if (oldEntry.useIndex == PartialUse<W, UseIndex>::kFreeSlot) continue;
+      PartialUse<W, UseIndex>& newEntry = const_cast<PartialUse<W, UseIndex>&>(
+          FindPartialUse(entries_.data(), newSize, oldEntry.useIndex));
+      assert((newEntry.useIndex == PartialUse<W, UseIndex>::kFreeSlot));
       newEntry = oldEntry;
     }
     maxLoad_ = newSize / 2;
   }
 
  private:
-  MmVector<PartialUse<W>> entries_;
+  MmVector<PartialUse<W, UseIndex>> entries_;
   size_t load_;
   size_t maxLoad_;
   std::string path_;
@@ -1403,7 +1425,7 @@ struct ResolvedUse {
   TraceIndex traceIndex;
 };
 
-template <typename W>
+template <typename W, typename UseIndex, typename DefIndex>
 class UdState {
  public:
   [[nodiscard]] int Init(const PathWithPlaceholder& path, InitMode mode,
@@ -1426,7 +1448,8 @@ class UdState {
     W endAddr = startAddr + size;
     for (It it = addressSpace_.lower_bound(startAddr + 1);
          it != addressSpace_.end() && it->second.startAddr < endAddr; ++it) {
-      std::uint32_t useIndex = static_cast<std::uint32_t>(uses_.size());
+      UseIndex useIndex{
+          static_cast<typename UseIndex::value_type>(uses_.size())};
       uses_.push_back(it->second.defIndex);
       W maxStartAddr = std::max(startAddr, it->second.startAddr);
       W minEndAddr = std::min(endAddr, it->first);
@@ -1474,16 +1497,15 @@ class UdState {
   size_t GetDefCount() const { return defs_.size(); }
   size_t GetPartialUseCount() const { return partialUses_.GetData().size(); }
 
-  template <Endianness E, DefIndex InsnInTrace::*StartDefIndex>
-  [[nodiscard]] int DumpUses(FILE* f, std::uint32_t startIndex,
-                             std::uint32_t endIndex,
+  template <Endianness E>
+  [[nodiscard]] int DumpUses(FILE* f, UseIndex startIndex, UseIndex endIndex,
                              const MmVector<InsnInTrace>& trace,
                              Trace<E, W>* fullTrace) const {
-    for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
+    for (UseIndex useIndex = startIndex; useIndex < endIndex;
+         useIndex.value++) {
       ResolvedUse<W> use;
       int err;
-      if ((err = ResolveUse<E, StartDefIndex>(&use, useIndex, trace,
-                                              fullTrace)) < 0)
+      if ((err = ResolveUse<E>(&use, useIndex, trace, fullTrace)) < 0)
         return err;
       std::fprintf(f,
                    useIndex == startIndex
@@ -1496,7 +1518,7 @@ class UdState {
     return 0;
   }
 
-  template <Endianness E, DefIndex InsnInTrace::*StartDefIndex>
+  template <Endianness E>
   [[nodiscard]] int DumpDefs(FILE* f, DefIndex startIndex, DefIndex endIndex,
                              const MmVector<InsnInTrace>& trace,
                              Trace<E, W>* fullTrace) const {
@@ -1504,8 +1526,7 @@ class UdState {
          defIndex.value++) {
       Range<W> defRange;
       int err;
-      if ((err = GetDefRange<E, StartDefIndex>(&defRange, defIndex, trace,
-                                               fullTrace)) < 0)
+      if ((err = GetDefRange<E>(&defRange, defIndex, trace, fullTrace)) < 0)
         return err;
       std::fprintf(f,
                    defIndex == startIndex ? "0x%" PRIx64 "-0x%" PRIx64
@@ -1516,18 +1537,17 @@ class UdState {
     return 0;
   }
 
-  template <Endianness E, DefIndex InsnInTrace::*StartDefIndex>
+  template <Endianness E>
   [[nodiscard]] int DumpUsesDot(std::FILE* f, TraceIndex traceIndex,
-                                std::uint32_t startIndex,
-                                std::uint32_t endIndex,
+                                UseIndex startIndex, UseIndex endIndex,
                                 const MmVector<InsnInTrace>& trace,
                                 Trace<E, W>* fullTrace,
                                 const char* prefix) const {
-    for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
+    for (UseIndex useIndex = startIndex; useIndex < endIndex;
+         useIndex.value++) {
       ResolvedUse<W> use;
       int err;
-      if ((err = ResolveUse<E, StartDefIndex>(&use, useIndex, trace,
-                                              fullTrace)) < 0)
+      if ((err = ResolveUse<E>(&use, useIndex, trace, fullTrace)) < 0)
         return err;
       std::fprintf(f,
                    "    %" PRIuTraceIndex " -> %" PRIuTraceIndex
@@ -1539,17 +1559,17 @@ class UdState {
     return 0;
   }
 
-  template <Endianness E, DefIndex InsnInTrace::*StartDefIndex>
-  [[nodiscard]] int DumpUsesHtml(std::FILE* f, std::uint32_t startIndex,
-                                 std::uint32_t endIndex,
+  template <Endianness E>
+  [[nodiscard]] int DumpUsesHtml(std::FILE* f, UseIndex startIndex,
+                                 UseIndex endIndex,
                                  const MmVector<InsnInTrace>& trace,
                                  Trace<E, W>* fullTrace,
                                  const char* prefix) const {
-    for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
+    for (UseIndex useIndex = startIndex; useIndex < endIndex;
+         useIndex.value++) {
       ResolvedUse<W> use;
       int err;
-      if ((err = ResolveUse<E, StartDefIndex>(&use, useIndex, trace,
-                                              fullTrace)) < 0)
+      if ((err = ResolveUse<E>(&use, useIndex, trace, fullTrace)) < 0)
         return err;
       std::fprintf(f,
                    "            <a href=\"#%" PRIuTraceIndex "\">%s0x%" PRIx64
@@ -1561,7 +1581,7 @@ class UdState {
     return 0;
   }
 
-  template <Endianness E, DefIndex InsnInTrace::*StartDefIndex>
+  template <Endianness E>
   [[nodiscard]] int DumpDefsHtml(std::FILE* f, DefIndex startIndex,
                                  DefIndex endIndex,
                                  const MmVector<InsnInTrace>& trace,
@@ -1571,8 +1591,7 @@ class UdState {
          defIndex.value++) {
       Range<W> defRange;
       int err;
-      if ((err = GetDefRange<E, StartDefIndex>(&defRange, defIndex, trace,
-                                               fullTrace)) < 0)
+      if ((err = GetDefRange<E>(&defRange, defIndex, trace, fullTrace)) < 0)
         return err;
       std::fprintf(f, "            %s0x%" PRIx64 "-0x%" PRIx64 "\n", prefix,
                    static_cast<std::uint64_t>(defRange.startAddr),
@@ -1581,18 +1600,17 @@ class UdState {
     return 0;
   }
 
-  template <Endianness E, DefIndex InsnInTrace::*StartDefIndex>
+  template <Endianness E>
   [[nodiscard]] int DumpUsesCsv(std::FILE* f, TraceIndex traceIndex,
-                                std::uint32_t startIndex,
-                                std::uint32_t endIndex,
+                                UseIndex startIndex, UseIndex endIndex,
                                 const MmVector<InsnInTrace>& trace,
                                 Trace<E, W>* fullTrace,
                                 const char* prefix) const {
-    for (std::uint32_t useIndex = startIndex; useIndex < endIndex; useIndex++) {
+    for (UseIndex useIndex = startIndex; useIndex < endIndex;
+         useIndex.value++) {
       ResolvedUse<W> use;
       int err;
-      if ((err = ResolveUse<E, StartDefIndex>(&use, useIndex, trace,
-                                              fullTrace)) < 0)
+      if ((err = ResolveUse<E>(&use, useIndex, trace, fullTrace)) < 0)
         return err;
       std::fprintf(f,
                    "%" PRIuTraceIndex ",%" PRIuTraceIndex ",%s,%" PRIu64
@@ -1605,7 +1623,7 @@ class UdState {
   }
 
   void AddDef(W startAddr, W endAddr) {
-    DefIndex defIndex{static_cast<DefIndex::value_type>(defs_.size())};
+    DefIndex defIndex{static_cast<typename DefIndex::value_type>(defs_.size())};
     defs_.emplace_back();
     addressSpace_[endAddr] = EntryValue{
         startAddr,
@@ -1614,40 +1632,38 @@ class UdState {
     };
   }
 
-  template <DefIndex InsnInTrace::*StartDefIndex>
   TraceIndex GetTraceForDef(DefIndex defIndex,
                             const MmVector<InsnInTrace>& trace) const {
     MmVector<InsnInTrace>::const_iterator it = std::upper_bound(
         trace.begin(), trace.end(), defIndex,
         [](DefIndex defIndex, const InsnInTrace& trace) -> bool {
-          return defIndex < trace.*StartDefIndex;
+          return defIndex < trace.*UdTraits<DefIndex, W>::StartDefIndex;
         });
     --it;
     return TraceIndex{static_cast<TraceIndex::value_type>(it - trace.begin())};
   }
 
-  template <Endianness E, DefIndex InsnInTrace::*StartDefIndex>
-  [[nodiscard]] int ResolveUse(ResolvedUse<W>* use, std::uint32_t useIndex,
+  template <Endianness E>
+  [[nodiscard]] int ResolveUse(ResolvedUse<W>* use, UseIndex useIndex,
                                const MmVector<InsnInTrace>& trace,
                                Trace<E, W>* fullTrace) const {
-    DefIndex defIndex = uses_[useIndex];
+    DefIndex defIndex = uses_[useIndex.value];
     Range<W> defRange;
-    const PartialUse<W>& partialUse = FindPartialUse(
+    const PartialUse<W, UseIndex>& partialUse = FindPartialUse(
         partialUses_.GetData().data(), partialUses_.GetData().size(), useIndex);
-    if (partialUse.first == static_cast<std::uint32_t>(-1)) {
+    if (partialUse.useIndex == PartialUse<W, UseIndex>::kFreeSlot) {
       int err;
-      if ((err = GetDefRange<E, StartDefIndex>(&defRange, defIndex, trace,
-                                               fullTrace)) < 0)
+      if ((err = GetDefRange<E>(&defRange, defIndex, trace, fullTrace)) < 0)
         return err;
     } else {
-      defRange = partialUse.second;
+      defRange = partialUse.range;
     }
-    TraceIndex traceIndex = GetTraceForDef<StartDefIndex>(defIndex, trace);
+    TraceIndex traceIndex = GetTraceForDef(defIndex, trace);
     *use = ResolvedUse<W>{defRange, traceIndex};
     return 0;
   }
 
-  template <Endianness E, DefIndex InsnInTrace::*StartDefIndex>
+  template <Endianness E>
   [[nodiscard]] int GetDefRange(Range<W>* range, DefIndex defIndex,
                                 const MmVector<InsnInTrace>& trace,
                                 Trace<E, W>* fullTrace) const {
@@ -1655,20 +1671,21 @@ class UdState {
       *range = Range<W>{0, std::numeric_limits<W>::max()};
       return 0;
     }
-    TraceIndex traceIndex = GetTraceForDef<StartDefIndex>(defIndex, trace);
+    TraceIndex traceIndex = GetTraceForDef(defIndex, trace);
     typename Trace<E, W>::ScopedRewind scopedRewind(fullTrace);
-    return fullTrace->template SeekDef<std::conditional_t<
-        StartDefIndex == &InsnInTrace::regDefStartIndex, RegDefSeeker<W>,
-        std::conditional_t<StartDefIndex == &InsnInTrace::memDefStartIndex,
-                           MemDefSeeker<W>, void>>>(
-        TraceIndex{traceIndex.value - 1},
-        defIndex.value - (trace[traceIndex.value].*StartDefIndex).value, range);
+    return fullTrace
+        ->template SeekDef<typename UdTraits<DefIndex, W>::DefSeeker>(
+            TraceIndex{traceIndex.value - 1},
+            defIndex.value -
+                (trace[traceIndex.value].*UdTraits<DefIndex, W>::StartDefIndex)
+                    .value,
+            range);
   }
 
  private:
   MmVector<DefIndex> uses_;
   // On average, 4% register and 12% memory uses are partial.
-  PartialUses<W> partialUses_;
+  PartialUses<W, UseIndex> partialUses_;
   MmVector<Def<W>> defs_;
   struct EntryValue {
     W startAddr;
@@ -1710,12 +1727,12 @@ class UdBase {
   virtual std::string GetDisasmForCode(InsnSeq insnSeq) const = 0;
   virtual std::vector<TraceIndex> GetTracesForCode(InsnSeq insnSeq) const = 0;
   virtual InsnSeq GetCodeForTrace(TraceIndex traceIndex) const = 0;
-  virtual std::vector<std::uint32_t> GetRegUsesForTrace(
+  virtual std::vector<RegUseIndex> GetRegUsesForTrace(
       TraceIndex traceIndex) const = 0;
-  virtual std::vector<std::uint32_t> GetMemUsesForTrace(
+  virtual std::vector<MemUseIndex> GetMemUsesForTrace(
       TraceIndex traceIndex) const = 0;
-  virtual TraceIndex GetTraceForRegUse(std::uint32_t regUse) const = 0;
-  virtual TraceIndex GetTraceForMemUse(std::uint32_t memUse) const = 0;
+  virtual TraceIndex GetTraceForRegUse(RegUseIndex regUse) const = 0;
+  virtual TraceIndex GetTraceForMemUse(MemUseIndex memUse) const = 0;
   virtual int DumpDot(const char* dot) const = 0;
   virtual int DumpHtml(const char* html) const = 0;
   virtual int DumpCsv(const char* csv) const = 0;
@@ -1905,42 +1922,42 @@ class Ud : public UdBase {
     return GetTrace(traceIndex).insnSeq;
   }
 
-  std::vector<std::uint32_t> GetRegUsesForTrace(
+  std::vector<RegUseIndex> GetRegUsesForTrace(
       TraceIndex traceIndex) const override {
-    std::vector<std::uint32_t> regUses;
-    for (std::uint32_t
+    std::vector<RegUseIndex> regUses;
+    for (RegUseIndex
              regUse = GetTrace(traceIndex).regUseStartIndex,
-             regUseEndIndex = regUse + GetTrace(traceIndex).regUseCount;
-         regUse < regUseEndIndex; regUse++)
+             regUseEndIndex{regUse.value + GetTrace(traceIndex).regUseCount};
+         regUse < regUseEndIndex; regUse.value++)
       regUses.push_back(regUse);
     return regUses;
   }
 
-  std::vector<std::uint32_t> GetMemUsesForTrace(
+  std::vector<MemUseIndex> GetMemUsesForTrace(
       TraceIndex traceIndex) const override {
-    std::vector<std::uint32_t> memUses;
-    for (std::uint32_t
+    std::vector<MemUseIndex> memUses;
+    for (MemUseIndex
              memUse = GetTrace(traceIndex).memUseStartIndex,
-             memUseEndIndex = memUse + GetTrace(traceIndex).memUseCount;
-         memUse < memUseEndIndex; memUse++)
+             memUseEndIndex{memUse.value + GetTrace(traceIndex).memUseCount};
+         memUse < memUseEndIndex; memUse.value++)
       memUses.push_back(memUse);
     return memUses;
   }
 
-  TraceIndex GetTraceForRegUse(std::uint32_t regUse) const override {
+  TraceIndex GetTraceForRegUse(RegUseIndex useIndex) const override {
     ResolvedUse<W> use;
     int err;
-    if ((err = regState_.template ResolveUse<E, &InsnInTrace::regDefStartIndex>(
-             &use, regUse, trace_, fullTrace_.get())) < 0)
+    if ((err = regState_.template ResolveUse<E>(&use, useIndex, trace_,
+                                                fullTrace_.get())) < 0)
       throw std::runtime_error("ResolveUse() failed");
     return use.traceIndex;
   }
 
-  TraceIndex GetTraceForMemUse(std::uint32_t memUse) const override {
+  TraceIndex GetTraceForMemUse(MemUseIndex useIndex) const override {
     ResolvedUse<W> use;
     int err;
-    if ((err = memState_.template ResolveUse<E, &InsnInTrace::memDefStartIndex>(
-             &use, memUse, trace_, fullTrace_.get())) < 0)
+    if ((err = memState_.template ResolveUse<E>(&use, useIndex, trace_,
+                                                fullTrace_.get())) < 0)
       throw std::runtime_error("ResolveUse() failed");
     return use.traceIndex;
   }
@@ -1948,8 +1965,8 @@ class Ud : public UdBase {
  private:
   [[nodiscard]] int Flush() {
     InsnInTrace& trace = trace_.back();
-    size_t regUseCount = regState_.GetUseCount() - trace.regUseStartIndex;
-    size_t memUseCount = memState_.GetUseCount() - trace.memUseStartIndex;
+    size_t regUseCount = regState_.GetUseCount() - trace.regUseStartIndex.value;
+    size_t memUseCount = memState_.GetUseCount() - trace.memUseStartIndex.value;
     size_t regDefCount = regState_.GetDefCount() - trace.regDefStartIndex.value;
     size_t memDefCount = memState_.GetDefCount() - trace.memDefStartIndex.value;
     if (regUseCount > std::numeric_limits<std::uint8_t>::max() ||
@@ -1969,27 +1986,27 @@ class Ud : public UdBase {
       HexDump(f_, &text_[code.textIndex], code.textSize);
       std::fprintf(f_, " %s reg_uses=[", GetDisasm(trace.insnSeq).c_str());
       int err;
-      if ((err = regState_.template DumpUses<E, &InsnInTrace::regDefStartIndex>(
+      if ((err = regState_.template DumpUses<E>(
                f_, trace.regUseStartIndex,
-               trace.regUseStartIndex + trace.regUseCount, trace_,
-               fullTrace_.get())) < 0)
+               RegUseIndex{trace.regUseStartIndex.value + trace.regUseCount},
+               trace_, fullTrace_.get())) < 0)
         return err;
       std::fprintf(f_, "] reg_defs=[");
-      if ((err = regState_.template DumpDefs<E, &InsnInTrace::regDefStartIndex>(
+      if ((err = regState_.template DumpDefs<E>(
                f_, trace.regDefStartIndex,
-               DefIndex{trace.regDefStartIndex.value + trace.regDefCount},
+               RegDefIndex{trace.regDefStartIndex.value + trace.regDefCount},
                trace_, fullTrace_.get())) < 0)
         return err;
       std::fprintf(f_, "] mem_uses=[");
-      if ((err = memState_.template DumpUses<E, &InsnInTrace::memDefStartIndex>(
+      if ((err = memState_.template DumpUses<E>(
                f_, trace.memUseStartIndex,
-               trace.memUseStartIndex + trace.memUseCount, trace_,
-               fullTrace_.get())) < 0)
+               MemUseIndex{trace.memUseStartIndex.value + trace.memUseCount},
+               trace_, fullTrace_.get())) < 0)
         return err;
       std::fprintf(f_, "] mem_defs=[");
-      if ((err = memState_.template DumpDefs<E, &InsnInTrace::memDefStartIndex>(
+      if ((err = memState_.template DumpDefs<E>(
                f_, trace.memDefStartIndex,
-               DefIndex{trace.memDefStartIndex.value + trace.memDefCount},
+               MemDefIndex{trace.memDefStartIndex.value + trace.memDefCount},
                trace_, fullTrace_.get())) < 0)
         return err;
       std::fprintf(f_, "]\n");
@@ -2001,14 +2018,14 @@ class Ud : public UdBase {
   int AddTrace(InsnSeq insnSeq) {
     InsnInTrace& trace = trace_.emplace_back();
     trace.insnSeq = insnSeq;
-    trace.regUseStartIndex =
-        static_cast<std::uint32_t>(regState_.GetUseCount());
-    trace.memUseStartIndex =
-        static_cast<std::uint32_t>(memState_.GetUseCount());
+    trace.regUseStartIndex.value =
+        static_cast<RegUseIndex::value_type>(regState_.GetUseCount());
+    trace.memUseStartIndex.value =
+        static_cast<MemUseIndex::value_type>(memState_.GetUseCount());
     trace.regDefStartIndex.value =
-        static_cast<DefIndex::value_type>(regState_.GetDefCount());
+        static_cast<RegDefIndex::value_type>(regState_.GetDefCount());
     trace.memDefStartIndex.value =
-        static_cast<DefIndex::value_type>(memState_.GetDefCount());
+        static_cast<MemDefIndex::value_type>(memState_.GetDefCount());
     return 0;
   }
 
@@ -2036,17 +2053,15 @@ class Ud : public UdBase {
                    static_cast<std::uint64_t>(code.pc),
                    GetDisasm(trace.insnSeq).c_str());
       int err;
-      if ((err = regState_
-                     .template DumpUsesDot<E, &InsnInTrace::regDefStartIndex>(
-                         f, traceIndex, trace.regUseStartIndex,
-                         trace.regUseStartIndex + trace.regUseCount, trace_,
-                         fullTrace_.get(), "r")) < 0)
+      if ((err = regState_.template DumpUsesDot<E>(
+               f, traceIndex, trace.regUseStartIndex,
+               RegUseIndex{trace.regUseStartIndex.value + trace.regUseCount},
+               trace_, fullTrace_.get(), "r")) < 0)
         return err;
-      if ((err = memState_
-                     .template DumpUsesDot<E, &InsnInTrace::memDefStartIndex>(
-                         f, traceIndex, trace.memUseStartIndex,
-                         trace.memUseStartIndex + trace.memUseCount, trace_,
-                         fullTrace_.get(), "m")) < 0)
+      if ((err = memState_.template DumpUsesDot<E>(
+               f, traceIndex, trace.memUseStartIndex,
+               MemUseIndex{trace.memUseStartIndex.value + trace.memUseCount},
+               trace_, fullTrace_.get(), "m")) < 0)
         return err;
     }
     std::fprintf(f, "}\n");
@@ -2097,34 +2112,28 @@ class Ud : public UdBase {
                    "</td>\n"
                    "        <td>\n");
       int err;
-      if ((err = regState_
-                     .template DumpUsesHtml<E, &InsnInTrace::regDefStartIndex>(
-                         f, trace.regUseStartIndex,
-                         trace.regUseStartIndex + trace.regUseCount, trace_,
-                         fullTrace_.get(), "r")) < 0)
+      if ((err = regState_.template DumpUsesHtml<E>(
+               f, trace.regUseStartIndex,
+               RegUseIndex{trace.regUseStartIndex.value + trace.regUseCount},
+               trace_, fullTrace_.get(), "r")) < 0)
         return err;
-      if ((err = memState_
-                     .template DumpUsesHtml<E, &InsnInTrace::memDefStartIndex>(
-                         f, trace.memUseStartIndex,
-                         trace.memUseStartIndex + trace.memUseCount, trace_,
-                         fullTrace_.get(), "m")) < 0)
+      if ((err = memState_.template DumpUsesHtml<E>(
+               f, trace.memUseStartIndex,
+               MemUseIndex{trace.memUseStartIndex.value + trace.memUseCount},
+               trace_, fullTrace_.get(), "m")) < 0)
         return err;
       std::fprintf(f,
                    "        </td>\n"
                    "        <td>\n");
-      if ((err = regState_
-                     .template DumpDefsHtml<E, &InsnInTrace::regDefStartIndex>(
-                         f, trace.regDefStartIndex,
-                         DefIndex{trace.regDefStartIndex.value +
-                                  trace.regDefCount},
-                         trace_, fullTrace_.get(), "r")) < 0)
+      if ((err = regState_.template DumpDefsHtml<E>(
+               f, trace.regDefStartIndex,
+               RegDefIndex{trace.regDefStartIndex.value + trace.regDefCount},
+               trace_, fullTrace_.get(), "r")) < 0)
         return err;
-      if ((err = memState_
-                     .template DumpDefsHtml<E, &InsnInTrace::memDefStartIndex>(
-                         f, trace.memDefStartIndex,
-                         DefIndex{trace.memDefStartIndex.value +
-                                  trace.memDefCount},
-                         trace_, fullTrace_.get(), "m")) < 0)
+      if ((err = memState_.template DumpDefsHtml<E>(
+               f, trace.memDefStartIndex,
+               MemDefIndex{trace.memDefStartIndex.value + trace.memDefCount},
+               trace_, fullTrace_.get(), "m")) < 0)
         return err;
       std::fprintf(f,
                    "        </td>\n"
@@ -2174,17 +2183,15 @@ class Ud : public UdBase {
          traceIndex < size; traceIndex.value++) {
       const InsnInTrace& trace = GetTrace(traceIndex);
       int err;
-      if ((err = regState_
-                     .template DumpUsesCsv<E, &InsnInTrace::regDefStartIndex>(
-                         f, traceIndex, trace.regUseStartIndex,
-                         trace.regUseStartIndex + trace.regUseCount, trace_,
-                         fullTrace_.get(), "r")) < 0)
+      if ((err = regState_.template DumpUsesCsv<E>(
+               f, traceIndex, trace.regUseStartIndex,
+               RegUseIndex{trace.regUseStartIndex.value + trace.regUseCount},
+               trace_, fullTrace_.get(), "r")) < 0)
         return err;
-      if ((err = memState_
-                     .template DumpUsesCsv<E, &InsnInTrace::memDefStartIndex>(
-                         f, traceIndex, trace.memUseStartIndex,
-                         trace.memUseStartIndex + trace.memUseCount, trace_,
-                         fullTrace_.get(), "m")) < 0)
+      if ((err = memState_.template DumpUsesCsv<E>(
+               f, traceIndex, trace.memUseStartIndex,
+               MemUseIndex{trace.memUseStartIndex.value + trace.memUseCount},
+               trace_, fullTrace_.get(), "m")) < 0)
         return err;
     }
     std::fclose(f);
@@ -2232,8 +2239,8 @@ class Ud : public UdBase {
   MmVector<std::uint8_t> text_;
   std::vector<std::string> disasm_;
   MmVector<InsnInTrace> trace_;
-  UdState<W> regState_;
-  UdState<W> memState_;
+  UdState<W, RegUseIndex, RegDefIndex> regState_;
+  UdState<W, MemUseIndex, MemDefIndex> memState_;
   PathWithPlaceholder binaryPath_;
 };
 
@@ -2473,4 +2480,6 @@ BOOST_PYTHON_MODULE(_memtrace) {
   RegisterEnumValues(&insnFlags, InsnFlags::MT_INSN_INDIRECT_JUMP);
   RegisterIdentifier<InsnSeq>("InsnSeq", "VectorOfInsnSeqs");
   RegisterIdentifier<TraceIndex>("TraceIndex", "VectorOfTraceIndices");
+  RegisterIdentifier<RegUseIndex>("RegUseIndex", "VectorOfRegUseIndices");
+  RegisterIdentifier<MemUseIndex>("MemUseIndex", "VectorOfMemUseIndices");
 }
