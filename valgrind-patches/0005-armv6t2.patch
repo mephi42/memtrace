@@ -1,7 +1,7 @@
-From 0105ff6d4d54c15c20dc9846f9947025b1728477 Mon Sep 17 00:00:00 2001
+From cf25dc2b3a65c7fc7a394815515c926429332031 Mon Sep 17 00:00:00 2001
 From: mephi42 <mephi42@gmail.com>
 Date: Sat, 1 Feb 2025 12:18:07 +0100
-Subject: [PATCH 5/5] armv6t2.patch
+Subject: [PATCH 5/6] armv6t2.patch
 
 ---
  configure.ac | 2 +-
