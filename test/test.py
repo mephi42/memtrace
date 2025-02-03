@@ -436,6 +436,22 @@ class MachineTest(CommonTest):
         self.filter_file(actual_dump_txt)
         diff_files(expected_dump_txt, actual_dump_txt)
 
+    def test_dump_entries(self) -> None:
+        dump_txt = f"{self.get_target()}-dump-entries.txt"
+        actual_dump_txt = os.path.join(self.workdir.name, dump_txt)
+        expected_dump_txt = os.path.join(self.basedir, dump_txt)
+        with self.assertRaises(SystemExit):
+            memtrace.cli.main(
+                [
+                    "dump-entries",
+                    "--input=" + os.path.join(self.workdir.name, "memtrace.out"),
+                    f"--output={actual_dump_txt}",
+                    "--count=1",
+                ]
+            )
+        self.filter_file(actual_dump_txt)
+        diff_files(expected_dump_txt, actual_dump_txt)
+
 
 class TestX86_64(MachineTest):
     @staticmethod

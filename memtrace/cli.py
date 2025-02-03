@@ -338,7 +338,7 @@ def taint_backward(
 @click.option(
     "--start-trace",
     type=AnyIntParamType(),
-    default="0",
+    default="1",
     help="Insn-in-trace index to start pretty-printing from",
 )
 @click.option(
@@ -355,7 +355,7 @@ def dump_entries(input, index, ud, output, start_trace, count):
         ud_path=ud,
     ) as analysis:
         analysis.ud
-        analysis.trace.seek_insn(start_trace)
+        analysis.trace.seek_insn(TraceIndex(start_trace))
         with open(output, "w") as fp:
             for _ in range(count):
                 entry = next(analysis.trace)
