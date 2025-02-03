@@ -1,7 +1,7 @@
-From a07d5fb0560a84e20b6bcae3fc439787657cc76a Mon Sep 17 00:00:00 2001
+From 9bda5f6ea4af3da2db389ba86fea7810c8c259f6 Mon Sep 17 00:00:00 2001
 From: mephi42 <mephi42@gmail.com>
 Date: Sat, 1 Feb 2025 12:18:07 +0100
-Subject: [PATCH 1/5] automake-copy.patch
+Subject: [PATCH 1/6] automake-copy.patch
 
 ---
  autogen.sh | 2 +-

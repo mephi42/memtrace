@@ -42,15 +42,6 @@ set(build ${CMAKE_SOURCE_DIR}/build/${uname})
 set(valgrind_build ${build}/valgrind)
 set(valgrind_install ${valgrind_build}/dist)
 set(valgrind ${valgrind_install}/bin/valgrind)
-add_custom_command(
-    OUTPUT ${valgrind_src}/configure
-    COMMAND ./autogen.sh
-    DEPENDS patch_valgrind
-            ${valgrind_src}/configure.ac
-            ${valgrind_src}/Makefile.am
-            ${valgrind_tracer_src}/Makefile.am
-    WORKING_DIRECTORY ${valgrind_src}
-)
 execute_process(
     COMMAND ${CMAKE_C_COMPILER} -dumpmachine
     RESULT_VARIABLE err
@@ -74,7 +65,7 @@ add_custom_command(
                     --with-mpicc=false
                     --with-gdbscripts-dir=no
                     ${VALGRIND_CONFIGURE_FLAGS}
-    DEPENDS ${valgrind_src}/configure
+    DEPENDS patch_valgrind
     WORKING_DIRECTORY ${valgrind_build}
 )
 include(ProcessorCount)

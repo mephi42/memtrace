@@ -1,7 +1,6 @@
 *.gch
 .deps/
 Makefile
-Makefile.in
 docs/Makefile
 docs/Makefile.in
 memtrace-*-linux

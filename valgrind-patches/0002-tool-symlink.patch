@@ -1,7 +1,7 @@
-From 149025b04d71380859de85a681a90beb4611fbb9 Mon Sep 17 00:00:00 2001
+From e227c7e822ce8d1afe46aa07a3fb977e283e7fed Mon Sep 17 00:00:00 2001
 From: mephi42 <mephi42@gmail.com>
 Date: Sat, 1 Feb 2025 12:18:07 +0100
-Subject: [PATCH 2/5] tool-symlink.patch
+Subject: [PATCH 2/6] tool-symlink.patch
 
 ---
  memtrace | 1 +

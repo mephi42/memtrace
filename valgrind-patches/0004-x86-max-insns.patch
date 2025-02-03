@@ -1,7 +1,7 @@
-From 68b46de548b3f251038530ac769f378b789a40d1 Mon Sep 17 00:00:00 2001
+From b855ec93b448171627dbb5d66546043bf413474a Mon Sep 17 00:00:00 2001
 From: mephi42 <mephi42@gmail.com>
 Date: Sat, 1 Feb 2025 12:18:07 +0100
-Subject: [PATCH 4/5] x86-max-insns.patch
+Subject: [PATCH 4/6] x86-max-insns.patch
 
 ---
  VEX/priv/guest_x86_toIR.c | 3 ++-

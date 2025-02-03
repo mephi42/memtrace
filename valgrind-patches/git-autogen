@@ -1,0 +1,10 @@
+#!/bin/bash
+set -e -u -x -o pipefail
+cd "$(dirname "$0")"
+cd ../valgrind
+git reset --hard
+git clean -dfx
+./autogen.sh
+rm -r autom4te.cache
+git add -f $(git ls-files --others)
+git commit -a -m autogen.patch
