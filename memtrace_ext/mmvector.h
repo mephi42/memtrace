@@ -37,7 +37,8 @@ class MmVector {
   MmVector(const MmVector<U>&) = delete;
   ~MmVector() {
     if (storage_ != nullptr) {
-      if (ftruncate(fd_, kOverhead + storage_->size * sizeof(T)) == 0)
+      if (ftruncate(fd_, static_cast<off_t>(kOverhead +
+                                            storage_->size * sizeof(T))) == 0)
         capacity_ = storage_->size;
       munmap(storage_, kOverhead + capacity_ * sizeof(T));
     }
@@ -110,7 +111,8 @@ class MmVector {
 
   void reserve(size_t n) {
     if (n <= capacity_) return;
-    if (ftruncate(fd_, kOverhead + n * sizeof(T)) == -1) throw std::bad_alloc();
+    if (ftruncate(fd_, static_cast<off_t>(kOverhead + n * sizeof(T))) == -1)
+      throw std::bad_alloc();
     void* newStorage = mremap(storage_, kOverhead + capacity_ * sizeof(T),
                               kOverhead + n * sizeof(T), MREMAP_MAYMOVE);
     if (newStorage == MAP_FAILED) throw std::bad_alloc();
@@ -132,8 +134,8 @@ class MmVector {
 
   template <typename InputIterator>
   void insert(iterator position, InputIterator first, InputIterator last) {
-    size_t i = position - &storage_->entries[0];
-    size_t n = last - first;
+    size_t i = static_cast<size_t>(position - &storage_->entries[0]);
+    size_t n = static_cast<size_t>(last - first);
     if (i + n > capacity_) {
       Grow(GetAligned((i + n - capacity_) * sizeof(T), kGrowAmount));
       position = &storage_->entries[i];

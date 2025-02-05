@@ -34,6 +34,9 @@ with open(sys.argv[0]) as fp:
     libasan = (
         subprocess.check_output([cc, "-print-file-name=libasan.so"]).strip().decode()
     )
+    libubsan = (
+        subprocess.check_output([cc, "-print-file-name=libubsan.so"]).strip().decode()
+    )
 
     # https://stackoverflow.com/questions/77894856
     argv = ["setarch", "--addr-no-randomize", "python3", "-c", script, *rest]
@@ -43,7 +46,7 @@ with open(sys.argv[0]) as fp:
         {
             **os.environ,
             "ASAN_OPTIONS": "detect_leaks=0",
-            "LD_PRELOAD": os.pathsep.join((libasan, libstdcxx)),
+            "LD_PRELOAD": os.pathsep.join((libasan, libubsan, libstdcxx)),
         },
     )
 
