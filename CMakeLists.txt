@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 project(_memtrace)
+include(CheckCXXCompilerFlag)
 string(REPLACE "." ";" _VERSION "${PYTHON_VERSION_STRING}")
 list(GET _VERSION 0 PYTHON_VERSION_MAJOR)
 list(GET _VERSION 1 PYTHON_VERSION_MINOR)
@@ -13,6 +14,12 @@ message(STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")
 message(STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
 include_directories(${Boost_INCLUDE_DIRS})
 add_library(_memtrace MODULE memtrace_ext/memtrace_ext.cc)
+check_cxx_compiler_flag(-Wno-maybe-uninitialized HAVE_WNO_MAYBE_UNINITIALIZED)
+if(HAVE_WNO_MAYBE_UNINITIALIZED)
+    set(WNO_MAYBE_UNINITIALIZED -Wno-maybe-uninitialized)
+else()
+    set(WNO_MAYBE_UNINITIALIZED "")
+endif()
 target_compile_options(
     _memtrace
     PRIVATE -std=c++17
@@ -21,7 +28,7 @@ target_compile_options(
             -Wconversion
             -Wdate-time
             -Wformat-security
-            -Wno-maybe-uninitialized
+            ${WNO_MAYBE_UNINITIALIZED}
             -pedantic
             -Werror
             -fstack-protector-strong

@@ -115,10 +115,10 @@ ssize_t ReadN(int fd, void* buf, size_t count) {
       break;
     }
     buf = static_cast<char*>(buf) + chunkSize;
-    count -= chunkSize;
-    totalSize += chunkSize;
+    count -= static_cast<size_t>(chunkSize);
+    totalSize += static_cast<size_t>(chunkSize);
   }
-  return totalSize;
+  return static_cast<ssize_t>(totalSize);
 }
 
 const char kPlaceholder[] = "{}";
@@ -135,7 +135,7 @@ struct PathWithPlaceholder {
                 << " placeholder" << std::endl;
       return -EINVAL;
     }
-    before[0] = std::string_view(path, placeholder - path);
+    before[0] = std::string_view(path, static_cast<size_t>(placeholder - path));
     after = placeholder + kPlaceholderLength;
     return 0;
   }
@@ -1139,7 +1139,8 @@ class Trace : public TraceBase {
 
   int UpdateDwfl() {
     if (!HasInsnIndex()) return -EINVAL;
-    size_t mmapFileOffset = FindMmapFileOffset(cur_ - data_);
+    size_t mmapFileOffset =
+        FindMmapFileOffset(static_cast<size_t>(cur_ - data_));
     if (mmapFileOffset == mmapFileOffset_) return 0;
     UpdateElves(mmapFileOffset);
     dwfl_report_begin(dwfl_.get());
@@ -1184,7 +1185,8 @@ int MmapFile(const char* path, size_t minSize, std::uint8_t** p,
     close(fd);
     return -EINVAL;
   }
-  void* data = mmap(nullptr, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  void* data = mmap(nullptr, static_cast<size_t>(stat.st_size), PROT_READ,
+                    MAP_PRIVATE, fd, 0);
   int err = errno;
   close(fd);
   if (data == MAP_FAILED) return -err;
@@ -1206,7 +1208,7 @@ TraceBase* LoadHelper(std::uint8_t* data, size_t length) {
 
 TraceBase* TraceBase::Load(const char* path) {
   std::uint8_t* data = nullptr;
-  size_t length = -1;
+  size_t length = static_cast<size_t>(-1);
   if (MmapFile(path, 2, &data, &length) < 0) return nullptr;
   switch (data[0] << 8 | data[1]) {
     case 'M' << 8 | '4':
